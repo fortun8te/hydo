@@ -257,6 +257,29 @@ const BASE_CONFIG = {
   impressionSpeed: 1,
 };
 
+/**
+ * Geometry detail, chosen from the size the face is actually drawn at.
+ *
+ * `detail` multiplies the mesh: meridians are `round(12 * detail)`, and the
+ * rim resolution scales with it too. At 4 that is 48 meridians, and the path
+ * string handed to the DOM every frame for ONE 36px avatar was measured at
+ * ~133,000 characters. A 36px avatar cannot show 48 meridians. It is paying
+ * for a mesh nobody can see, on every frame, on every face in the roster.
+ *
+ * Three levels rather than a continuous function, because `getGeometry`
+ * caches on `shape|dense|detail` . a continuous one would build and keep a
+ * separate mesh for every pixel size in the app.
+ *
+ * The big faces are untouched: the rail's 72px mark and the lab keep 4, which
+ * is where the depth slices are actually visible.
+ */
+function detailFor(size) {
+  const n = Number(size) || 0;
+  if (n <= 48) return 2; // roster rows, composer marks, home cards
+  if (n <= 96) return 3; // the bot rail's mark
+  return 4; // the lab, and anything full-size
+}
+
 const DETAIL = 4;
 const NO_DRAG = { x: 0, y: 0, active: false, vx: 0, vy: 0, lastX: 0, lastY: 0 };
 
@@ -322,14 +345,17 @@ function fitExtentFor(spec) {
   return BOX_EXTENT;
 }
 
-function stillFrame(shapeId, motionId) {
-  const key = shapeId + "|" + motionId;
+// `detail` is part of the KEY, not just a parameter: the cached rest frame is
+// geometry, and one built at detail 2 must never be handed to a face drawing
+// at detail 4.
+function stillFrame(shapeId, motionId, detail = 4) {
+  const key = shapeId + "|" + motionId + "|" + detail;
   let hit = stillCache.get(key);
   if (hit) return hit;
   const spec = cachedSpec(shapeId);
   const motion = motionFor(motionId);
   const cfg = { ...BASE_CONFIG, motionId, blink: false };
-  const A = createAvatar(spec, motion, true, 4.3, DETAIL);
+  const A = createAvatar(spec, motion, true, 4.3, detail);
   const f = svgFrame(computeFrame(A, 0, { config: cfg, style: EYE_STYLE_BY_ID.plain, topper: null, drag: NO_DRAG }));
   hit = { frame: f, extent: BOX_EXTENT, fit: fitExtentFor(spec) };
   stillCache.set(key, hit);
@@ -551,7 +577,7 @@ function useLiveFrame(shapeId, motionId, cfg, active, stagger, morphRef, pokeRef
       if (avatarRef.current && avatarRef.current.spec === spec) {
         play(avatarRef.current, first);
       } else {
-        avatarRef.current = createAvatar(spec, first, true, 4.3, DETAIL);
+        avatarRef.current = createAvatar(spec, first, true, 4.3, detailFor(size));
         shownRef.current = shapeId;
       }
       let t0 = 0;
@@ -723,7 +749,7 @@ function useLiveFrame(shapeId, motionId, cfg, active, stagger, morphRef, pokeRef
 
         if (showId !== shownRef.current) {
           try {
-            avatarRef.current = createAvatar(cachedSpec(showId), motionFor(motionRef.current), true, 4.3, DETAIL);
+            avatarRef.current = createAvatar(cachedSpec(showId), motionFor(motionRef.current), true, 4.3, detailFor(size));
             shownRef.current = showId;
             shownMotion = motionRef.current;
           } catch {
@@ -896,7 +922,7 @@ export default function UmbraFace({
   const body = useMemo(() => {
     try {
       const spec = cachedSpec(shapeId);
-      const rest = stillFrame(shapeId, motionId);
+      const rest = stillFrame(shapeId, motionId, detailFor(size));
       return { spec, paint: bodyPaint(cfg, spec), rest };
     } catch {
       return null;
