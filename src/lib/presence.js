@@ -38,6 +38,10 @@ export const READ_HOLD_MS = 1100;
 // token landed, which is the exact moment you are reading it and most likely
 // to reply. Staying is the cheap part of feeling present.
 export const LINGER_MS = 22000;
+// The tail of the linger, where he actually starts to go. Matches the
+// `sand-inchat-out` duration in production.css so the fade finishes exactly as
+// the row stops being rendered, instead of snapping away mid-animation.
+export const LEAVE_FADE_MS = 300;
 
 // ---------------------------------------------------------------- online pip
 //
@@ -126,7 +130,18 @@ export function presenceOf(input = {}) {
     return { visible: true, mood: fromActivity, kind, phase: "in" };
   }
   if (working) return { visible: true, mood: "spin", kind: "work", phase: "in" };
-  if (linger) return { visible: true, mood: "looking", kind: "linger", phase: "out" };
+  if (linger) {
+    // NOT phase "out". The CSS for that is a 0.3s fade with `forwards`, so
+    // marking the whole linger as "leaving" made him vanish a third of a
+    // second after his own message and stay gone for the remaining 21.7
+    // seconds the linger was still nominally running. The linger worked the
+    // entire time; it was being rendered invisible.
+    //
+    // He is here, and only starts drifting off in the last moment of it.
+    const started = Number(input.lingerSince) || 0;
+    const going = started > 0 && now - started > LINGER_MS - LEAVE_FADE_MS;
+    return { visible: true, mood: "looking", kind: "linger", phase: going ? "out" : "in" };
+  }
   return { visible: true, mood: "looking", kind: "read", phase: "in" };
 }
 

@@ -43,6 +43,9 @@ export default function Shell({ state }) {
   const [collapsed, setCollapsed] = useState(false);
   const [dmPeerId, setDmPeerId] = useState(null);
   const [linger, setLinger] = useState(false);
+  // When the current linger began, so presence can fade at the end of it
+  // rather than marking the whole thing as "leaving" from the first frame.
+  const [lingerSince, setLingerSince] = useState(0);
   const [composerMenu, setComposerMenu] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
   // The entry a Delete is waiting on. Deleting takes the whole transcript with
@@ -130,8 +133,10 @@ export default function Shell({ state }) {
   useEffect(() => {
     if (sending || workingHere) {
       setLinger(true);
+      setLingerSince(0);
       return undefined;
     }
+    setLingerSince(Date.now());
     const t = setTimeout(() => setLinger(false), LINGER_MS);
     return () => clearTimeout(t);
   }, [sending, workingHere]);
@@ -409,6 +414,7 @@ export default function Shell({ state }) {
             channel={isChannel ? selected : null}
             sending={sending && !peer}
             linger={(linger || workingHere) && !peer}
+            lingerSince={lingerSince}
             draft={draft}
             lastKeyAt={lastKeyAt}
             composeAt={composeAt}

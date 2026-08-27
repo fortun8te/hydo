@@ -917,6 +917,7 @@ export default function Transcript({
   channel,
   sending,
   linger,
+  lingerSince,
   draft,
   lastKeyAt,
   composeAt,
@@ -966,6 +967,7 @@ export default function Transcript({
       working: busyHere(agent, convId),
       sending: !!sending,
       linger: !!linger,
+      lingerSince,
       activity: agent.activity || agent.activityDetail || "",
       draft,
       lastKeyAt,
@@ -1008,6 +1010,7 @@ export default function Transcript({
             composerExtrasForMember(a.id, waitId, {
               sending,
               linger,
+              lingerSince,
               draft,
               lastKeyAt,
               composeAt,

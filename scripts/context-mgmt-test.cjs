@@ -31,7 +31,20 @@ const compactUse = storeSrc.indexOf(">= COMPACT_AT_PERCENT");
 assert.ok(compactDecl >= 0 && compactUse >= 0 && compactDecl < compactUse, "COMPACT_AT_PERCENT must be declared before use");
 assert.ok(!storeSrc.includes("Private memory snapshot:"), "standing must not dump memory snapshots");
 assert.ok(storeSrc.includes("opts.complete"), "injected complete still short-circuits Hermes");
-assert.ok(storeSrc.includes("raw = await complete(system, userText, agent.model || state.settings.model)"), "defaultComplete fallback still wired");
+assert.ok(
+  storeSrc.includes("raw = await complete(system, userText, agent.model || state.settings.model, priorTurns)"),
+  "defaultComplete fallback still wired"
+);
+// The fallback must carry the thread. Hermes owns conversation state, so this
+// path once sent only [system, user]: a fresh amnesiac model every turn whose
+// whole context was a soul telling it to introduce itself. It greeted the user
+// three times in a row and looked broken, because it was.
+assert.ok(storeSrc.includes("const priorTurns"), "the fallback turn is given the conversation");
+assert.ok(
+  /async function defaultComplete\(system, user, model, history\)/.test(storeSrc),
+  "defaultComplete takes history"
+);
+assert.ok(storeSrc.includes("...prior,"), "and actually sends it between system and the new turn");
 
 const gwSrc = require("node:fs").readFileSync(
   require("node:path").join(__dirname, "../electron/hermes-gateway.cjs"),

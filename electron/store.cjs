@@ -34,6 +34,23 @@ const PICK_SHAPES = SHAPES;
 const COLOR_IDS = BLOBS;
 const SHAPE_IDS = SHAPES;
 
+// Toolsets a teammate may hand ITSELF, on top of whatever profile it is on.
+//
+// The test is "does this only cost schema": every name here widens what it can
+// reach without picking a vendor, a price per token, or the user's machine.
+// Shell, file writes and the delegation tools are NOT here — they arrive with
+// a profile the user chose, not because a bot talked itself into one.
+const SELF_TOOLSETS = [
+  "browser",     // read the web properly instead of guessing from a snippet
+  "search",
+  "x_search",
+  "vision",      // look at the screenshot it was just handed
+  "image_gen",
+  "desktop_ui",  // show a chart rather than reading numbers out loud
+  "memory",
+  "cronjob",
+];
+
 function pickRandomMark(agents) {
   const list = agents || [];
   const used = new Set(list.map((a) => `${a.blob}|${a.shape}`));
@@ -266,11 +283,28 @@ function normalizeState(raw) {
   };
 }
 
-async function defaultComplete(system, user, model) {
+/**
+ * The fallback turn, used when Hermes is not answering.
+ *
+ * `history` is not optional in practice. Hermes owns conversation state, so
+ * this path shipped sending only [system, user] — a brand new amnesiac model
+ * every turn, whose entire context was the soul. The soul says "open with a
+ * hello", so it opened with a hello. Every time. To "noice", to "I love boys",
+ * to anything: three identical greetings in a row and no memory that it had
+ * ever spoken. It read as the model being stupid; it was the model being given
+ * one message and told to introduce itself.
+ */
+async function defaultComplete(system, user, model, history) {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) {
     return "Got it. Local mode — no OpenRouter key — so I can't hit the model. Drop OPENROUTER_API_KEY in the env and I'll actually work.";
   }
+  const prior = (Array.isArray(history) ? history : [])
+    .map((m) => ({
+      role: m && m.role === "bot" ? "assistant" : "user",
+      content: String((m && m.text) || "").trim(),
+    }))
+    .filter((m) => m.content);
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -281,6 +315,7 @@ async function defaultComplete(system, user, model) {
       model: model || "grok-4.6",
       messages: [
         { role: "system", content: system },
+        ...prior,
         { role: "user", content: user },
       ],
     }),
@@ -1267,10 +1302,15 @@ function createStore(opts = {}) {
    * roster row said New Bot forever. Same for "stop notifying me" and "you're
    * the ads one".
    *
-   * Whitelisted and bounded on purpose: a bot may describe itself, it may not
-   * hand itself more capability. `toolProfile`, `toolsets`, `mcp`, `model` and
-   * `reasoningEffort` are deliberately NOT here — those cost money and change
-   * what it is allowed to touch, and they stay yours.
+   * Whitelisted and bounded on purpose. `mcp`, `model`, `reasoningEffort` and
+   * `toolProfile` are deliberately NOT here: those pick a vendor, a price per
+   * token, or a whole tier of schema, and they stay yours.
+   *
+   * `toolsets` IS here, against an allowlist. A teammate that needs a browser
+   * to finish the thing you asked for, and has to come back and ask you to
+   * tick a box in a panel it cannot see, is not a teammate. Every name in
+   * SELF_TOOLSETS is additive on top of its profile, costs schema and nothing
+   * else, and shows up in the action log the moment it is taken.
    */
   function applySelf(agent, spec) {
     if (!agent || !spec || typeof spec !== "object") return false;
@@ -1311,6 +1351,18 @@ function createStore(opts = {}) {
     if (typeof spec.shape === "string") {
       const want = spec.shape.trim().toLowerCase();
       if (SHAPE_IDS.includes(want)) patch.shape = want;
+    }
+    // Abilities. Additive only, allowlisted, and capped: a bot cannot grant
+    // itself the machine, only more ways to do the job in front of it. It also
+    // cannot take one away by omission, because a half-remembered list on a
+    // later turn would silently strip a tool it is mid-way through using.
+    if (Array.isArray(spec.toolsets)) {
+      const have = Array.isArray(agent.toolsets) ? agent.toolsets : [];
+      const want = spec.toolsets
+        .map((x) => String(x).trim().toLowerCase())
+        .filter((x) => SELF_TOOLSETS.includes(x));
+      const merged = [...new Set([...have, ...want])].slice(0, 8);
+      if (merged.length !== have.length) patch.toolsets = merged;
     }
     if (!Object.keys(patch).length) return false;
 
@@ -2025,11 +2077,17 @@ function createStore(opts = {}) {
         .filter(Boolean)
         .join("\n") || undefined
     );
+    // The last stretch of THIS conversation, for the non-Hermes path. Capped:
+    // it is a fallback, not the context engine, and an unbounded thread would
+    // quietly turn a cheap turn into an expensive one.
+    const priorTurns = (state.messages[convId || agent.id] || [])
+      .filter((m) => m && (m.role === "user" || m.role === "bot") && m.kind !== "event")
+      .slice(-20);
     let raw;
     let shotImages = [];
     try {
       if (opts.complete) {
-        raw = await complete(system, userText, agent.model || state.settings.model);
+        raw = await complete(system, userText, agent.model || state.settings.model, priorTurns);
       } else {
         try {
           const jobWake = /^\s*\[job\]/m.test(String(extra || ""));
@@ -2049,7 +2107,7 @@ function createStore(opts = {}) {
           if (gw && typeof gw.available === "function" && gw.available()) {
             raw = `Hermes failed: ${err && err.message ? err.message : err}`;
           } else {
-            raw = await complete(system, userText, agent.model || state.settings.model);
+            raw = await complete(system, userText, agent.model || state.settings.model, priorTurns);
           }
         }
       }
