@@ -13,6 +13,7 @@
     "app": "npm run build && HYDO_DIST=1 electron .",
     "preview": "vite preview",
     "verify": "node scripts/verify.cjs",
+    "window-check": "electron scripts/window-check.cjs",
     "icon": "node scripts/make-app-icon.mjs && electron scripts/rasterize-icon.cjs",
     "pack": "npm run build && npm run icon && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
     "dist": "npm run build && npm run icon && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
