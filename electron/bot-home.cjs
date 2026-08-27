@@ -149,6 +149,50 @@ This folder is your sandbox. Write files here.
 - Heavy coding: the harness under **Models** below (Grok Build, OpenCode, Cursor, or this shell).
 `;
 
+/**
+ * Per-bot Hermes config.
+ *
+ * A profile with no config.yaml does NOT inherit ~/.hermes/config.yaml. It
+ * falls all the way through to the code defaults in config_defaults.py, and
+ * nothing says so . the values coincide often enough to look like inheritance.
+ * Verified by asking Hermes itself:
+ *
+ *   HERMES_HOME=~/.hermes             hermes config get compression.tail_mode  -> lean
+ *   HERMES_HOME=~/.hermes/profiles/…  hermes config get compression.tail_mode  -> legacy
+ *
+ * `legacy` is the old tail-retention policy: after a compaction it drags a
+ * large slice of the old conversation into every subsequent turn. Nous' own
+ * compaction evals put it around 162K retained against ~49K for `lean`. That
+ * is paid on EVERY turn of a long-lived thread . which is exactly what a
+ * teammate you keep for months is.
+ *
+ * Written narrowly on purpose: only the keys where the code default is the
+ * wrong choice for a long-running teammate. Everything else stays Hermes'
+ * business, so a Hermes upgrade that improves a default still reaches us.
+ */
+const PROFILE_CONFIG = `# Written by Hydo. A Hermes profile does not inherit ~/.hermes/config.yaml,
+# so anything not set here is the code default, not your own setting.
+compression:
+  tail_mode: lean
+`;
+
+function writeProfileConfig(home) {
+  const file = path.join(home, "config.yaml");
+  try {
+    // Only when it would change: this file is cheap, but a bot may have been
+    // given settings by hand and rewriting them every launch would be rude.
+    if (fs.existsSync(file)) {
+      const cur = fs.readFileSync(file, "utf8");
+      if (cur.includes("tail_mode")) return;
+      fs.writeFileSync(file, `${cur.replace(/\s*$/, "")}\n${PROFILE_CONFIG}`);
+      return;
+    }
+    fs.writeFileSync(file, PROFILE_CONFIG);
+  } catch {
+    /* a profile without it still runs, just on the older tail policy */
+  }
+}
+
 function prepare(hydoDir, botId, soulText) {
   if (!hydoDir) throw new Error("prepare: hydoDir required");
   if (!botId) throw new Error("prepare: botId required");
@@ -169,6 +213,8 @@ function prepare(hydoDir, botId, soulText) {
   for (const d of ["memories", "sessions", "skills", "logs", "workspace", "cron"]) {
     ensureDir(path.join(home, d));
   }
+
+  writeProfileConfig(home);
 
   const launchHome = path.join(os.homedir(), ".hermes");
   const envSrc = path.join(launchHome, ".env");
