@@ -325,7 +325,27 @@ function normalizeState(raw) {
 async function defaultComplete(system, user, model, history) {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) {
-    return "Got it. Local mode — no OpenRouter key — so I can't hit the model. Drop OPENROUTER_API_KEY in the env and I'll actually work.";
+    // This is the FIRST thing a new teammate says on a machine with no Hermes,
+    // and it used to say only "no OpenRouter key — drop OPENROUTER_API_KEY in
+    // the env". Measured on a clean profile: sign in, make a teammate, and its
+    // opening line names an env var, for a cause that is not the real one.
+    // Hermes is the product; a missing OpenRouter key is the missing FALLBACK.
+    // Name whichever is actually absent, and name it as something you can go
+    // and do.
+    let hermes = false;
+    try {
+      hermes = require("./hermes-gateway.cjs").available();
+    } catch {
+      hermes = false;
+    }
+    if (!hermes) {
+      return (
+        "I can't work yet: Hermes Agent isn't installed on this Mac, so there's " +
+        "nothing for me to think with. Install it into ~/.hermes/hermes-agent and " +
+        "restart Hydo, and I'll be here."
+      );
+    }
+    return "Hermes is installed but wouldn't answer, and there's no fallback model set (OPENROUTER_API_KEY). Nothing I can do from in here.";
   }
   const prior = (Array.isArray(history) ? history : [])
     .map((m) => ({

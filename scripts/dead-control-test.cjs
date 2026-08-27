@@ -23,6 +23,7 @@ const sidebar = read("src/screens/Sidebar.jsx");
 const computerRail = read("src/screens/ComputerRail.jsx");
 const shortcuts = read("src/lib/shortcuts.js");
 const rails = read("src/screens/rails.css");
+const composer = read("src/screens/Composer.jsx");
 
 // -- 1. ⌘K could never open the command palette --------------------------
 // runCommand() ended with an unconditional `setPaletteOpen(false)`, so the
@@ -131,6 +132,26 @@ assert.deepEqual(dead, [], `palette commands with no case in runCommand (they do
 const chordIds = [...shortcuts.matchAll(/"[\w+]+": "(sand\.[\w.]+)"/g)].map((m) => m[1]);
 const deadChords = chordIds.filter((id) => id !== "sand.send" && !runCommand.includes(`case "${id}"`));
 assert.deepEqual(deadChords, [], `keyboard chords bound to a command runCommand ignores: ${deadChords.join(", ")}`);
+
+// -- 8. Escape could not dismiss the slash / mention menu ---------------
+// `menuMode()` derives the menu from the DRAFT ("/…" or "…@foo"), so the
+// Escape branch's `onMenuToggle(false)` — which only clears the plus
+// button's own flag — changed nothing, while preventDefault() made the key
+// look handled. The menu stayed up until you deleted the slash.
+assert.ok(composer.includes("const [dismissed, setDismissed] = useState(false)"), "Composer lost its Escape dismissal state");
+assert.ok(
+  composer.includes("const mode = dismissed ? null : menuMode(draft, menuOpen);"),
+  "the draft-derived menu must honour an Escape dismissal, or Escape does nothing again"
+);
+assert.ok(
+  /if \(e\.key === "Escape"\) \{\s*e\.preventDefault\(\);\s*setDismissed\(true\);/.test(composer),
+  "Escape must set the dismissal, not just toggle the plus flag"
+);
+// …and it must lift on the next keystroke, or the menu is gone for good.
+assert.ok(
+  /useEffect\(\(\) => \{\s*setDismissed\(false\);\s*\}, \[draft\]\);/.test(composer),
+  "the dismissal must reset when the draft changes"
+);
 
 // -- 7. every gb-icon-<name> in the app must have a rule in icons.css ----
 // `gb-icon gb-icon-camera` shipped on Settings' avatar badge. The class
