@@ -220,9 +220,16 @@ function shortModelLabel(id) {
 
 // A two-segment switch, not a Select: with one local endpoint the whole
 // decision is "hosted or mine", and that should be one click either way.
+//
+// The segments used to read as a MODEL name next to a PROVIDER name
+// ("Qwen3.8-Flash-Next-GGUF | unsloth") — both of which are local right now,
+// so nothing on the control said "cloud" or "local" at all. The primary word
+// on each pill is now literally Cloud / Local; the model or machine name is
+// still here, just demoted to a smaller line under it, per the rule that the
+// specific choice belongs below the mode, not instead of it.
 function LocalSwitch({ cloudLabel, localLabel, onLocal, running, disabled }) {
   return (
-    <div className="settings__seg" role="group" aria-label="Where turns run">
+    <div className="settings__seg" role="group" aria-label="Local or cloud">
       <button
         type="button"
         className="settings__seg-btn"
@@ -230,7 +237,8 @@ function LocalSwitch({ cloudLabel, localLabel, onLocal, running, disabled }) {
         data-on={running === "cloud" || undefined}
         onClick={() => onLocal(false)}
       >
-        {cloudLabel}
+        <span className="settings__seg-btn-main">Cloud</span>
+        <span className="settings__seg-btn-sub">{cloudLabel}</span>
       </button>
       <button
         type="button"
@@ -240,7 +248,8 @@ function LocalSwitch({ cloudLabel, localLabel, onLocal, running, disabled }) {
         disabled={disabled}
         onClick={() => onLocal(true)}
       >
-        {localLabel}
+        <span className="settings__seg-btn-main">Local</span>
+        <span className="settings__seg-btn-sub">{localLabel}</span>
       </button>
     </div>
   );
@@ -465,11 +474,11 @@ export default function Settings({
   const chatIsGrok = /grok-/i.test(chatModel);
   const harnessDesc =
     harness === "shell"
-      ? "Heavy coding stays in this workspace's shell. Nothing is handed to an outside CLI."
+      ? "Heavy coding stays in this workspace's shell, not an outside CLI."
       : harness === "grok-build"
         ? runningLocal
-          ? "Heavy coding shells out to `grok -p`, which signs in to xAI — it does NOT run on your hardware. Pick Workspace shell to keep coding local too."
-          : "Heavy coding shells out to `grok -p`. The working row says Connecting to Grok Build when it runs."
+          ? "Heavy coding still shells out to `grok -p`, which signs in to xAI — not your hardware. Pick Workspace shell to keep it local too."
+          : "Heavy coding shells out to `grok -p`, which signs in to xAI."
         : `Heavy coding shells out to the ${HARNESS_NAME[harness] || harness} CLI, on its own account — not your hardware.`;
 
   return (
@@ -556,7 +565,7 @@ export default function Settings({
                   {activeLocal && (
                     <Row
                       divided
-                      label="Where turns run"
+                      label="Local or cloud"
                       description={
                         <>
                           {activeStatus.detail ||
@@ -600,11 +609,10 @@ export default function Settings({
                     <Row
                       divided
                       label="Local endpoint"
-                      description={
-                        runningLocal
-                          ? "The machine your turns are running on."
-                          : "Local is off. This is the machine the Local button would switch to."
-                      }
+                      // One sentence, true in both modes: "Local or cloud" above
+                      // already says which mode is live, so this row does not
+                      // need to repeat it — it only has one job, aiming Local.
+                      description="Which machine the Local side of the switch uses."
                     >
                       <Select
                         ariaLabel="Local endpoint"
@@ -627,7 +635,7 @@ export default function Settings({
                       />
                     </Row>
                   )}
-                  <Row divided label="Chat model" description="Hermes uses this for turns. Default is grok-4.6.">
+                  <Row divided label="Chat model" description="Model for chat turns — default grok-4.6.">
                     <Select
                       ariaLabel="Chat model"
                       value={chatModel}

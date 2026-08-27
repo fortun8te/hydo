@@ -266,13 +266,17 @@
    primary white, so both segments looked selected. Scoped to the track. */
 .settings__seg .settings__seg-btn {
   appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   border: 0;
   border-radius: 7px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   background: transparent;
   color: var(--sand-text-secondary, #fcfcfc99);
   font-size: 13px;
-  line-height: 18px;
+  line-height: 16px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -284,7 +288,19 @@
 .settings__seg .settings__seg-btn[data-on] {
   background: var(--sand-fill-primary, #fafafa);
   color: var(--sand-text-on-primary, #141414);
+}
+
+/* Cloud / Local is the decision — bold and unmistakable. The model or
+   machine name underneath is context, not the choice, so it stays small and
+   dim even on the selected pill (inherits the pill's ink, just faded). */
+.settings__seg-btn-main {
   font-weight: var(--sand-font-weight-medium, 500);
+}
+
+.settings__seg-btn-sub {
+  font-size: 10.5px;
+  line-height: 13px;
+  opacity: 0.7;
 }
 
 .settings__seg .settings__seg-btn:disabled {

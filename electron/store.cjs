@@ -2028,13 +2028,22 @@ function createStore(opts = {}) {
     // error is a machine that never stops, which is the expensive direction to
     // be wrong in.
     let releaseBox = null;
+    // NOT awaited. Measured on bx_843rh875: `box resume` returns in 0.28s but
+    // the first `box exec` that actually answers is 5.9s later, and awaiting
+    // that here spent every one of those seconds BEFORE the model was allowed
+    // to emit a token. At 31 tok/s the model needs far longer than 5.9s to
+    // reason its way to a first command, so the wake now runs alongside the
+    // turn and its cost falls out of the wall clock entirely.
+    let boxWake = null;
     if (box && agent.boxEnabled && wantsBox(userText)) {
-      try {
-        const up = await box.ensureRunning({ reason: "turn", agentId: agent.id });
-        if (up && up.ok) releaseBox = box.hold(`turn-${agent.id}`);
-      } catch {
-        /* the turn still runs; the bot just will not find the machine awake */
-      }
+      boxWake = box
+        .ensureRunning({ reason: "turn", agentId: agent.id })
+        .then((up) => {
+          if (up && up.ok) releaseBox = box.hold(`turn-${agent.id}`);
+        })
+        .catch(() => {
+          /* the turn still runs; the bot just will not find the machine awake */
+        });
     }
     // Hermes context engine owns history. AGENTS.md is workspace rules + soul
     // only — dumping MEMORY.md here every turn pays for it forever.
@@ -2089,20 +2098,25 @@ function createStore(opts = {}) {
             "",
             "## Shared Linux machine",
             "",
-            `One Ubuntu box for the whole team, id \`${boxId}\`. Run \`box exec ${boxId} --timeout 120 -- <cmd>\`, or \`box ssh ${boxId}\` for a session. Scratch folder \`~/hydo/${agent.id}\`. The disk is shared: logins and installed software stay for the next teammate, and all of them can see it. It sleeps when idle; a command wakes it.`,
+            `One Ubuntu box for the whole team, id \`${boxId}\`. Run \`box exec ${boxId} --timeout 120 -- <cmd>\`. Scratch \`~/hydo/${agent.id}\`. The disk is shared: logins and installed software stay for the next teammate, and all of them can see it. It sleeps when idle and \`box exec\` does NOT wake it: on \`machine_not_running\`, run \`box resume ${boxId} --ttl 1800\`, then retry.`,
             "",
             // Output is the expensive part, not VM seconds. A 200KB log hauled
             // back is ~50,000 tokens, re-sent on every later turn. So the cap is
             // a NUMBER: "keep it small" is advice a model talks itself out of,
             // `| head -c 2000` is not.
-            "Everything it prints is charged to this conversation by the token, and stays in context for the rest of the thread. Filter ON the box with `rg`/`jq` and end every command with `| head -c 2000`. Never `cat` a whole file, log or page — re-run it narrower instead.",
+            "Everything it prints is charged to this conversation by the token and stays in context all thread. Filter ON the box with `rg`/`jq` and end every command with `| head -c 2000`. Never `cat` a whole file, log or page — re-run it narrower.",
+            "",
+            // Measured: 3 execs 1.50s of wire, the same 3 chained 0.59s. The
+            // wire is not the point — a second call is a second whole turn of
+            // a 31 tok/s model rereading the thread to rewrite one command.
+            "One errand, one command: chain with `;`, never a second call — each extra `box exec` is another whole turn you pay to think through, and that is the slow part.",
             "",
             // Cheapest rung first: a model told to "check a page" reaches for a
             // screenshot unless handed `curl | rg`. One 1280x800 frame is
             // ~1,365 tokens, a twenty-step look-and-click loop ~27,000, re-sent
             // every turn. lux runs that loop in the box and returns text — one
             // session at a time, 20/day (docs.ascii.dev/box/desktop-streaming).
-            'Text before pixels, always: try `curl -sL <url> | rg <pattern>` first; if the page needs a real browser or a login, use `lux start "<goal>" && lux run`, which drives Chrome and the desktop inside the box and answers in text (one lux session at a time — the box has a single shared desktop). Do NOT take screenshots, stream the desktop, or look at a screen in a loop: one screenshot costs more than most whole tasks, and you cannot see the stream anyway.',
+            'Text before pixels. Fetch a page as TEXT: `curl -sL <url> | html2text -utf8 | awk NF | rg -m5 -C2 <pattern> | head -c 1500`. Raw HTML is mostly markup: the same 2,000 bytes of Hacker News is 1 story raw, 13 as text. Needs JavaScript? Swap the curl for `google-chrome --headless --no-sandbox --user-data-dir=$(mktemp -d) --dump-dom <url>` (~3s; a REUSED dir silently prints nothing). Only for a login or real clicking: `lux start "<goal>" && lux run --max-steps 15` (one at a time, 20/day for the team). Never take screenshots or watch a screen in a loop — one costs more than a whole task, and you cannot see it.',
             "",
           ].join("\n")
         : "";
@@ -2703,6 +2717,11 @@ function createStore(opts = {}) {
       // Always, on both paths. A refcount that leaks on an error is a machine
       // that never stops . the expensive direction to be wrong in, and the one
       // an error path reaches most often.
+      //
+      // Await the wake FIRST. It is no longer awaited up front, so a turn that
+      // ends fast can reach here before the hold has been taken — and a hold
+      // taken after its release is exactly the leak this block exists to stop.
+      if (boxWake) await boxWake;
       if (releaseBox) releaseBox();
     }
   }

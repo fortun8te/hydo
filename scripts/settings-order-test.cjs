@@ -26,7 +26,7 @@ const contextMgmt = require(path.join(root, "electron/context-mgmt.cjs"));
 const modelPick = require(path.join(root, "electron/model-pick.cjs"));
 
 // ── 1. row order ──────────────────────────────────────────────────────────
-const ORDER = ["Where turns run", "Local endpoint", "Chat model", "Coding harness", "Timezone"];
+const ORDER = ["Local or cloud", "Local endpoint", "Chat model", "Coding harness", "Timezone"];
 let cursor = -1;
 for (const label of ORDER) {
   const at = jsx.indexOf(`label="${label}"`);
@@ -34,9 +34,17 @@ for (const label of ORDER) {
   assert.ok(at > cursor, `row "${label}" must come after "${ORDER[ORDER.indexOf(label) - 1]}"`);
   cursor = at;
 }
-// The old label is gone, so nobody re-adds the switch under the model by
+// The old labels are gone, so nobody re-adds the switch under the model by
 // resurrecting the row it used to live in.
-assert.equal(jsx.includes('label="Own hardware"'), false, "the switch row is 'Where turns run' now");
+assert.equal(jsx.includes('label="Own hardware"'), false, "the switch row is 'Local or cloud' now");
+assert.equal(jsx.includes('label="Where turns run"'), false, "the switch row was renamed to 'Local or cloud'");
+
+// The switch's two segments used to read as a MODEL name next to a PROVIDER
+// name ("Qwen3.8-Flash-Next-GGUF | unsloth") — both local, so nothing on the
+// control said "cloud" or "local". The literal words must be the primary text.
+assert.ok(/settings__seg-btn-main">Cloud</.test(jsx), "the switch's cloud segment must say Cloud");
+assert.ok(/settings__seg-btn-main">Local</.test(jsx), "the switch's local segment must say Local");
+assert.ok(css.includes(".settings__seg-btn-main"), "Cloud/Local needs to be the visually primary text on the pill");
 
 // The one genuinely inert row is hidden rather than left clickable: the Grok
 // Build model flag does nothing under any other harness, and said so.
