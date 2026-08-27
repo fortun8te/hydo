@@ -135,7 +135,15 @@ assert.ok(art.includes("escapeHtml"), "text kinds are escaped, not injected raw"
 
 // The soul has to tell bots this exists, or nothing will ever call open_preview.
 const soul = fs.readFileSync(path.join(ROOT, "electron", "SOUL.default.md"), "utf8");
-assert.ok(soul.includes("open_preview"), "soul teaches the tool");
-assert.ok(soul.includes("hydo-artifact"), "and points at the skill");
+// The soul routes to the skill rather than restating the tool: the method
+// lives in `hydo-artifact`, which loads on demand and costs nothing per turn.
+// What the soul must still guarantee is that a bot can FIND it.
+assert.ok(soul.includes("hydo-artifact"), "soul routes to the artifact skill");
+assert.ok(/^\|.*`hydo-artifact`.*\|$/m.test(soul), "from the skill routing table");
+const skill = fs.readFileSync(
+  path.join(require("node:os").homedir(), ".hermes", "skills", "hydo-artifact", "SKILL.md"),
+  "utf8"
+);
+assert.ok(skill.includes("open_preview"), "and the skill itself teaches the tool");
 
 console.log("artifact renderer ok");
