@@ -61,6 +61,12 @@ export const SHAPES = [
   { id: "wedge",    label: "Wedge" },
   { id: "gem",      label: "Gem" },
   { id: "crystal",  label: "Crystal" },
+  { id: "pentagon", label: "Pentagon" },
+  { id: "diamond",  label: "Diamond" },
+  { id: "star",     label: "Star" },
+  { id: "clover",   label: "Clover" },
+  { id: "cross",    label: "Cross" },
+  { id: "oval",     label: "Oval" },
 ];
 
 export const PICK_SHAPES = SHAPES.map((s) => s.id);

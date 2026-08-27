@@ -13,6 +13,10 @@
 // of proving a fallback.
 
 import { He, al } from "./blob-kernel.js";
+// Side-effect import: registers the extra bodies into `al` before anything
+// samples it. Must sit here rather than in a component, or a shape saved on a
+// bot renders as Hex until some unrelated module happens to load first.
+import "./shapes-extra.js";
 
 // Half-width of the kernel box in engine units: a silhouette that fills Grok's
 // box comes out 2 * RIM_R across here.

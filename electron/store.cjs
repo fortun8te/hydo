@@ -29,6 +29,7 @@ const BLOBS = [
 const SHAPES = [
   "blob", "pebble", "bean", "egg", "teardrop", "cloud", "leaf", "dome", "arch",
   "squircle", "tablet", "capsule", "cylinder", "shield", "hex", "wedge", "gem", "crystal",
+  "pentagon", "diamond", "star", "clover", "cross", "oval",
 ];
 const PICK_SHAPES = SHAPES;
 const COLOR_IDS = BLOBS;
@@ -2562,7 +2563,12 @@ function createStore(opts = {}) {
           tail.role === "system" &&
           tail.fromId === agent.id &&
           typeof tail.renameFrom === "string" &&
-          now() - new Date(tail.at).getTime() < RENAME_COALESCE_MS
+          // `now()` is nowIso, a STRING. `string - number` is NaN and
+          // `NaN < ms` is false, so this test failed every single time and the
+          // coalescing below was dead code from the day it was written . which
+          // is exactly the bug it was added to fix: typing "Health" left six
+          // lines in the thread, H to He to Hea to Heal to Healt to Health.
+          new Date(now()).getTime() - new Date(tail.at).getTime() < RENAME_COALESCE_MS
             ? tail.renameFrom
             : null;
         if (renamedFrom && renamedFrom !== agent.name) {
