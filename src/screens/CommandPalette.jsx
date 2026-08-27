@@ -178,6 +178,8 @@ export default function CommandPalette({ open, commands, agents, onRun, onClose 
                     onClick={() => pick(i)}
                   >
                     <span className="hy-palette__item-icon">
+                      {/* No glow at 18px — below the app's 20px floor
+                          (see the channel-mark comment in Sidebar.jsx). */}
                       {row.face ? (
                         <UmbraFace tint={row.face.blob} shape={row.face.shape} size={18} />
                       ) : (

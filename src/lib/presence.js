@@ -223,3 +223,47 @@ export function composerExtrasForMember(agentId, waitId, extras = {}) {
     now: extras.now,
   };
 }
+
+// ------------------------------------------------------------ slow backends
+//
+// How long a turn has to run before the working row starts saying how long.
+//
+// A teammate on hosted Grok answers a short question in a few seconds, and a
+// counter on that is noise — it turns an ordinary wait into something to watch.
+// A teammate on the user's own hardware is a different animal: MEASURED on the
+// endpoint in docs/LOCAL-MODEL.md, ~16 tokens/second, so a 2,000-token answer
+// is a little over two minutes during which the row says "Working" and nothing
+// changes. Two minutes of a frozen word is indistinguishable from a hang, and
+// the only thing the user can do about a hang is give up on a turn that was
+// fine.
+//
+// 20s is chosen against those two facts: at 16 tok/s it is ~320 tokens, so it
+// is past every short local answer and still well past anything a hosted model
+// does routinely. It is a legibility threshold, not a deadline — nothing gives
+// up when it passes.
+export const SLOW_TURN_MS = 20000;
+
+/**
+ * "1m 40s" once a turn has been running long enough to be worth saying.
+ *
+ * Returns "" below the threshold, and "" when `since` is 0 — which is the
+ * honest answer for a turn this window did not start (a routine, a job wake,
+ * a channel turn begun elsewhere). A guessed start time would put a confident
+ * wrong number next to a face, which is worse than no number.
+ *
+ * @param {number} since  epoch ms the turn started, 0 when unknown
+ * @param {number} now
+ * @param {number} [thresholdMs]
+ * @returns {string}
+ */
+export function elapsedLabel(since, now, thresholdMs = SLOW_TURN_MS) {
+  const start = num(since);
+  const at = num(now);
+  if (start <= 0 || at <= start) return "";
+  const ms = at - start;
+  const gate = num(thresholdMs) > 0 ? num(thresholdMs) : SLOW_TURN_MS;
+  if (ms < gate) return "";
+  const secs = Math.floor(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+}

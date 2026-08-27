@@ -431,6 +431,11 @@ export default function Composer({
                   ) : row.kind === "action" ? (
                     <CommandGlyph />
                   ) : row.kind === "bot" ? (
+                    // No glow at 18px: below the 20px floor used everywhere
+                    // else in the app (glow's halo bleeds ~0.31x the face's
+                    // own size — see the channel-mark comment in
+                    // Sidebar.jsx — and this mark sits inline in a menu row
+                    // next to text, where that bleed would read as a smudge).
                     <UmbraFace tint={row.agent.blob} shape={row.agent.shape} size={18} />
                   ) : row.kind === "plugin" ? (
                     <img src={pluginIconUrl(row.plugin)} alt="" />

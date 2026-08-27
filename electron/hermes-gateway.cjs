@@ -31,6 +31,29 @@ const path = require('node:path');
 const readline = require('node:readline');
 
 const { activityFromTool } = require('./activity.cjs');
+const localProviders = require('./local-providers.cjs');
+
+// Provider name → { local, reasoningHonoured }, cached.
+//
+// Every call re-reads and re-parses ~/.hermes/config.yaml, and this is asked
+// on every session create and every turn. The providers block changes when a
+// human edits a file, so a process-lifetime cache is the honest granularity —
+// and `paceFor` is deliberately total (unknown name → hosted), so a cache miss
+// on a config the user just edited degrades to today's behaviour, never to a
+// crash mid-turn.
+const paceCache = new Map();
+function paceFor(provider) {
+  const key = String(provider || '');
+  if (paceCache.has(key)) return paceCache.get(key);
+  let pace;
+  try {
+    pace = localProviders.paceFor(key);
+  } catch {
+    pace = { local: false, reasoningHonoured: true };
+  }
+  paceCache.set(key, pace);
+  return pace;
+}
 
 // ── Tunables ─────────────────────────────────────────────────────────────
 //
@@ -63,6 +86,28 @@ const num = (name, fallback) => {
 const STARTUP_TIMEOUT_MS = num('HYDO_GATEWAY_STARTUP_TIMEOUT_MS', 60_000);
 const REQUEST_TIMEOUT_MS = num('HYDO_GATEWAY_RPC_TIMEOUT_MS', 120_000);
 const TURN_TIMEOUT_MS = num('HYDO_GATEWAY_TURN_TIMEOUT_MS', 900_000);
+//   LOCAL  3600s — the ceiling for a teammate answering on hardware the user
+//          owns. MEASURED on the endpoint in docs/LOCAL-MODEL.md
+//          (unsloth/Qwen3.8-Flash-Next-GGUF): 214 completion tokens in 13.42s
+//          and 152 in 9.39s, i.e. ~16 tok/s. 900s buys 14,400 output tokens —
+//          which sounds like plenty until you remember a TURN is not one
+//          completion. It is the whole agent loop: every tool round trip is
+//          another generation, and Hermes' own compaction is allowed to run
+//          for max(600, 4x300) = 1200s on its own
+//          (auxiliary_client.py `_aux_stream_total_ceiling`). One legal
+//          compaction therefore outlives Hydo's entire 900s turn ceiling, and
+//          a modest-context model compacts OFTEN. The old ceiling could fire
+//          while Hermes was doing exactly what it was told to.
+//
+//          Hosted stays at 900s on purpose. A raised ceiling is not free: on a
+//          hosted provider a turn that has been silent for fifteen minutes is
+//          a wedged stream, and a timeout that never fires is its own bug —
+//          the user sits watching a spinner instead of being told. So this is
+//          the LOCAL number only, chosen against Hermes' own local numbers
+//          (1800s httpx read timeout, 900s stale-stream detector): the ceiling
+//          must sit above the detector that owns retry and diagnostics, never
+//          below it.
+const LOCAL_TURN_TIMEOUT_MS = num('HYDO_GATEWAY_LOCAL_TURN_TIMEOUT_MS', 3_600_000);
 
 // Quitting is not an RPC. `shutdown()` used to await every `session.close` at
 // the full REQUEST_TIMEOUT_MS, and a child that has stopped answering — which
@@ -936,7 +981,24 @@ function createParams(cwd, title, opts) {
     const provider = String(opts.provider || '').trim();
     if (provider) p.provider = provider;
   }
-  const effort = String(opts.reasoningEffort || '').trim();
+  // `reasoning_effort` only if the transport will actually put it on the wire.
+  //
+  // Hermes gates it on `AIAgent._supports_reasoning_extra_body()`
+  // (run_agent.py:7629), which for the `chat_completions` transport says yes
+  // to nousresearch.com, ai-gateway.vercel.sh, GitHub Models/Copilot, provider
+  // id `lmstudio`, ollama.com and OpenRouter URLs — and ends
+  // `if not self._is_openrouter_url(): return False`. A plain
+  // OpenAI-compatible box on your own hardware is none of those, so neither
+  // the top-level field nor `extra_body.reasoning` is ever sent for it.
+  //
+  // Sending it anyway is not harmless. `sessionFor` treats a changed effort as
+  // a different session and tears the old one down — so the landing turn
+  // (`minimal`) followed by the first real turn (`low`) rebuilt the session
+  // for a field the endpoint never saw. On a local model that rebuild is a
+  // cold agent init and a re-prefill at ~16 tok/s, bought with nothing.
+  const effort = paceFor(opts.provider).reasoningHonoured
+    ? String(opts.reasoningEffort || '').trim()
+    : '';
   if (effort) p.reasoning_effort = effort;
   // Presence is part of the contract — see methods_session.py:70-74.
   if (typeof opts.fast === 'boolean') p.fast = opts.fast;
@@ -988,10 +1050,15 @@ function sessionFor(botId, opts = {}) {
     if (existing.pin === pin) {
       const wantModel = String(opts.model || '').trim();
       const wantProv = String(opts.provider || '').trim();
-      const wantEffort = String(opts.reasoningEffort || '').trim();
+      // Same rule as createParams: an effort the transport drops is not a
+      // reason to rebuild a session.
+      const honoursEffort = paceFor(opts.provider).reasoningHonoured;
+      const wantEffort = honoursEffort ? String(opts.reasoningEffort || '').trim() : '';
       const haveModel = String((existing.opts && existing.opts.model) || '').trim();
       const haveProv = String((existing.opts && existing.opts.provider) || '').trim();
-      const haveEffort = String((existing.opts && existing.opts.reasoningEffort) || '').trim();
+      const haveEffort = honoursEffort
+        ? String((existing.opts && existing.opts.reasoningEffort) || '').trim()
+        : '';
       if (wantModel === haveModel && wantProv === haveProv && wantEffort === haveEffort) {
         if (existing.creating) return existing.creating;
         return Promise.resolve(publicSession(existing));
@@ -1132,6 +1199,12 @@ function submit(botId, text, handlers = {}, opts = {}) {
       if (bot.turn && !bot.turn.settled) {
         throw new Error(`bot ${botId} already has a turn in flight`);
       }
+      // A turn on the user's own hardware gets the local ceiling: ~16 tok/s
+      // measured, and one Hermes compaction alone may legally run 1200s. See
+      // LOCAL_TURN_TIMEOUT_MS.
+      const ceiling = paceFor(bot.opts && bot.opts.provider).local
+        ? LOCAL_TURN_TIMEOUT_MS
+        : TURN_TIMEOUT_MS;
       return new Promise((resolve, reject) => {
         const turn = {
           botId,
@@ -1142,8 +1215,8 @@ function submit(botId, text, handlers = {}, opts = {}) {
           resolve,
           reject,
           timer: setTimeout(() => {
-            settleTurn(turn, new Error(`turn timed out after ${TURN_TIMEOUT_MS}ms`));
-          }, TURN_TIMEOUT_MS),
+            settleTurn(turn, new Error(`turn timed out after ${ceiling}ms`));
+          }, ceiling),
         };
         turn.timer.unref?.();
         bot.turn = turn;
@@ -2166,5 +2239,8 @@ module.exports = {
   // hermes-plugins.cjs, which uses this). NEVER exposed to the renderer.
   request,
   HERMES_ROOT,
-  TIMEOUTS: { STARTUP_TIMEOUT_MS, REQUEST_TIMEOUT_MS, TURN_TIMEOUT_MS },
+  TIMEOUTS: { STARTUP_TIMEOUT_MS, REQUEST_TIMEOUT_MS, TURN_TIMEOUT_MS, LOCAL_TURN_TIMEOUT_MS },
+  // Exposed for tests: which ceiling a provider name earns, and why.
+  turnCeilingFor: (provider) => (paceFor(provider).local ? LOCAL_TURN_TIMEOUT_MS : TURN_TIMEOUT_MS),
+  paceFor,
 };

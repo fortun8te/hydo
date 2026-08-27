@@ -3,7 +3,7 @@ import UmbraFace from "../umbra/UmbraFace.jsx";
 import ChoiceCard from "./ChoiceCard.jsx";
 import * as RC from "./RichContent.jsx";
 import { botWorks } from "../lib/working.js";
-import { composerExtrasForMember, presenceOf, joinDelayOf, readHoldFor } from "../lib/presence.js";
+import { composerExtrasForMember, presenceOf, joinDelayOf, readHoldFor, elapsedLabel } from "../lib/presence.js";
 import ActivityMark from "./ActivityMark.jsx";
 
 function dayKey(iso) {
@@ -440,6 +440,8 @@ function ReactionPills({ groups, byId, userName, showFaces, onToggle }) {
             aria-pressed={g.mine}
             onClick={() => onToggle(g.emoji)}
           >
+            {/* No glow at 14px — below the app's 20px floor (see the
+                channel-mark comment in Sidebar.jsx). */}
             {showFaces && firstBot ? (
               <UmbraFace tint={firstBot.blob} shape={firstBot.shape} size={14} className="hy-reaction__face" />
             ) : null}
@@ -783,7 +785,7 @@ function GateCard({ msg, from }) {
   return (
     <div className={answered ? "hy-ask hy-ask--done" : "hy-ask"}>
       <div className="hy-ask__head">
-        {from ? <UmbraFace tint={from.blob} shape={from.shape} size={20} /> : null}
+        {from ? <UmbraFace tint={from.blob} shape={from.shape} size={20} glow={!!from.glow} /> : null}
         <span className="hy-ask__who">{who} needs a reply</span>
       </div>
       <p className="hy-ask__text">{toText(msg.text)}</p>
@@ -837,7 +839,7 @@ function ApprovalCard({ msg, from }) {
   return (
     <div className={answered ? "hy-ask hy-ask--done" : "hy-ask"}>
       <div className="hy-ask__head">
-        {from ? <UmbraFace tint={from.blob} shape={from.shape} size={20} /> : null}
+        {from ? <UmbraFace tint={from.blob} shape={from.shape} size={20} glow={!!from.glow} /> : null}
         <span className="hy-ask__who">{who} wants your OK</span>
       </div>
       <p className="hy-ask__text">{toText(msg.text) || "Run this?"}</p>
@@ -1015,6 +1017,7 @@ function Transcript({
   function workingRow(agent, key, extra = {}) {
     if (!agent) return null;
     const busy = humanActivity(agent.activity) || humanActivity(agent.activityDetail) || "Working";
+    const workingNow = busyHere(agent, convId);
     const presence = presenceOf({
       // Per-bot join delay, so two faces in a channel do not appear in
       // lockstep like a UI animation.
@@ -1023,7 +1026,7 @@ function Transcript({
       // of it there is. Flat, this was the most mechanical thing left in the
       // presence system.
       readMs: readHoldFor(lastUserChars),
-      working: busyHere(agent, convId),
+      working: workingNow,
       sending: !!sending,
       linger: !!linger,
       lingerSince,
@@ -1036,6 +1039,7 @@ function Transcript({
       ...extra,
     });
     if (!presence.visible) return null;
+    const elapsed = elapsedLabel(extra.since ?? since, clock);
     return (
       <div
         className="sand-inchat"
@@ -1048,6 +1052,7 @@ function Transcript({
           tint={agent.blob}
           shape={agent.shape}
           size={28}
+          glow={!!agent.glow}
           live
           morph
           mood={presence.mood}
@@ -1061,6 +1066,17 @@ function Transcript({
         <span className="hy-act">
           <ActivityMark plugin={agent.activityIcon} size={14} />
           <span className="sand-inchat__busy">{busy}</span>
+          {/* Only once the wait is long enough to be worth a number, and only
+              for a turn this window actually started. A teammate on the user's
+              own hardware runs at ~16 tok/s (docs/LOCAL-MODEL.md), so two
+              minutes of an unchanging "Working" is normal there and reads
+              exactly like a hang. The clock is what says "still going" without
+              claiming to know how much longer. It is NOT inside the busy span:
+              that span is a background-clip:text shimmer with a transparent
+              fill, and anything nested in it renders as nothing at all. */}
+          {workingNow && elapsed ? (
+            <span className="sand-inchat__elapsed">{elapsed}</span>
+          ) : null}
         </span>
       </div>
     );
@@ -1181,6 +1197,8 @@ function Transcript({
             <div key={msg.id} id={`msg-${msg.id}`} className={`hy-item${sep}${enter}`} style={enterStyle}>
               {day}
               <button type="button" className="sand-tally" onClick={() => who && onOpenDm?.(who.id)}>
+                {/* No glow at 16px — below the app's 20px floor (see the
+                    channel-mark comment in Sidebar.jsx). */}
                 {toText(msg.text)} {who ? <UmbraFace tint={who.blob} shape={who.shape} size={16} /> : null}{" "}
                 {who?.name}
               </button>
@@ -1294,6 +1312,7 @@ function Transcript({
                   tint={from.blob}
                   shape={from.shape}
                   size={28}
+                  glow={!!from.glow}
                   live={busyHere(from, convId)}
                   mood={busyHere(from, convId) ? "thinking" : "idle"}
                 />

@@ -108,7 +108,7 @@ export default function ChannelCreate({ agents = [], onClose, onCreate }) {
             <div className="hy-chcreate__chips">
               {selected.map((a) => (
                 <span key={a.id} className="hy-chcreate__chip">
-                  <UmbraFace tint={a.blob} shape={a.shape} size={20} />
+                  <UmbraFace tint={a.blob} shape={a.shape} size={20} glow={!!a.glow} />
                   <span>{a.name}</span>
                   <button type="button" aria-label={`Remove ${a.name}`} onClick={() => toggle(a.id)}>
                     <ChipX />
@@ -145,7 +145,7 @@ export default function ChannelCreate({ agents = [], onClose, onCreate }) {
                       </svg>
                     ) : null}
                   </span>
-                  <UmbraFace tint={a.blob} shape={a.shape} size={28} />
+                  <UmbraFace tint={a.blob} shape={a.shape} size={28} glow={!!a.glow} />
                   <span className="hy-chcreate__name">{a.name}</span>
                 </button>
               );

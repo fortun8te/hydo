@@ -104,6 +104,12 @@ function ChannelMark({ channel, agents }) {
         // Per member, never per channel: one face can be spinning inside a
         // channel mark while the other sits perfectly still.
         const memberLive = botWorks(m, channel.id);
+        // No glow here even for a member with it on: FACE_CLASS absolutely
+        // positions these three faces overlapping each other (see
+        // sand-channel-mark__face--0/1/2 in styles.css). Glow's halo bleeds
+        // ~0.31x the face's own size past its silhouette (glow.js GLOW_GEOM,
+        // haloR 1.62), which on a 24px face would smear directly into the
+        // neighbour it overlaps rather than reading as light.
         return (
           <UmbraFace
             key={m.id}
@@ -598,6 +604,7 @@ function Sidebar({
                         tint={entry.blob}
                         shape={entry.shape}
                         size={48}
+                        glow={!!entry.glow}
                         fit
                         live={live}
                         mood={moodFor(live)}
@@ -731,6 +738,7 @@ function Sidebar({
                     tint={entry.blob}
                     shape={entry.shape}
                     size={36}
+                    glow={!!entry.glow}
                     fit
                     live={live}
                     mood={moodFor(live)}

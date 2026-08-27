@@ -692,10 +692,10 @@ export default function Shell({ state }) {
             <div className="sand-header-bot">
               {peer ? (
                 <>
-                  <UmbraFace tint={selected.blob} shape={selected.shape} size={22} />
+                  <UmbraFace tint={selected.blob} shape={selected.shape} size={22} glow={!!selected.glow} />
                   {selected.name}
                   <span className="mute"> ↔ </span>
-                  <UmbraFace tint={peer.blob} shape={peer.shape} size={22} />
+                  <UmbraFace tint={peer.blob} shape={peer.shape} size={22} glow={!!peer.glow} />
                   {peer.name}
                 </>
               ) : (
@@ -714,6 +714,7 @@ export default function Shell({ state }) {
                           tint={selected.blob}
                           shape={selected.shape}
                           size={22}
+                          glow={!!selected.glow}
                           live={sending || botBusy(selected) || botWorks(selected, selected.id)}
                           mood={sending || botBusy(selected) || botWorks(selected, selected.id) ? "spin" : "idle"}
                           poke

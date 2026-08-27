@@ -70,7 +70,7 @@ export default function ChannelRail({ channel, agents, onChange, onClose, onTogg
                 onClick={() => onToggleMember(a.id)}
               >
                 <span className="sand-member__face">
-                  <UmbraFace tint={a.blob} shape={a.shape} size={28} live={here} mood={here ? "spin" : "idle"} />
+                  <UmbraFace tint={a.blob} shape={a.shape} size={28} glow={!!a.glow} live={here} mood={here ? "spin" : "idle"} />
                   {here ? (
                     <span
                       className="sand-row__dot sand-member__dot is-work"

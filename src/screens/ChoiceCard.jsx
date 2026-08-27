@@ -52,6 +52,8 @@ export default function ChoiceCard({
     <div className={resolved ? "hy-choice hy-choice--resolved" : "hy-choice"}>
       <div className="hy-choice__head">
         <div className="hy-choice__title">
+          {/* No glow at 18px — below the app's 20px floor (see the
+              channel-mark comment in Sidebar.jsx for the halo-bleed math). */}
           {speaker ? (
             <UmbraFace
               tint={speaker.blob}

@@ -626,6 +626,17 @@
   }
 }
 
+/* The elapsed clock on a long turn. Deliberately NOT shimmering and a step
+   quieter than the activity line: it is a fact about the wait, not a second
+   thing claiming to be in flight. Tabular figures so a ticking number does not
+   reflow the row every second. */
+.sand-transcript .sand-inchat__elapsed {
+  margin-left: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+}
+
 /* ------------------------------------------------------- streaming caret */
 
 .hy-caret {

@@ -117,6 +117,71 @@ function list(file = CONFIG) {
   return out;
 }
 
+/**
+ * Is this host a machine the user owns?
+ *
+ * Deliberately the SAME set Hermes uses (`agent/model_metadata.py`
+ * `is_local_endpoint`): loopback, container DNS names, unqualified hostnames,
+ * RFC-1918, link-local, and Tailscale CGNAT 100.64/10. Tailscale is in there
+ * because that is how the PC next to you is actually reached — the endpoint in
+ * docs/LOCAL-MODEL.md is `100.74.135.83`, which is not private by RFC-1918 and
+ * would read as a public cloud host to a naive check.
+ *
+ * Matching Hermes matters more than being right in the abstract: Hermes raises
+ * its own stream read timeout to 1800s and its stale-stream detector to 900s
+ * for exactly these hosts. If Hydo drew the line somewhere else, Hydo's turn
+ * ceiling would fire on a stream Hermes was still happily waiting for.
+ */
+function isLocalHost(host) {
+  const h = String(host || "").trim().toLowerCase().replace(/^\[|\]$/g, "").split(":")[0];
+  if (!h) return false;
+  if (h === "localhost" || h === "::1" || h.endsWith(".local") || h.endsWith(".internal")) return true;
+  if (!h.includes(".")) return true; // docker-compose service name, /etc/hosts entry
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  if (a === 127 || a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // Tailscale CGNAT
+  return false;
+}
+
+/**
+ * How a turn on this provider behaves, for callers that have to choose a
+ * deadline or decide whether a knob is real.
+ *
+ * `reasoningHonoured` is the one that surprises people. Hermes only puts
+ * `reasoning_effort` (or `extra_body.reasoning`) on the wire when
+ * `AIAgent._supports_reasoning_extra_body()` says yes, and for the
+ * `chat_completions` transport that method returns True for exactly four
+ * things: nousresearch.com, ai-gateway.vercel.sh, GitHub Models/Copilot,
+ * provider id `lmstudio`, ollama.com, and OpenRouter URLs. Everything else —
+ * an Unsloth server, llama.cpp, vLLM, any plain OpenAI-compatible box — falls
+ * through `if not self._is_openrouter_url(): return False`.
+ *
+ * So on your own Unsloth endpoint the effort field is not "weakly honoured",
+ * it is never sent. Read from `~/.hermes/hermes-agent/run_agent.py:7629` and
+ * `agent/transports/chat_completions.py:664`, not guessed.
+ */
+function paceOf(provider) {
+  const id = String((provider && provider.id) || "").trim().toLowerCase();
+  const host = String((provider && provider.host) || "").trim().toLowerCase();
+  const local = isLocalHost(host);
+  const reasoningHonoured = id === "lmstudio" || host.endsWith("ollama.com");
+  return { local, reasoningHonoured };
+}
+
+/** paceOf() for a provider NAME, as a session carries it. Unknown → hosted. */
+function paceFor(id, file = CONFIG) {
+  const want = String(id || "").trim().toLowerCase();
+  if (!want) return { local: false, reasoningHonoured: true };
+  const found = list(file).find((p) => String(p.id).toLowerCase() === want);
+  if (!found) return { local: false, reasoningHonoured: true };
+  return paceOf(found);
+}
+
 /** The api_key for one provider. Main process only; never returned over IPC. */
 function keyFor(id, file = CONFIG) {
   let text;
@@ -202,4 +267,4 @@ async function status(file = CONFIG, opts = {}) {
   return probed;
 }
 
-module.exports = { CONFIG, parseProviders, list, keyFor, probe, probeUrl, isPlaceholder, hostOf, status };
+module.exports = { CONFIG, parseProviders, list, keyFor, probe, probeUrl, isPlaceholder, hostOf, status, isLocalHost, paceOf, paceFor };

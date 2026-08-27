@@ -111,6 +111,8 @@ export default function Home({
   if (!roster.length) {
     return (
       <div className="sand-home" {...glow}>
+        {/* Decorative marks for the empty state — not a real teammate, so
+            there is no agent.glow to read. Left plain. */}
         <div className="sand-home__marks" aria-hidden="true">
           {["cyan", "purple", "orange"].map((tint, i) => (
             <UmbraFace
@@ -172,7 +174,7 @@ export default function Home({
                     className="hy-live"
                     onClick={() => onOpen?.(a.id)}
                   >
-                    <UmbraFace tint={a.blob} shape={a.shape} size={34} live mood="spin" poke={false} />
+                    <UmbraFace tint={a.blob} shape={a.shape} size={34} glow={!!a.glow} live mood="spin" poke={false} />
                     <span className="hy-live__copy">
                       <span className="hy-live__name">{a.name}</span>
                       {/* The plan step wins when there is one — it is what
@@ -208,6 +210,7 @@ export default function Home({
                       tint={a.blob}
                       shape={a.shape}
                       size={40}
+                      glow={!!a.glow}
                       live
                       mood={pip === "work" ? "spin" : "fidget"}
                       poke={false}
@@ -279,7 +282,7 @@ export default function Home({
                   onClick={() => onOpenRoutine?.(r.agentId, r.id)}
                 >
                   <span className="hy-row__icon" aria-hidden="true">
-                    <UmbraFace tint={r.bot.blob} shape={r.bot.shape} size={22} poke={false} />
+                    <UmbraFace tint={r.bot.blob} shape={r.bot.shape} size={22} glow={!!r.bot.glow} poke={false} />
                   </span>
                   <span className="hy-row__copy">
                     <span className="hy-row__name">{r.name || r.instruction || "Routine"}</span>

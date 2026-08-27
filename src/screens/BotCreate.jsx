@@ -139,7 +139,7 @@ export default function BotCreate({ agents = [], onClose, onCreate, onOpen }) {
               onMouseEnter={() => setActive(i + 1)}
               onClick={() => pick(i + 1)}
             >
-              <UmbraFace tint={a.blob} shape={a.shape} size={28} />
+              <UmbraFace tint={a.blob} shape={a.shape} size={28} glow={!!a.glow} />
               <span className="hy-botcreate__label">{a.name}</span>
               {i + 2 <= 9 ? <Chord n={i + 2} /> : null}
             </button>

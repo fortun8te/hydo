@@ -2059,6 +2059,18 @@ function createStore(opts = {}) {
         if (pre && pre.compressed) {
           persistHermesIds();
           logAction(agent.id, "compact", `history compressed at ${Math.round(pre.percent || 0)}%`);
+          // And SAY so, in the thread it happened in.
+          //
+          // The post-turn twin of this (`maybeCompact`) has always posted the
+          // event; this one only wrote a line to the action log, which nobody
+          // reads. That asymmetry did not matter much on a 200K hosted window,
+          // where compaction is rare and always lands after a reply. It
+          // matters on a modest-context local model, which compacts often and
+          // trips the PRE-turn gate — so the visible effect was a teammate
+          // pausing before it answered, forgetting things, and never saying
+          // why. Silence about losing your history is the failure this app is
+          // supposed to not have.
+          compactedNote(agent, convId || agent.id);
         }
         // Even when it declines to compress it hands back the real percent,
         // which unsticks the cache for every turn after this one.
@@ -2394,6 +2406,23 @@ function createStore(opts = {}) {
    * Hermes hands back — a transcript is a conversation, and a summariser's
    * output is machinery.
    */
+  /**
+   * The one sentence both compaction paths post. Same words in both places on
+   * purpose: from the user's side it is the same event, and two phrasings for
+   * one thing reads as two different things happening.
+   */
+  function compactedNote(agent, convId) {
+    pushMsg(convId || agent.id, {
+      id: uuid(),
+      role: "system",
+      kind: "event",
+      fromId: agent.id,
+      text: `Older messages were summarised to free up room. ${agent.name} still remembers what mattered.`,
+      at: now(),
+    });
+    save();
+  }
+
   function maybeCompact(agent) {
     let gateway;
     try {
@@ -2409,15 +2438,7 @@ function createStore(opts = {}) {
         const storedId = gateway.storedSessionIdOf ? gateway.storedSessionIdOf(agent.id) : "";
         if (storedId) agent.hermesSessionId = storedId;
         if (res.percent != null) agent.contextPercent = res.percent;
-        pushMsg(agent.id, {
-          id: uuid(),
-          role: "system",
-          kind: "event",
-          fromId: agent.id,
-          text: `Older messages were summarised to free up room. ${agent.name} still remembers what mattered.`,
-          at: now(),
-        });
-        save();
+        compactedNote(agent, agent.id);
       })
       .catch(() => {
         /* best-effort housekeeping — never surfaced as a failure */
