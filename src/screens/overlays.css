@@ -562,3 +562,16 @@
   color: var(--sand-text-secondary, #fcfcfc99);
 }
 .hy-computer__tag.is-work { background: rgba(42, 146, 254, 0.18); color: #9ccaff; }
+
+/* The size note. Amber rather than red: this is a thing worth knowing before
+   the month ends, not a thing that is wrong. */
+.hy-computer__size {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--sand-text-primary, #fcfcfc);
+  background: rgba(228, 161, 27, 0.1);
+  border: 1px solid rgba(228, 161, 27, 0.26);
+}

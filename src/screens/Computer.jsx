@@ -10,6 +10,23 @@ import { useCallback, useEffect, useState } from "react";
  * more than one box, something has gone wrong upstream of it.
  */
 
+/**
+ * What a machine of this size costs if it never sleeps.
+ *
+ * Rates are the vendor's own multipliers: small 0.5x, default 1x, large 2x,
+ * against a $20 plan of 2,000,000 VM-seconds and a 2,592,000-second month.
+ * Shown as a share of the plan rather than dollars, because the plan is the
+ * thing that runs out.
+ */
+const RATE = { small: 0.5, default: 1, large: 2 };
+const MONTH = 2_592_000;
+const PLAN = 2_000_000;
+function costOf(type) {
+  const r = RATE[type];
+  if (!r) return null;
+  return { pct: Math.round(((MONTH * r) / PLAN) * 100), rate: r };
+}
+
 function hrs(n) {
   const v = Number(n);
   return Number.isFinite(v) ? `${v.toFixed(1)}h` : "";
@@ -100,6 +117,17 @@ export default function Computer() {
               {st.type ? <span className="hy-computer__tag">{st.type}</span> : null}
               {st.busy ? <span className="hy-computer__tag is-work">{st.busy} working</span> : null}
             </div>
+            {/* Said where the decision is, not in a doc. Hydo creates `small`;
+                a machine adopted from the dashboard can be any size, and the
+                difference is the whole monthly bill. */}
+            {st.type && st.type !== "small" && costOf(st.type) ? (
+              <p className="hy-computer__size">
+                This one is <strong>{st.type}</strong> ({costOf(st.type).rate}x rate). Left awake
+                all month it would use about {costOf(st.type).pct}% of the plan, against{" "}
+                {costOf("small").pct}% for a small one. Hydo makes small ones; this was already on
+                your account, so it kept it.
+              </p>
+            ) : null}
             <p className="hy-computer__note">
               {running
                 ? "Billing runs by the second while it is awake. It stops itself after ten idle minutes, and on quit."
