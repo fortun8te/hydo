@@ -31,19 +31,22 @@ import { hash01 } from "./spin-turn.js";
 export const IDLE = {
   // A still beat: he is just there. The long tail is the point — occasionally
   // he does nothing for seven seconds, which no fixed grid ever produces.
-  STILL_MIN: 1700,
-  STILL_MAX: 7400,
+  STILL_MIN: 2600,
+  STILL_MAX: 9200,
   // A motion beat: one of the calm motions plays out.
-  MOVE_MIN: 900,
-  MOVE_MAX: 2300,
-  // The gaze runs on its own, faster and more often than posture.
-  LOOK_MIN: 900,
-  LOOK_MAX: 4600,
-  // How long the eased turn onto a new gaze target takes.
-  LOOK_EASE_MS: 900,
+  MOVE_MIN: 1100,
+  MOVE_MAX: 2400,
+  // The gaze runs on its own clock. It used to re-aim every 0.9-4.6s and swing
+  // up to 17 degrees, which is not "looking around", it is scanning the room
+  // for exits. Someone waiting for you to finish a sentence mostly holds still
+  // and occasionally shifts. Slower, smaller, and eased over longer.
+  LOOK_MIN: 2400,
+  LOOK_MAX: 7800,
+  // The turn onto a new target. Long: a fast eye movement reads as a flinch.
+  LOOK_EASE_MS: 1500,
   // Gaze amplitude in degrees, before `restless` scales it.
-  LOOK_MIN_DEG: 5,
-  LOOK_MAX_DEG: 17,
+  LOOK_MIN_DEG: 3,
+  LOOK_MAX_DEG: 11,
   // He is fully settled after this long with nothing happening.
   SETTLE_MS: 75_000,
   // Settled stills last this much longer; settled glances are this much smaller.
@@ -178,8 +181,11 @@ export function idleStep(st, now, ease) {
     const damped = amp * (IDLE.SETTLE_DAMP + (1 - IDLE.SETTLE_DAMP) * restless);
     // Not a coin flip between two sides: sometimes he looks back to centre,
     // sometimes barely moves, which is what stops it reading as a wiper.
+    // Nearly half the time the gaze returns to CENTRE. Constantly holding a
+    // sideways stare is most of what read as anxious: a person waiting looks
+    // away and then back, they do not sit at an angle.
     const pick = hash01(s.seed * 2.2 + s.ln * 6.6);
-    const to = pick < 0.18 ? 0 : (pick < 0.59 ? 1 : -1) * damped;
+    const to = pick < 0.42 ? 0 : (pick < 0.71 ? 1 : -1) * damped;
     s.lookFrom = s.deg;
     s.lookTo = to;
     s.lookAt0 = s.lookUntil;

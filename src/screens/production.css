@@ -790,23 +790,33 @@
      blue and tinted the copy with it, which is a background, not a glow. It
      should be a pool of light you notice under the marks, not a gradient the
      screen is painted in. */
-  bottom: -120px;
-  width: min(520px, 62%);
-  height: 300px;
-  transform: translateX(-50%);
+  bottom: -150px;
+  width: min(680px, 78%);
+  height: 380px;
+  /* Follows the pointer, with the lift and brightness rising as you move up
+     toward the marks. The transition is long and eased so it drifts after the
+     cursor rather than snapping to it, which is the difference between "alive"
+     and "attached to the mouse". */
+  transform: translate(calc(-50% + var(--glow-x)), calc(var(--glow-lift) * -1));
+  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
   mix-blend-mode: screen;
   filter: blur(40px);
   background:
-    radial-gradient(30% 52% at 50% 100%, rgba(228, 238, 255, 0.34) 0%, rgba(228, 238, 255, 0) 60%),
-    radial-gradient(46% 68% at 50% 100%, rgba(105, 148, 255, 0.32) 0%, rgba(105, 148, 255, 0) 70%),
-    radial-gradient(74% 88% at 50% 100%, rgba(35, 101, 255, 0.2) 0%, rgba(35, 101, 255, 0) 78%);
+    radial-gradient(28% 48% at 50% 100%, rgba(236, 244, 255, 0.5) 0%, rgba(236, 244, 255, 0) 60%),
+    radial-gradient(44% 66% at 50% 100%, rgba(105, 148, 255, 0.46) 0%, rgba(105, 148, 255, 0) 70%),
+    radial-gradient(70% 86% at 50% 100%, rgba(35, 101, 255, 0.3) 0%, rgba(35, 101, 255, 0) 78%),
+    radial-gradient(100% 100% at 50% 100%, rgba(20, 76, 205, 0.2) 0%, rgba(20, 76, 205, 0) 82%);
+  opacity: var(--glow-boost);
   animation: sand-home-glow 7.5s ease-in-out infinite;
 }
 
 .sand-home {
   position: relative;
   overflow: hidden;
+  --glow-x: 0px;
+  --glow-lift: 0px;
+  --glow-boost: 1;
 }
 
 /* Above the floor glow. */
@@ -817,14 +827,24 @@
 
 /* Breathing, not pulsing. The scale is tiny on purpose: you should notice it
    only if you look for it. */
+/* Breathing is on the FILTER, not the transform, so it cannot fight the
+   pointer-follow transform above. */
 @keyframes sand-home-glow {
-  0%, 100% { opacity: 0.7; transform: translateX(-50%) scaleY(1); }
-  50% { opacity: 0.92; transform: translateX(-50%) scaleY(1.06); }
+  0%, 100% { filter: blur(40px) brightness(0.92); }
+  50% { filter: blur(46px) brightness(1.1); }
 }
 
 .sand-home__mark {
   animation: sand-home-rise 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* Standing IN the light: a soft blue cast under each mark, so they belong
+     to the pool rather than floating above it. */
+  filter: drop-shadow(0 10px 18px rgba(35, 101, 255, 0.28));
+  transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+
+.sand-home:hover .sand-home__mark--0 { transform: translateY(-3px); }
+.sand-home:hover .sand-home__mark--1 { transform: translateY(-1px); }
+.sand-home:hover .sand-home__mark--2 { transform: translateY(-2px); }
 
 /* The middle one is the hero; the outer two sit back and arrive after it. */
 /* `opacity` is animated to a literal, never to `inherit`: `inherit` in a

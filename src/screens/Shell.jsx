@@ -432,11 +432,30 @@ export default function Shell({ state }) {
             }}
           />
         ) : (
-          <div className="sand-home">
+          <div
+            className="sand-home"
+            /* The glow follows the pointer. A fixed pool is wallpaper; one
+               that leans toward you is the only cheap way a static screen
+               feels like it noticed you arrive. Written as CSS vars so the
+               move handler never triggers a React render. */
+            onPointerMove={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              const x = ((e.clientX - r.left) / r.width - 0.5) * 2;
+              const y = (e.clientY - r.top) / r.height;
+              e.currentTarget.style.setProperty("--glow-x", `${x * 46}px`);
+              e.currentTarget.style.setProperty("--glow-lift", `${(1 - y) * 26}px`);
+              e.currentTarget.style.setProperty("--glow-boost", String(1 + (1 - y) * 0.5));
+            }}
+            onPointerLeave={(e) => {
+              e.currentTarget.style.setProperty("--glow-x", "0px");
+              e.currentTarget.style.setProperty("--glow-lift", "0px");
+              e.currentTarget.style.setProperty("--glow-boost", "1");
+            }}
+          >
             {/* An empty app should show you the thing it makes, not a sentence
                 pointing at a button in the corner. */}
             <div className="sand-home__marks" aria-hidden="true">
-              {["chrome", "cyan", "orange"].map((tint, i) => (
+              {["cyan", "purple", "orange"].map((tint, i) => (
                 <UmbraFace
                   key={tint}
                   className={`sand-home__mark sand-home__mark--${i}`}
