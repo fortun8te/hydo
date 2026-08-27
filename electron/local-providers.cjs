@@ -375,9 +375,16 @@ async function probe(provider, opts = {}) {
     // server. A model listing with nothing in it is its own state, and its own
     // fix — load a model, not debug a firewall.
     let names = [];
+    // `rows` is read again below, so it is declared HERE, not inside the try.
+    // It was scoped to the try first, and the reference below threw a
+    // ReferenceError straight into the outer catch — which reports "offline".
+    // So a server answering 200 in 80ms was told to the user as unreachable:
+    // the same confidently-wrong status this whole function exists to avoid,
+    // reintroduced by the fix for it.
+    let rows = [];
     try {
       const body = await res.json();
-      const rows = Array.isArray(body) ? body : (body && body.data) || [];
+      rows = Array.isArray(body) ? body : (body && body.data) || [];
       names = rows.map((m) => (m && (m.id || m.name)) || "").filter(Boolean);
     } catch {
       // A 200 we cannot parse is still a live server; say the true, smaller
@@ -389,6 +396,25 @@ async function probe(provider, opts = {}) {
         state: "empty",
         detail: `${provider.host} is up but has no model loaded.`,
         models: [],
+      };
+    }
+    // A CATALOGUE is not a loaded model.
+    //
+    // Unsloth Studio lists every model it knows about and marks each
+    // `loaded: true|false`. Caught live: seven models listed, all false — the
+    // server answering perfectly and unable to run a single turn. Checking only
+    // for an empty list called that "Reachable", which is the same true-and-
+    // useless answer the empty case exists to prevent.
+    //
+    // Only conclude this when the server actually SPEAKS about loading. Plenty
+    // of OpenAI-compatible servers never send the field, and absence of the
+    // flag is not absence of a model.
+    const speaks = rows.some((m) => m && typeof m.loaded === "boolean");
+    if (speaks && !rows.some((m) => m && m.loaded === true)) {
+      return {
+        state: "empty",
+        detail: `${provider.host} lists ${names.length} model${names.length === 1 ? "" : "s"} but none are loaded.`,
+        models: names,
       };
     }
     return { state: "ok", detail: `Answering at ${provider.host}.`, models: names };
