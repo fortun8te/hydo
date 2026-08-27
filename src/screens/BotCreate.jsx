@@ -118,8 +118,14 @@ export default function BotCreate({ agents = [], onClose, onCreate, onOpen }) {
                   onClose?.();
                 }}
               >
-                <UmbraFace tint={p.tint} shape="pebble" size={20} poke={false} />
-                <span className="hy-botcreate__preset-name">{p.name}</span>
+                <UmbraFace tint={p.tint} shape="pebble" size={22} poke={false} />
+                <span className="hy-botcreate__preset-copy">
+                  <span className="hy-botcreate__preset-name">{p.name}</span>
+                  {/* What it will actually be, said here rather than in a
+                      tooltip. A row of six names is a guess; the point of a
+                      starting point is knowing where it starts. */}
+                  <span className="hy-botcreate__preset-blurb">{p.blurb}</span>
+                </span>
               </button>
             ))}
           </div>
