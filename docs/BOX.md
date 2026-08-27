@@ -330,6 +330,138 @@ keep.
 
 ---
 
+## Browsing: what the box side actually costs, measured
+
+**This section is not read-only.** It was measured on 2026-08-27 by resuming
+`bx_843rh875`, running `box exec` against it, and stopping it again. Cost:
+**two starts** and **~4 minutes** of awake time. Nothing was installed. The box
+was left stopped, as it was found.
+
+The baseline to beat: a teammate on the local model fetched `https://example.com`
+through one `box exec` and read its `<h1>` — **109 seconds**, one tool call. The
+box side of that is 1.4 seconds. Everything else is the model at ~31 tok/s.
+**That is the shape of the whole problem: the machine is not slow, the turn is.**
+So every lever below is a lever on TURNS and on TOKENS, not on VM seconds.
+
+### The wire is cheap. A second call is not
+
+| Measured (n=3) | Value |
+|---|---|
+| One `box exec` end to end, warm | **0.45s** (0.96s / 0.43s / 0.41s; the first pays a connection) |
+| Three separate `box exec`s | **1.50s** |
+| The same three chained into one exec | **0.59s** |
+| One `curl … \| html2text … \| head -c 300`, warm | **1.35s** (1.47 / 1.35 / 1.24) |
+
+So batching saves ~0.9s of wire per three commands, which on its own is not
+worth a sentence in a prompt that is taxed every turn. It is worth it for the
+other half: a second `box exec` is a second whole TURN — the model re-reads the
+thread and writes another command at 31 tok/s. Against a 109-second first turn,
+the wire is a rounding error and the turn is the bill. Hence the block's line:
+**one errand, one command, chained with `;`**.
+
+### `head -c 2000` of HTML buys almost no answer. Of text it buys 13x more
+
+`html2text` is **already installed** at `/usr/bin/html2text`. `lynx`, `w3m`,
+`pandoc`, `links` and `elinks` are not; `python3`, `node`, `rg`, `jq`, `curl`
+and `google-chrome` are. Nothing was added to the disk to make any of this work.
+
+| Page | Raw HTML | Text (`html2text -utf8 \| awk NF`) |
+|---|---|---|
+| `example.com` | 559 B | **142 B** |
+| `en.wikipedia.org/wiki/Ubuntu` | 1,036,632 B | **109,543 B** (extracted in 0.10s) |
+| `news.ycombinator.com` | 34,597 B | 20 KB-ish |
+
+Byte counts are the boring half. The sharp number is what fits under the SAME
+`head -c 2000` cap the block already mandates, on the Hacker News front page:
+
+- raw HTML — **1 story**
+- `html2text` — **13 stories**, each with title, domain, points and comment count
+
+Thirteen times the answer for the identical token spend. And on `example.com`
+the entire useful page is 142 bytes of text, against 559 bytes of markup — the
+exact 109-second baseline task, at a quarter of the tokens. Extraction happens
+**on the box**, before the bytes cross the wire, which is the only place it can
+save anything.
+
+`awk NF` rather than a `grep -v` blank-line filter: html2text emits long runs of
+blank lines (24 of them before the first word of a Wikipedia page), and `awk NF`
+drops them in six characters with no quoting to get wrong inside a prompt.
+
+### A rung between `curl` and `lux`, that costs no lux session
+
+`lux --help` was read on the box. There is no cheap mode and no session reuse:
+`lux start "<task>"`, `lux run [--max-steps N]`, `lux status`. `lux status`
+reports the ration — **20 sessions/day, 50 steps/session**, today 0/20 — and
+reading it spends nothing. `--max-steps` is the only dial, and it is worth
+using: one confused session can eat 50 steps of a 20-session day.
+
+Twenty a day for a whole team is tight, and `curl` cannot run JavaScript. The
+gap between them is filled by something already on the disk:
+
+```bash
+google-chrome --headless --no-sandbox --user-data-dir=$(mktemp -d) \
+  --dump-dom <url> | html2text -utf8 | awk NF | head -c 1500
+```
+
+Measured: **~2.1s** for the Hacker News front page, **~3s** each for
+`docs.ascii.dev` and `vitejs.dev`. It renders JavaScript, returns text, spends
+**zero lux sessions** and takes **zero screenshots**.
+
+**One trap, and it is a silent one.** Reuse a `--user-data-dir` and Chrome exits
+**0 with empty stdout** — measured three URLs in a row returning `0` bytes after
+an earlier run had left a lock in the same directory. That reads exactly like
+"the page is empty", which is the worst failure mode there is. `$(mktemp -d)`
+every time. It is also why the throwaway profile is right anyway: the persistent
+Chrome profile on this box holds the team's logins, and a headless process must
+not fight the desktop one for it.
+
+So the ladder in `AGENTS.md` now has four rungs instead of three:
+
+1. `curl -sL <url> | html2text -utf8 | awk NF | rg -m5 -C2 <pattern> | head -c 1500`
+2. `google-chrome --headless … --dump-dom` when the page needs JavaScript
+3. `lux start "<goal>" && lux run --max-steps 15` when it needs a login or real clicking
+4. screenshots — still never
+
+### `box exec` does NOT wake a sleeping box
+
+Measured, and the old prompt said the opposite. Against a stopped box, `box exec`
+returns in **0.18s** with `{"code":"machine_not_running","status":409}`. It does
+not resume, it does not queue. The AGENTS.md line "It sleeps when idle; a command
+wakes it" was therefore false, and the cost of that falsehood is a confused model
+spending a whole turn — tens of seconds at 31 tok/s — working out what to do with
+a 409. It now names the error and the one-line recovery.
+
+### The 5.9s wake was being spent before the model was allowed to think
+
+`streamThroughHermes` awaited `box.ensureRunning()` inline whenever `wantsBox()`
+matched, so the measured **5.9s cold-to-usable** (`resume` returns at 0.28s; the
+first `box exec` that answers is 5.9s later) was serial, in front of the first
+token. The model needs far longer than 5.9s to reason its way to a first command,
+so the wake now runs **alongside** the turn and falls out of the wall clock.
+
+The `finally` awaits the wake promise before releasing the hold. Without that,
+a turn that ends quickly releases a hold that has not been taken yet, and the
+hold lands afterwards on a machine nothing will ever stop — the one direction
+this file exists to never be wrong in.
+
+Cold end to end, resume included, on the recommended one-liner: **8.35s** to a
+correct answer (that figure includes a tight retry loop hammering the box while
+it booted). Warm: **1.35s**.
+
+### What is NOT done, and why
+
+- **Pre-warming on a pasted URL.** `WANTS_BOX` does not match "check
+  news.ycombinator.com", so a browsing turn typically finds the box asleep and
+  pays the resume itself. Adding `https?://` to the pattern would overlap the
+  wake with the model's thinking. It is not done because **starts are the binding
+  constraint** (75/day), not seconds, and a URL in a sentence is not proof the
+  teammate is about to browse. The recovery line in the prompt costs one start
+  only when the box is genuinely needed.
+- **Installing anything.** The disk is the user's and it is shared. Everything
+  above uses binaries that were already there.
+
+---
+
 ## The disk really does persist, including browser logins
 
 Tested, not assumed. Planted a marker inside Chrome's own profile directory
