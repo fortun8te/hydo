@@ -167,6 +167,62 @@ async function main() {
 
 
 
+  // ---- adopt a machine the user already made -----------------------------
+  // A fresh install remembers no id, but the account may already have the box
+  // the user created by hand. Creating alongside it is the worst outcome
+  // available: it spends one of 75 daily starts, adds a second machine against
+  // a TWO machine limit, and splits the team's files across two disks that
+  // will never see each other.
+  {
+    // One box on the account, made outside Hydo.
+    const theirs = { id: "bx_843rh875", state: "idle", type: "default" };
+    const h = { id: "", adopted: "" };
+    const rt = createBoxRuntime({
+      installed: () => true,
+      getBoxId: () => h.id,
+      setBoxId: (id) => {
+        h.adopted = id;
+      },
+      exec: async (args) => {
+        if (args[0] === "status") return { ok: true, json: { account: { loginState: "signed in" } } };
+        if (args[0] === "limits") return { ok: true, json: { accessTier: "trial" } };
+        if (args[0] === "list") return { ok: true, json: { boxes: [theirs] } };
+        if (args[0] === "new") throw new Error("must NOT create when one already exists");
+        return { ok: true, json: {} };
+      },
+    });
+    const res = await rt.ensureRunning();
+    assert.ok(res.ok && res.adopted, "adopts the box already on the account");
+    assert.equal(res.id, "bx_843rh875");
+    assert.equal(h.adopted, "bx_843rh875", "and remembers it as the desk's machine");
+  }
+
+  // Two or more is a real question about which one is the team's, and guessing
+  // is how you write to a disk that is not yours.
+  {
+    let created = false;
+    const rt = createBoxRuntime({
+      installed: () => true,
+      getBoxId: () => "",
+      setBoxId: () => {},
+      exec: async (args) => {
+        if (args[0] === "status") return { ok: true, json: { account: { loginState: "signed in" } } };
+        if (args[0] === "limits") return { ok: true, json: { accessTier: "trial" } };
+        if (args[0] === "list") {
+          return { ok: true, json: { boxes: [{ id: "bx_a", state: "idle" }, { id: "bx_b", state: "idle" }] } };
+        }
+        if (args[0] === "new") {
+          created = true;
+          return { ok: true, json: { box: { id: "bx_new", state: "running" } } };
+        }
+        return { ok: true, json: {} };
+      },
+    });
+    const res = await rt.ensureRunning();
+    assert.ok(created, "with two candidates it does not guess, it makes its own");
+    assert.equal(res.id, "bx_new");
+  }
+
   console.log("box-runtime-test ok");
 }
 

@@ -200,7 +200,37 @@ function createBoxRuntime(opts = {}) {
         return { ok: true, id: st.id, resumed: true };
       }
 
-      // No id, or the id points at a machine that no longer exists.
+      // Before creating anything: is there already a machine on this account?
+      //
+      // Hydo remembers one id, and a fresh install remembers none . but the
+      // account may already have the box the user made by hand. Creating
+      // alongside it is the worst outcome available: it spends a start, adds a
+      // second machine against a two-machine limit, and splits the team's
+      // files across two disks that will never see each other.
+      //
+      // Adopt only when there is EXACTLY one. Two or more is a real question
+      // about which is the team's, and guessing at that is how you end up
+      // writing to a stranger's disk.
+      if (!st.id) {
+        const existing = await exec(["list"], { timeout: 30_000 });
+        const rows =
+          existing.ok && existing.json
+            ? Array.isArray(existing.json)
+              ? existing.json
+              : existing.json.boxes || []
+            : [];
+        if (rows.length === 1 && rows[0] && rows[0].id) {
+          setBoxId(rows[0].id);
+          lastUsedAt = now();
+          if (!isLive(rows[0])) {
+            const back = await exec(["resume", rows[0].id], { timeout: 180_000 });
+            if (!back.ok) return back;
+            return { ok: true, id: rows[0].id, adopted: true, resumed: true };
+          }
+          return { ok: true, id: rows[0].id, adopted: true };
+        }
+      }
+
       const args = ["new", "--type", reason.type || DEFAULT_TYPE, "--ttl", String(ttl)];
       const res = await exec(args, { timeout: 240_000 });
       if (!res.ok) return res;
