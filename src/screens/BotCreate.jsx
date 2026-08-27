@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import UmbraFace from "../umbra/UmbraFace.jsx";
+import { BOT_PRESETS, presetPatch } from "../lib/bot-presets.js";
 
 function Chord({ n }) {
   return (
@@ -100,6 +101,29 @@ export default function BotCreate({ agents = [], onClose, onCreate, onOpen }) {
           <span className="hy-botcreate__label">{createLabel}</span>
           <Chord n={1} />
         </button>
+        {/* Starting points. Only when you have not typed a name . once you
+            have, you have already decided what this one is, and a row of
+            suggestions is just something in the way. */}
+        {!typed ? (
+          <div className="hy-botcreate__presets">
+            <span className="hy-botcreate__presets-label">Start from</span>
+            {BOT_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="hy-botcreate__preset"
+                title={p.blurb}
+                onClick={() => {
+                  onCreate?.(presetPatch(p));
+                  onClose?.();
+                }}
+              >
+                <UmbraFace tint={p.tint} shape="pebble" size={20} poke={false} />
+                <span className="hy-botcreate__preset-name">{p.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="hy-botcreate__list">
           {filtered.map((a, i) => (
             <button

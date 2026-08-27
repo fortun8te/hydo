@@ -34,6 +34,9 @@ const SHAPES = [
 const PICK_SHAPES = SHAPES;
 const COLOR_IDS = BLOBS;
 const SHAPE_IDS = SHAPES;
+// The tool profiles a preset may pick. Not free-form: an unknown name would
+// be dropped by the resolver and the bot would silently run on the default.
+const PROFILE_IDS = ["chat", "writer", "researcher", "builder", "full"];
 // ~350KB of base64, which is a generous 256px square. The avatar lives inside
 // state.json, and that file is re-serialised on every save, so this is a cap
 // on how much work every future write does . not just on the picture.
@@ -2542,13 +2545,22 @@ function createStore(opts = {}) {
       const t = now();
       const mark = pickRandomMark(state.agents);
       const named = String(patch.name || "").trim();
+      // A preset answers the three questions nobody wants to face on a blank
+      // form . what it is for, how much tool schema to carry, what it needs to
+      // know first . and then gets out of the way. Every field stays editable,
+      // and the bot rewrites its own description once it learns what it
+      // actually does here.
+      const wantBlob = COLOR_IDS.includes(String(patch.blob || "")) ? patch.blob : mark.blob;
+      const wantProfile = PROFILE_IDS.includes(String(patch.toolProfile || ""))
+        ? patch.toolProfile
+        : "chat";
       state.agents.unshift({
         id,
         name: named || "New Bot",
-        label: "",
-        description: "",
+        label: String(patch.label || "").trim().slice(0, 24),
+        description: String(patch.description || "").trim().slice(0, 600),
         notifications: false,
-        blob: mark.blob,
+        blob: wantBlob,
         shape: mark.shape,
         status: "working",
         activity: "Working",
@@ -2556,7 +2568,10 @@ function createStore(opts = {}) {
         // Auto mode: start at the cheapest rung and climb only when a turn
         // actually needs more. `builder` on a bot that says "hey" was ~16.6k
         // of tool schema for a two-word answer.
-        toolProfile: "chat",
+        // A FLOOR, not a ceiling: auto still climbs. The preset only avoids
+        // starting a researcher at `chat` and burning a first turn to
+        // discover it needs the web.
+        toolProfile: wantProfile,
         profilePinned: false,
         reasoningEffort: "low",
         // Extra Hermes toolsets on top of the profile (browser, vision, ...).
@@ -2573,6 +2588,10 @@ function createStore(opts = {}) {
       });
       state.messages[id] = [];
       state.routines[id] = [];
+      // Read once by landNewBot, so a preset's teammate opens already knowing
+      // what it is for instead of asking.
+      const setup = String(patch.setup || "").trim();
+      if (setup) state.agents[0].setup = setup.slice(0, 1200);
       state.selectedId = id;
       save();
       return publicState();
@@ -2620,6 +2639,10 @@ function createStore(opts = {}) {
       const brief = [
         `${user} just made you, a few seconds ago. You are their new teammate${named ? `, called ${named}` : ""}.`,
         agent.description ? `They set you up for: ${agent.description}` : "",
+        // What the preset told you. Read here rather than pushed as a message
+        // so it shapes the opening instead of sitting above it as an
+        // instruction the user has to look at.
+        agent.setup ? `They also said: ${agent.setup}` : "",
         named
           ? ""
           : "You have no name yet. Never invent one and never call yourself Hydo, that is the app.",

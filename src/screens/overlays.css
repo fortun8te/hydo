@@ -490,3 +490,41 @@
   font-size: 12px;
   overflow-x: auto;
 }
+
+/* Starting points for a new teammate. A row of chips rather than a second
+   screen: picking one is a shortcut, and a shortcut that costs a page load is
+   not one. */
+.hy-botcreate__presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 4px;
+}
+.hy-botcreate__presets-label {
+  width: 100%;
+  font-size: 10.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sand-text-tertiary, #8d8d8d);
+  margin-bottom: 2px;
+}
+.hy-botcreate__preset {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 6px;
+  border: 1px solid var(--sand-line, #ffffff12);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sand-text-primary, #fcfcfc);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.hy-botcreate__preset:hover { background: var(--hy-raised, #2e2e2e); }
+.hy-botcreate__preset:focus-visible {
+  outline: 2px solid var(--sand-accent, #2a92fe);
+  outline-offset: 2px;
+}
+.hy-botcreate__preset .umbra-face { flex: none; }
