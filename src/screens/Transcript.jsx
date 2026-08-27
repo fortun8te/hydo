@@ -980,7 +980,6 @@ function Transcript({
   onJumpTo,
   onMessageMenu,
 }) {
-  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.Transcript = (window.__rc.Transcript || 0) + 1; }
 
   const list = Array.isArray(thread) ? thread.filter((m) => m && typeof m === "object") : [];
   // Which originals are still in the thread — a reply to a deleted message
@@ -1326,11 +1325,4 @@ function Transcript({
   );
 }
 
-export default memo(Transcript, (a, b) => {
-  const changed = Object.keys({ ...a, ...b }).filter((k) => a[k] !== b[k]);
-  if (typeof window !== "undefined") {
-    window.__props = window.__props || {};
-    for (const k of changed) window.__props[k] = (window.__props[k] || 0) + 1;
-  }
-  return changed.length === 0;
-});
+export default memo(Transcript);

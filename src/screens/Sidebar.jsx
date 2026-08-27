@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import UmbraFace from "../umbra/UmbraFace.jsx";
 import AccountMenu from "./AccountMenu.jsx";
 import { when } from "../lib/blobs.js";
@@ -188,7 +188,7 @@ function bornNow(entry) {
   return Number.isFinite(t) && Date.now() - t < BORN_MS;
 }
 
-export default function Sidebar({
+function Sidebar({
   entries,
   agents,
   selectedId,
@@ -228,7 +228,6 @@ export default function Sidebar({
   onSignOut,
   sendingId,
 }) {
-  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.Sidebar = (window.__rc.Sidebar || 0) + 1; }
 
   // Shell resolves the account holder's full name and passes it down; the
   // fallback matches, so a Sidebar rendered without the prop (tests, stories)
@@ -894,3 +893,16 @@ export default function Sidebar({
     </aside>
   );
 }
+
+/**
+ * memo, for the same reason Transcript is memoised: the roster renders a row
+ * (and a live blob face) per conversation, and it was re-rendering on every
+ * keystroke in the composer purely because Shell owns the draft. Measured, on
+ * a 40-character message: 3.3ms -> 2.1ms median and 4.7ms -> 2.7ms p95 of
+ * synchronous React work per key.
+ *
+ * Every prop it takes is a primitive, a memoised array, or a useCallback in
+ * Shell. Adding an inline arrow to <Sidebar> there silently turns this back
+ * into a no-op.
+ */
+export default memo(Sidebar);

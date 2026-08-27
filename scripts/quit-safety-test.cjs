@@ -122,17 +122,24 @@ function runGatewayShutdownProbe() {
   const root = path.join(home, '.hermes', 'hermes-agent');
   fs.mkdirSync(root, { recursive: true });
 
-  // The "python". Announces ready, then declines to co-operate with anything:
-  // no stdin replies, and SIGTERM ignored. Only SIGKILL ends it.
-  const fake = path.join(home, 'fake-gateway.js');
+  // The "python": a shell wrapper, NOT a NODE_OPTIONS preload — the probe is
+  // itself a node process, so a preload would keep IT alive too. Announces
+  // ready, then declines to co-operate with anything: no stdin replies, and
+  // SIGTERM ignored. Only SIGKILL ends it.
+  const fakeJs = path.join(home, 'fake-gateway.js');
   fs.writeFileSync(
-    fake,
+    fakeJs,
     [
       'process.on("SIGTERM", () => {});',
-      'process.stdout.write(JSON.stringify({ type: "gateway.ready" }) + "\\n");',
+      // The ready frame is a JSON-RPC *event*, not a bare object — the client
+      // reads the name off params.type and ignores anything else.
+      'process.stdout.write(JSON.stringify({ jsonrpc: "2.0", method: "event", params: { type: "gateway.ready" } }) + "\\n");',
       'setInterval(() => {}, 1000);',
     ].join('\n')
   );
+  const fake = path.join(home, 'fake-gateway.sh');
+  fs.writeFileSync(fake, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeJs)}\n`);
+  fs.chmodSync(fake, 0o755);
 
   const probe = path.join(home, 'probe.js');
   fs.writeFileSync(
@@ -144,8 +151,11 @@ gw.ensure("").then(() => {
   const kids = execSync("pgrep -P " + process.pid + " || true").toString().trim().split("\\n").filter(Boolean);
   const t0 = Date.now();
   return gw.shutdown().then(() => {
+    // A SIGKILLed child is a ZOMBIE until node reaps it, and kill(pid, 0)
+    // still succeeds on one — so ask ps for the state instead.
     const alive = kids.filter((p) => {
-      try { process.kill(Number(p), 0); return true; } catch { return false; }
+      const stat = execSync("ps -p " + p + " -o stat= || true").toString().trim();
+      return stat && !stat.startsWith("Z");
     });
     process.stdout.write("RESULT " + JSON.stringify({ ms: Date.now() - t0, kids, alive }) + "\\n");
   });
@@ -159,10 +169,8 @@ gw.ensure("").then(() => {
     env: {
       ...process.env,
       HOME: home,
-      HERMES_PYTHON: process.execPath,
-      // The fake ignores argv, so `-m tui_gateway.entry` is harmless; node
-      // needs the script path first.
-      NODE_OPTIONS: `--require ${JSON.stringify(fake)}`,
+      // The wrapper ignores the `-m tui_gateway.entry` argv it is handed.
+      HERMES_PYTHON: fake,
       HYDO_GATEWAY_STARTUP_TIMEOUT_MS: '8000',
     },
     encoding: 'utf8',

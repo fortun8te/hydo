@@ -143,7 +143,11 @@ function AccountRow({ name, email, avatarUrl, onSignOut, onAvatar }) {
           <span className="settings__avatar-initial">{initialOf(name)}</span>
         )}
         <span className="settings__avatar-hint" aria-hidden="true">
-          <i className="gb-icon gb-icon-camera" />
+          {/* `gb-icon-camera` is not a name icons.css defines — the class
+              applied, ::before resolved to `content: none`, and the badge
+              painted as an empty 0x0 grey circle on hover. The font's real
+              name for this glyph is device-camera. */}
+          <i className="gb-icon gb-icon-device-camera" />
         </span>
       </button>
       <input

@@ -2965,7 +2965,7 @@ function createStore(opts = {}) {
       // bot on Hermes' own default pays 18,327 — 72% of which is tool
       // definitions it never calls. Changing either moves the bot to a
       // different gateway child on its next turn (see hermes-gateway.cjs).
-      const allowed = ["name", "label", "description", "notifications", "blob", "shape", "status", "draft", "color", "activity", "activityDetail", "model", "provider", "reasoningEffort", "fast", "toolProfile", "profilePinned", "toolsets", "mcp", "sectionId", "backgroundTurn", "subagentIds", "lastSubagentId", "boxEnabled"];
+      const allowed = ["name", "label", "description", "notifications", "blob", "shape", "glow", "status", "draft", "color", "activity", "activityDetail", "model", "provider", "reasoningEffort", "fast", "toolProfile", "profilePinned", "toolsets", "mcp", "sectionId", "backgroundTurn", "subagentIds", "lastSubagentId", "boxEnabled"];
       const before = agent.name;
       for (const key of allowed) {
         if (Object.prototype.hasOwnProperty.call(patch, key)) agent[key] = patch[key];

@@ -92,7 +92,6 @@ function connectionRows(listed) {
 }
 
 export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCreateRoutine, onOpenUndo }) {
-  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.BotRail = (window.__rc.BotRail || 0) + 1; }
 
   const name = agent?.name ?? "";
   const label = agent?.label ?? "";
@@ -108,6 +107,8 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   // background process is a rare thing and this is an RPC, so a permanent
   // timer would cost far more than the answer is worth.
   const [procs, setProcs] = useState([]);
+  // Why the last Stop did not work. Empty when there is nothing to say.
+  const [procError, setProcError] = useState("");
   // The last answer from `openWorkspace`, so the button can report instead of
   // swallowing it: {} | {busy} | {path} | {error}.
   const [workspace, setWorkspace] = useState({});
@@ -314,6 +315,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           tint={agent?.blob}
           shape={agent?.shape}
           size={72}
+          glow={!!agent?.glow}
           morph
           live
           /* Spins whenever a turn of theirs is running, not only when it is
@@ -393,6 +395,24 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             onClose={() => setWheelOpen(false)}
           />
         ) : null}
+      </div>
+      {/* Glow is part of APPEARANCE, so it lives with colour and shape rather
+          than in settings: it is the same kind of choice, and it is only
+          meaningful next to a swatch you can see it applied to. Reuses the
+          notification row's switch markup so it needs no new CSS. */}
+      <div className="bot-rail__notify">
+        <div>
+          <span className="bot-rail__notify-title">Glow</span>
+          <p>Light this Bot from inside, in its own colour</p>
+        </div>
+        <button
+          type="button"
+          className={agent?.glow ? "bot-rail__toggle is-on" : "bot-rail__toggle"}
+          role="switch"
+          aria-checked={!!agent?.glow}
+          aria-label="Glow"
+          onClick={() => onChange({ glow: !agent?.glow })}
+        />
       </div>
       <div className="bot-rail__field">
         <span className="bot-rail__field-label">Shape</span>
@@ -744,9 +764,27 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
                 <button
                   type="button"
                   className="ghost bot-rail__proc-stop"
-                  onClick={() => {
-                    window.hydo?.killProcess?.(agent.id, p.session_id || p.id);
-                    setProcs((list) => list.filter((x) => (x.session_id || x.id) !== (p.session_id || p.id)));
+                  onClick={async () => {
+                    // The row used to disappear the moment you clicked,
+                    // whatever `killProcess` answered — so with Hermes down
+                    // the process kept running and the rail said it was gone.
+                    // Same shape as the `openWorkspace` bug below: a real
+                    // {ok:false, reason} thrown away. Drop the row only when
+                    // the kill actually landed.
+                    const key = p.session_id || p.id;
+                    setProcError("");
+                    try {
+                      const res = await window.hydo?.killProcess?.(agent.id, key);
+                      if (res && res.ok) {
+                        setProcs((list) => list.filter((x) => (x.session_id || x.id) !== key));
+                      } else {
+                        setProcError(
+                          (res && res.reason) || "Could not stop it — Hermes did not answer."
+                        );
+                      }
+                    } catch (err) {
+                      setProcError(err?.message || "Could not stop it.");
+                    }
                   }}
                 >
                   Stop
@@ -754,6 +792,9 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
               </li>
             ))}
           </ul>
+          {procError ? (
+            <p className="bot-rail__workspace-note is-bad">{procError}</p>
+          ) : null}
           <p>
             Started by this Bot and still going after its turn ended. Stopping
             one here only touches this Bot&apos;s.

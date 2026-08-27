@@ -544,3 +544,60 @@ console.log("box-runtime-test (presets) ok");
 }
 
 console.log("box-runtime-test (bans + token rules) ok");
+
+(async () => {
+// ---- adoption happens on a READ, and starts nothing ------------------------
+//
+// Adoption used to live only in ensureRunning, so a user whose account already
+// held a box opened the Computer panel and was told there was no machine.
+// Measured on the real account: settings.boxId was empty while a stopped box
+// with a completed snapshot sat there, and the panel said "none".
+//
+// The two halves of the fix are equally important. It must LEARN the id, and it
+// must NOT resume — opening a panel is curiosity, and curiosity must never
+// spend one of the trial's 75 daily starts.
+  {
+  const calls = [];
+  let stored = "";
+  const rt = createBoxRuntime({
+    getBoxId: () => stored,
+    setBoxId: (v) => { stored = v; },
+    installed: () => true,
+    exec: async (args) => {
+      calls.push(args[0]);
+      if (args[0] === "status") return { ok: true, json: { account: { identifier: "t@example.com", loginState: "active" } } };
+      if (args[0] === "list") return { ok: true, json: { boxes: [{ id: "bx_only", state: "stopped", type: "small" }] } };
+      if (args[0] === "info") return { ok: true, json: { box: { id: "bx_only", state: "stopped", type: "small" } } };
+      return { ok: true, json: {} };
+    },
+  });
+  const st = await rt.status();
+  assert.strictEqual(stored, "bx_only", "status must remember the one box on the account");
+  assert.strictEqual(st.id, "bx_only", "and report it");
+  assert.strictEqual(st.state, "stopped", "as asleep — it is not running and must not be started");
+  assert.ok(!calls.includes("resume"), "a READ must never resume: that would spend a start on curiosity");
+  assert.ok(!calls.includes("new"), "and must never create");
+  }
+
+// Two boxes is a real question about which one is the team's, so adopt neither.
+  {
+  let stored = "";
+  const rt = createBoxRuntime({
+    getBoxId: () => stored,
+    setBoxId: (v) => { stored = v; },
+    installed: () => true,
+    exec: async (args) => {
+      if (args[0] === "status") return { ok: true, json: { account: { identifier: "t@example.com", loginState: "active" } } };
+      if (args[0] === "list") return { ok: true, json: { boxes: [{ id: "bx_a" }, { id: "bx_b" }] } };
+      return { ok: true, json: {} };
+    },
+  });
+  const st = await rt.status();
+  assert.strictEqual(stored, "", "two boxes: guessing is how you write to a stranger's disk");
+  assert.strictEqual(st.state, "none");
+  }
+console.log("box-runtime-test (adopt on read) ok");
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

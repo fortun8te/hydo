@@ -115,4 +115,66 @@ const noteRule = note.slice(0, note.indexOf("}"));
 assert.ok(noteRule.includes("overflow-wrap: anywhere"), "the workspace note must use overflow-wrap: anywhere");
 assert.ok(!noteRule.includes("word-break: break-all"), "word-break: break-all chops ordinary English mid-word");
 
-console.log("dead-control-test ok");
+// -- 6. every palette row must reach a case in runCommand ---------------
+// The palette renders shortcuts.js's COMMANDS verbatim — it does no filtering
+// by "is this implemented". `sand.openTools`, `sand.openWorkflows` and
+// `sand.navigateForward` all shipped as rows (two with a chord printed beside
+// them) that fell through `default: break`. This is the general form of that
+// bug, so it is checked generally.
+const ids = [...shortcuts.matchAll(/\{ id: "(sand\.[\w.]+)"/g)].map((m) => m[1]);
+assert.ok(ids.length > 8, "could not parse shortcuts.js's command list");
+const runCommand = shell.slice(shell.indexOf("function runCommand("), shell.indexOf("useEffect", shell.indexOf("function runCommand(")));
+const dead = ids.filter((id) => id !== "sand.send" && !runCommand.includes(`case "${id}"`));
+assert.deepEqual(dead, [], `palette commands with no case in runCommand (they do nothing when clicked): ${dead.join(", ")}`);
+
+// And every chord in KEYMAP must land on one of those commands.
+const chordIds = [...shortcuts.matchAll(/"[\w+]+": "(sand\.[\w.]+)"/g)].map((m) => m[1]);
+const deadChords = chordIds.filter((id) => id !== "sand.send" && !runCommand.includes(`case "${id}"`));
+assert.deepEqual(deadChords, [], `keyboard chords bound to a command runCommand ignores: ${deadChords.join(", ")}`);
+
+// -- 7. every gb-icon-<name> in the app must have a rule in icons.css ----
+// `gb-icon gb-icon-camera` shipped on Settings' avatar badge. The class
+// applied, nothing errored, ::before resolved to `content: none`, and the
+// badge painted as an empty 0x0 circle on hover. icons.css calls that glyph
+// `device-camera`. Checked for every icon in the app, not just that one.
+const jsxFiles = [];
+(function walk(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === "umbra" || e.name === "node_modules") continue;
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) walk(full);
+    else if (/\.(jsx?|css)$/.test(e.name) && e.name !== "icons.css") jsxFiles.push(full);
+  }
+})(path.join(ROOT, "src"));
+
+const iconsCss = read("src/kit/icons.css");
+const defined = new Set(
+  [...iconsCss.matchAll(/^\.(gb-icon-[a-z0-9-]+)::before/gm)].map((m) => m[1])
+);
+assert.ok(defined.size > 400, "could not parse icons.css");
+
+const missing = [];
+for (const file of jsxFiles) {
+  // Comments name these classes constantly (including the one right above
+  // the fix for this very bug), so strip them first or the test flags prose.
+  const src = fs
+    .readFileSync(file, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+  for (const m of src.matchAll(/gb-icon-[a-z0-9-]+/g)) {
+    // `gb-icon-chevron-${open ? "down" : "up"}` — the literal half is a
+    // prefix, not a name. Those families are asserted explicitly below.
+    if (src.slice(m.index + m[0].length, m.index + m[0].length + 2) === "${") continue;
+    if (!defined.has(m[0])) missing.push(`${path.relative(ROOT, file)}: ${m[0]}`);
+  }
+}
+assert.deepEqual(missing, [], `icon classes with no rule in icons.css (they render a 0x0 box):\n  ${missing.join("\n  ")}`);
+
+// The interpolated families, spelled out so a renamed glyph still trips.
+for (const name of [
+  "gb-icon-chevron-up", "gb-icon-chevron-down", "gb-icon-chevron-left", "gb-icon-chevron-right",
+]) {
+  assert.ok(defined.has(name), `${name} is interpolated in JSX but not defined in icons.css`);
+}
+
+console.log(`dead-control-test ok (${ids.length} commands, ${chordIds.length} chords, all reachable, ${defined.size} icons defined)`);

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import UmbraFace from "../umbra/UmbraFace.jsx";
 import Sidebar from "./Sidebar.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
@@ -89,6 +89,11 @@ const ACCOUNT_FULL_NAME = "Michael Knaap";
 // whole message list per character. Rounded, it changes at most once a second
 // while you type, and the blob's fade moves by under a second in a
 // forty-five-second hysteresis, which is not a thing anyone can see.
+// Idle gap after which a draft is written to the store. Long enough that
+// normal typing never triggers it, short enough that you cannot get to the
+// sidebar and read a stale preview before it lands.
+const DRAFT_SAVE_MS = 250;
+
 function keyStamp() {
   return Math.floor(Date.now() / 1000) * 1000;
 }
@@ -101,7 +106,6 @@ function accountName(settings) {
 }
 
 export default function Shell({ state }) {
-  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.Shell = (window.__rc.Shell || 0) + 1; }
 
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
@@ -196,6 +200,37 @@ export default function Shell({ state }) {
   }, [query, entries]);
 
   /* ------------------------------------------------------------------------
+     Sidebar is memoised too (see Sidebar.jsx). Same rule as the transcript
+     handlers below: stable setters and `window.hydo` only, so `[]` is honest.
+     ---------------------------------------------------------------------- */
+  const onToggleSidebar = useCallback(() => setCollapsed((v) => !v), []);
+  const onCreateBot = useCallback(() => setBotCreate(true), []);
+  const onCreateChannel = useCallback(() => setChannelCreate(true), []);
+  const onSelectEntry = useCallback((id) => window.hydo.select(id), []);
+  const onDeleteEntries = useCallback(
+    (list) => setConfirmDelete(Array.isArray(list) ? list : [list]),
+    []
+  );
+  const onPinEntry = useCallback((entry) => window.hydo.setPinned?.(entry.id, !entry.pinned), []);
+  const onMarkUnread = useCallback((entry) => window.hydo.setUnread?.(entry.id, true), []);
+  const onHideEntry = useCallback((entry) => window.hydo.setHidden?.(entry.id, true), []);
+  const onDuplicateEntry = useCallback((entry) => window.hydo.duplicateAgent?.(entry.id), []);
+  const onEditProfile = useCallback((entry) => {
+    window.hydo.select(entry.id);
+    setRail(entry.kind === "channel" ? "channel" : "bot");
+  }, []);
+  const onCopyId = useCallback((entry) => navigator.clipboard?.writeText(entry.id), []);
+  const onPlugins = useCallback(() => setPluginsOpen(true), []);
+  const onOpenSettings = useCallback(() => setSettingsOpen(true), []);
+  const onAbout = useCallback(() => setSheet("about"), []);
+  const onHelp = useCallback(() => setSheet("help"), []);
+  const onFeedback = useCallback(() => setSheet("feedback"), []);
+  const onSignOut = useCallback(() => window.hydo.signOut(), []);
+  // `state.sections || []` minted a fresh array on every render, which on its
+  // own was enough to defeat the memo above.
+  const sections = useMemo(() => state.sections || [], [state.sections]);
+
+  /* ------------------------------------------------------------------------
      Transcript is memoised (see Transcript.jsx). These seven handlers were
      inline arrows, so every Shell render minted seven new functions and the
      memo would never have held. All of them close over nothing but setState
@@ -245,6 +280,9 @@ export default function Shell({ state }) {
   }, []);
 
   useEffect(() => {
+    // The ref still holds the conversation we are leaving, so this writes the
+    // half-typed message to the right thread before we read the new one's.
+    flushDraft();
     setDraft(selected?.draft || "");
     setRoutineId(null);
     setDmPeerId(null);
@@ -253,6 +291,53 @@ export default function Shell({ state }) {
     setReplyTo(null);
     setTitleEdit(false);
   }, [selected?.id]);
+
+  /* ------------------------------------------------------------------------
+     Persisting the draft: once you stop, not once per character.
+
+     `window.hydo.setDraft` is an ipcMain handler that calls `store.setDraft`
+     (which writes the whole store to disk) and then `push()` — a full state
+     broadcast back to this window. Wired to every keystroke, a
+     forty-character message meant forty disk writes and forty brand-new
+     `state` objects, and because `thread`, `agents` and `selected` are all
+     read off that object, every single one of them re-rendered the entire app
+     including the message list. Measured: 84 renders of Shell/Sidebar/
+     Transcript/Composer for 40 keystrokes, with `thread`, `agents` and
+     `selected` changing identity on all 40.
+
+     The composer's own `draft` state above is the source of truth while you
+     type, so the store copy is only needed for two things: the sidebar's
+     "Draft: …" preview, and surviving a restart. Neither needs to be exact
+     mid-word.
+
+     Flushing is not optional and is what makes this safe: the pending value is
+     written before the conversation changes, before a send, and on unmount, so
+     the store is never behind at the only moments anything reads it back.
+     ---------------------------------------------------------------------- */
+  const pendingDraft = useRef(null);
+  const draftTimer = useRef(0);
+  const flushDraft = useCallback(() => {
+    if (draftTimer.current) {
+      clearTimeout(draftTimer.current);
+      draftTimer.current = 0;
+    }
+    const p = pendingDraft.current;
+    pendingDraft.current = null;
+    if (p) window.hydo?.setDraft?.(p.id, p.value);
+  }, []);
+  const queueDraft = useCallback(
+    (id, value) => {
+      // A different conversation's pending draft must land before this one
+      // starts queueing, or switching mid-word would drop it.
+      if (pendingDraft.current && pendingDraft.current.id !== id) flushDraft();
+      pendingDraft.current = { id, value };
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+      draftTimer.current = setTimeout(flushDraft, DRAFT_SAVE_MS);
+    },
+    [flushDraft]
+  );
+  // Unmount is the last chance; the window closing goes through here too.
+  useEffect(() => flushDraft, [flushDraft]);
 
   // The transcript only ever asked "is the composer empty?" — presence.js reads
   // no character of the draft (see draftIsFilled there). Handing it the string
@@ -486,6 +571,14 @@ export default function Shell({ state }) {
     setDraft("");
     setComposeAt(0);
     setSince(Date.now());
+    // Drop the queued draft rather than flushing it: `send` clears the stored
+    // draft itself, and a timer firing 250ms later would put the sent text
+    // straight back into the sidebar as an unsent draft.
+    pendingDraft.current = null;
+    if (draftTimer.current) {
+      clearTimeout(draftTimer.current);
+      draftTimer.current = 0;
+    }
     setComposerMenu(false);
     const replying = replyTo;
     setReplyTo(null);
@@ -510,7 +603,7 @@ export default function Shell({ state }) {
     if (value.startsWith("/")) setComposerMenu(false);
     else if (/(?:^|\s)@[^\s]*$/.test(value)) setComposerMenu(false);
     else if (composerMenu && !value) setComposerMenu(false);
-    if (selected) window.hydo.setDraft(selected.id, value);
+    if (selected) queueDraft(selected.id, value);
   }
 
   function pickMention(agent) {
@@ -520,7 +613,7 @@ export default function Shell({ state }) {
     setLastKeyAt(keyStamp());
     if (wasEmpty) setComposeAt(Date.now());
     setComposerMenu(false);
-    if (selected) window.hydo.setDraft(selected.id, next);
+    if (selected) queueDraft(selected.id, next);
   }
 
   // Every bot, including the one whose thread this is. Excluding it meant
@@ -536,39 +629,36 @@ export default function Shell({ state }) {
       <Sidebar
         entries={roster}
         agents={agents}
-        sections={state.sections || []}
+        sections={sections}
         selectedId={atHome ? "home" : selected?.id}
         query={query}
         onQuery={setQuery}
         collapsed={collapsed || tooNarrow}
         canToggle={!tooNarrow}
-        onToggle={() => setCollapsed((v) => !v)}
-        onCreate={() => setBotCreate(true)}
-        onCreateBot={() => setBotCreate(true)}
-        onCreateChannel={() => setChannelCreate(true)}
-        onSelect={(id) => window.hydo.select(id)}
+        onToggle={onToggleSidebar}
+        onCreate={onCreateBot}
+        onCreateBot={onCreateBot}
+        onCreateChannel={onCreateChannel}
+        onSelect={onSelectEntry}
         onMenu={setMenu}
-        onDelete={(list) => setConfirmDelete(Array.isArray(list) ? list : [list])}
-        onPin={(entry) => window.hydo.setPinned?.(entry.id, !entry.pinned)}
-        onMarkUnread={(entry) => window.hydo.setUnread?.(entry.id, true)}
-        onHide={(entry) => window.hydo.setHidden?.(entry.id, true)}
-        onDuplicate={(entry) => window.hydo.duplicateAgent?.(entry.id)}
-        onEditProfile={(entry) => {
-          window.hydo.select(entry.id);
-          setRail(entry.kind === "channel" ? "channel" : "bot");
-        }}
-        onCopyId={(entry) => navigator.clipboard?.writeText(entry.id)}
-        onPlugins={() => setPluginsOpen(true)}
+        onDelete={onDeleteEntries}
+        onPin={onPinEntry}
+        onMarkUnread={onMarkUnread}
+        onHide={onHideEntry}
+        onDuplicate={onDuplicateEntry}
+        onEditProfile={onEditProfile}
+        onCopyId={onCopyId}
+        onPlugins={onPlugins}
         showHome={HOME_ENABLED}
         userName={accountName(state.settings)}
         userAvatar={state.settings.userAvatar}
         accountOpen={accountOpen}
         onAccountToggle={setAccountOpen}
-        onSettings={() => setSettingsOpen(true)}
-        onAbout={() => setSheet("about")}
-        onHelp={() => setSheet("help")}
-        onFeedback={() => setSheet("feedback")}
-        onSignOut={() => window.hydo.signOut()}
+        onSettings={onOpenSettings}
+        onAbout={onAbout}
+        onHelp={onHelp}
+        onFeedback={onFeedback}
+        onSignOut={onSignOut}
         sendingId={sending ? selected?.id : null}
       />
 

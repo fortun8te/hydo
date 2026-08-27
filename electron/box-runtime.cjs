@@ -320,7 +320,38 @@ function createBoxRuntime(opts = {}) {
     // renaming its vocabulary, which it evidently does.
     const loginState = String(acct.loginState || acct.status || "").toLowerCase();
     const signedIn = !!acct.identifier && !!loginState && !/signed[\s_-]?out|logged[\s_-]?out/.test(loginState);
-    const id = getBoxId();
+    let id = getBoxId();
+
+    // Learn the id on a READ, not only when someone asks for work.
+    //
+    // Adoption lived solely in `ensureRunning`, so a user whose account already
+    // had a box — made by hand, or by an older install — opened the Computer
+    // panel and was told there was no machine. Measured on this account:
+    // `settings.boxId` was empty while bx_843rh875 sat there stopped, snapshot
+    // intact, and the panel reported "none". The machine was fine; the app had
+    // simply never looked.
+    //
+    // This is free and it starts nothing: `list` is a read, and recording the
+    // id is a local write. Resuming still belongs to ensureRunning, so opening
+    // a panel cannot spend a start — which is the rule the rest of this file
+    // exists to keep.
+    //
+    // EXACTLY one, as everywhere else in this file. Two or more is a real
+    // question about which machine is the team's, and guessing is how you write
+    // to a stranger's disk.
+    if (signedIn && !id) {
+      const found = await exec(["list", "--all"], { timeout: 30_000 });
+      const rows =
+        found.ok && found.json
+          ? Array.isArray(found.json)
+            ? found.json
+            : found.json.boxes || []
+          : [];
+      if (rows.length === 1 && rows[0] && rows[0].id) {
+        id = rows[0].id;
+        setBoxId(id);
+      }
+    }
     const box = signedIn && id ? await info(id) : null;
     return {
       ok: true,
@@ -390,13 +421,22 @@ function createBoxRuntime(opts = {}) {
     }
 
     starting = (async () => {
+      // Was this machine already ours before this call?
+      //
+      // status() adopts a lone existing box now, so by the time we read it the
+      // id may have been learned a millisecond ago rather than remembered from
+      // a previous session. Both mean "we found your machine, we did not make
+      // one" — which the UI and the tests both care about — so it has to be
+      // sampled BEFORE the status call that may fill it in.
+      const knewItAlready = !!getBoxId();
       // Fresh, never cached: deciding "create" from a stale "missing" is a
       // second machine against a two-machine limit.
       const st = await status({ fresh: true });
+      const freshlyAdopted = !knewItAlready && !!st.id;
       if (!st.signedIn) return { ok: false, reason: "signed-out" };
       if (st.state === "running") {
         lastUsedAt = now();
-        return { ok: true, id: st.id, reused: true };
+        return { ok: true, id: st.id, reused: true, adopted: freshlyAdopted || undefined };
       }
 
       if (st.state === "stopped") {
@@ -412,7 +452,7 @@ function createBoxRuntime(opts = {}) {
         spentStart(now());
         invalidate();
         lastUsedAt = now();
-        return { ok: true, id: st.id, resumed: true };
+        return { ok: true, id: st.id, resumed: true, adopted: freshlyAdopted || undefined };
       }
 
       // Before creating anything: is there already a machine on this account?

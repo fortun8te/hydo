@@ -121,7 +121,6 @@ export default function Composer({
   replyTo = null,
   onCancelReply,
 }) {
-  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.Composer = (window.__rc.Composer || 0) + 1; }
 
   const inputRef = useRef(null);
   const formRef = useRef(null);
