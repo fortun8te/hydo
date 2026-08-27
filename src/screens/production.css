@@ -404,7 +404,7 @@
   font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
 }
 
 .hy-chcreate__x {
@@ -420,7 +420,7 @@
 }
 
 .hy-chcreate__x:hover {
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
   background: #2a2a2a;
 }
 
@@ -443,7 +443,7 @@
   border-radius: 10px;
   border: 1px solid #2e2e2e;
   background: #161616;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
 }
 
 .hy-chcreate__field > input {
@@ -469,7 +469,7 @@
   height: 100%;
   border: 0;
   background: transparent;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
   font-size: 14px;
 }
 
@@ -487,7 +487,7 @@
   padding: 0 6px 0 4px;
   border-radius: 999px;
   background: #2a2a2a;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
   font-size: 13px;
 }
 
@@ -504,7 +504,7 @@
 }
 
 .hy-chcreate__chip button:hover {
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
 }
 
 .hy-chcreate__list {
@@ -528,7 +528,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
   text-align: left;
   cursor: pointer;
 }
@@ -550,7 +550,7 @@
 }
 
 .hy-chcreate__box.is-on {
-  border-color: #e8e8e8;
+  border-color: var(--sand-text-primary, #fcfcfc);
   background: #f2f2f2;
 }
 
@@ -576,7 +576,7 @@
   border: 0;
   border-radius: 10px;
   background: #2a2a2a;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
   font-size: 14px;
   cursor: pointer;
 }
@@ -626,7 +626,7 @@
   height: 100%;
   border: 0;
   background: transparent;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
   font-size: 14px;
   outline: none;
 }
@@ -660,7 +660,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
   text-align: left;
   cursor: pointer;
   font-size: 14px;
@@ -690,7 +690,7 @@
   place-items: center;
   border-radius: 50%;
   background: #3d3d3d;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
   font-size: 20px;
   line-height: 1;
 }

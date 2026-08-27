@@ -16,6 +16,9 @@ import "./screens/plugins.css";
 import "./screens/palette.css";
 import "./screens/settings.css";
 
+// Dark until the store loads and says otherwise (see applyTheme in App.jsx).
+// Set here rather than in a component so the first paint is never a white
+// flash on a dark-mode machine.
 document.documentElement.dataset.theme = "cursor-dark";
 
 createRoot(document.getElementById("root")).render(

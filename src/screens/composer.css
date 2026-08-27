@@ -16,7 +16,7 @@
   padding: 8px;
   min-height: 44px;
   border-radius: 22px;
-  background: #2f2f2f;
+  background: var(--hy-raised);
   border: 1px solid #fcfcfc12;
 }
 
@@ -46,7 +46,7 @@
 }
 
 .sand-composer .sand-composer__input::placeholder {
-  color: #fcfcfc7a;
+  color: var(--sand-text-tertiary, #8d8d8d);
 }
 
 /* -- the buttons -------------------------------------------------------- */
@@ -59,8 +59,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #3c3c3c;
-  color: #d4d4d4;
+  background: var(--hy-raised-hover);
+  color: var(--sand-text-primary, #fcfcfc);
   font-size: 15px;
   cursor: pointer;
 }
@@ -262,7 +262,7 @@
   overscroll-behavior: contain;
   padding: 6px;
   border-radius: 16px;
-  background: #0d0d0d;
+  background: var(--hy-menu);
   border: 1px solid rgba(252, 252, 252, 0.1);
   box-shadow: 0 20px 56px rgba(0, 0, 0, 0.72);
   z-index: 6;
@@ -294,7 +294,7 @@
    over on hover. Two competing highlights would be a lie about what Enter
    does. */
 .sand-slash__item.is-active {
-  background: #262626;
+  background: var(--hy-raised-hover);
 }
 
 
@@ -340,7 +340,7 @@
 .sand-slash__note {
   flex: 1;
   min-width: 0;
-  color: #7d7d7d;
+  color: var(--sand-text-tertiary, #8d8d8d);
   font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -354,7 +354,7 @@
   flex: none;
   margin-left: auto;
   padding-left: 10px;
-  color: #6f6f6f;
+  color: var(--sand-text-tertiary, #8d8d8d);
   font-size: 14px;
   white-space: nowrap;
 }

@@ -1152,7 +1152,7 @@ button.hy-rc-image-tile {
   margin: 8px 0 4px;
   padding: 12px;
   border-radius: 12px;
-  background: #0d0d0d;
+  background: var(--hy-code-ground);
   border: 1px solid rgba(252, 252, 252, 0.08);
   overflow: hidden;
 }

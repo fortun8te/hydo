@@ -26,9 +26,12 @@ const MODEL_LABELS = {
   "grok-4.5": "grok-4.5",
 };
 
+// Light was missing, not unsupported: `src/kit/tokens.css` has shipped a full
+// `cursor-light` palette from the start. Dark stays the default.
 const THEME_OPTIONS = [
-  { value: "system", label: "Follow System" },
   { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+  { value: "system", label: "Follow System" },
 ];
 
 const ACCENT_OPTIONS = ["Black", "Blue", "Purple"];

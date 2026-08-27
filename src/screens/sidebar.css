@@ -93,7 +93,7 @@
 .sand-sidebar .sand-row.is-pick:hover,
 .sand-sidebar .sand-row.is-on.is-pick {
   --row-ground: #2e2e2e;
-  background: #2e2e2e;
+  background: var(--hy-raised);
 }
 
 .sand-sidebar .sand-row__face-wrap {
@@ -209,7 +209,7 @@
 
 .sand-sidebar .sand-row.is-pick:not(.is-on) {
   --row-ground: #2e2e2e;
-  background: #2e2e2e;
+  background: var(--hy-raised);
 }
 
 .sand-sidebar .sand-row__time {
@@ -270,7 +270,7 @@
 
 .sand-sidebar .sand-pin.is-on {
   --row-ground: #2e2e2e;
-  background: #2e2e2e;
+  background: var(--hy-raised);
 }
 
 .sand-sidebar .sand-pin__face-wrap {
@@ -376,7 +376,7 @@
 }
 
 .sand-sidebar .sand-row.is-unread .sand-row__name {
-  color: #fff;
+  color: var(--sand-text-primary, #fcfcfc);
 }
 
 .sand-sidebar .sand-row.is-unread .sand-row__last-text {
@@ -460,7 +460,7 @@
   gap: 12px;
   padding: 6px 8px;
   border-radius: 10px;
-  color: #e8e8e8;
+  color: var(--sand-text-primary, #fcfcfc);
   font-family: var(--sand-font-family-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   font-size: 15px;
   font-weight: 500;
@@ -482,13 +482,13 @@
   display: grid;
   place-items: center;
   font-size: 14px;
-  color: #ececec;
+  color: var(--sand-text-primary, #fcfcfc);
 }
 
 .sand-sidebar .sand-plugins .sand-foot__mark {
   border: 1px solid #4a4a4a;
   background: transparent;
-  color: #f2f2f2;
+  color: var(--sand-text-primary, #fcfcfc);
 }
 
 .sand-sidebar .sand-plugins .sand-plug {
@@ -499,8 +499,8 @@
   width: 32px;
   height: 32px;
   border: 0;
-  background: #3a3a3a;
-  color: #f5f5f5;
+  background: var(--hy-raised-hover);
+  color: var(--sand-text-primary, #fcfcfc);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0;
@@ -514,7 +514,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #e8e8e8;
+  color: var(--sand-text-primary, #fcfcfc);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.01em;

@@ -763,7 +763,7 @@
 }
 
 .sand-transcript .hy-artifact:hover {
-  background: #303030;
+  background: var(--hy-bubble-bot-hover);
   border-color: rgba(252, 252, 252, 0.18);
 }
 

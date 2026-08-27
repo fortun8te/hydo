@@ -23,8 +23,16 @@ const BLOBS = [
   "gray",
   "white",
 ];
-const SHAPES = ["hex", "squircle", "tablet", "capsule", "pebble", "blob", "bean", "egg", "cloud", "wedge", "teardrop"];
-const PICK_SHAPES = ["blob", "pebble", "squircle", "tablet", "wedge", "hex", "cloud", "teardrop"];
+// Every body the kernel can draw. Kept in step with src/lib/marks.js SHAPES;
+// mcp-import-test's sibling `marks` check would be the place to enforce that
+// if they ever drift.
+const SHAPES = [
+  "blob", "pebble", "bean", "egg", "teardrop", "cloud", "leaf", "dome", "arch",
+  "squircle", "tablet", "capsule", "cylinder", "shield", "hex", "wedge", "gem", "crystal",
+];
+const PICK_SHAPES = SHAPES;
+const COLOR_IDS = BLOBS;
+const SHAPE_IDS = SHAPES;
 
 function pickRandomMark(agents) {
   const list = agents || [];
@@ -1290,6 +1298,20 @@ function createStore(opts = {}) {
       patch.description = spec.description.trim().slice(0, 600);
     }
     if (typeof spec.notifications === "boolean") patch.notifications = spec.notifications;
+    // Appearance. A teammate choosing how it looks is the cheapest kind of
+    // self-determination and costs nothing: these are cosmetic fields with a
+    // fixed vocabulary, validated against the real lists so a hallucinated
+    // colour cannot leave the roster rendering a blank.
+    if (typeof spec.blob === "string") {
+      const want = spec.blob.trim().toLowerCase();
+      if (COLOR_IDS.includes(want) || /^#[0-9a-f]{6}$/i.test(spec.blob.trim())) {
+        patch.blob = /^#/.test(spec.blob.trim()) ? spec.blob.trim() : want;
+      }
+    }
+    if (typeof spec.shape === "string") {
+      const want = spec.shape.trim().toLowerCase();
+      if (SHAPE_IDS.includes(want)) patch.shape = want;
+    }
     if (!Object.keys(patch).length) return false;
 
     const before = agent.name;

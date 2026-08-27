@@ -1399,3 +1399,40 @@
   -webkit-font-smoothing: antialiased;
 }
 
+
+/* ---------------------------------------------------------------------------
+   Surfaces the app hardcoded.
+
+   A handful of literal dark hex values were baked into the composer, the
+   selected row, the popover menus and the bubbles. They were correct while the
+   app was dark-only, and they are exactly what breaks when the light palette
+   is switched on: a near-black composer sitting on a white page.
+
+   These are the semantic names for those surfaces, defined once per theme.
+   Anything that needs "a raised thing", "a menu", "a bubble" uses these
+   instead of a number.
+   --------------------------------------------------------------------------- */
+
+:root, [data-theme='cursor-light'] {
+  --hy-raised: #ececef;        /* composer pill, selected row */
+  --hy-raised-hover: #e2e2e6;
+  --hy-menu: #ffffff;          /* popovers, slash menu, dialogs */
+  --hy-menu-border: rgba(20, 20, 20, 0.12);
+  --hy-bubble-bot: #ececef;
+  --hy-bubble-bot-hover: #e4e4e8;
+  --hy-bubble-user: #d6d8dd;
+  --hy-code-ground: #f4f4f6;
+  --hy-shadow: rgba(20, 20, 20, 0.16);
+}
+
+[data-theme='cursor-dark'], :root[data-theme='cursor-dark'] {
+  --hy-raised: #2e2e2e;
+  --hy-raised-hover: #3a3a3a;
+  --hy-menu: #1c1c1c;
+  --hy-menu-border: rgba(252, 252, 252, 0.1);
+  --hy-bubble-bot: #262626;
+  --hy-bubble-bot-hover: #303030;
+  --hy-bubble-user: #5a5a5a;
+  --hy-code-ground: #0d0d0d;
+  --hy-shadow: rgba(0, 0, 0, 0.55);
+}

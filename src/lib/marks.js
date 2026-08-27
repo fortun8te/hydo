@@ -35,16 +35,32 @@ export const COLORS = [
 // reading `.iris` keeps working.
 for (const c of COLORS) c.iris = c.ink;
 
-// The 8 real bodies, in the picker's own order: two rows of four.
+// All 18 bodies the kernel can draw.
+//
+// The picker used to offer 8 of these to match the reference app's own list.
+// The other ten were never missing, only hidden: they render through the same
+// `rim` path, they are in the face lab, and saved bots could already be
+// wearing them. Ordered soft-to-hard so the grid reads as a family rather
+// than a dump.
 export const SHAPES = [
   { id: "blob",     label: "Blob" },
   { id: "pebble",   label: "Pebble" },
+  { id: "bean",     label: "Bean" },
+  { id: "egg",      label: "Egg" },
+  { id: "teardrop", label: "Teardrop" },
+  { id: "cloud",    label: "Cloud" },
+  { id: "leaf",     label: "Leaf" },
+  { id: "dome",     label: "Dome" },
+  { id: "arch",     label: "Arch" },
   { id: "squircle", label: "Squircle" },
   { id: "tablet",   label: "Tablet" },
-  { id: "wedge",    label: "Wedge" },
+  { id: "capsule",  label: "Capsule" },
+  { id: "cylinder", label: "Cylinder" },
+  { id: "shield",   label: "Shield" },
   { id: "hex",      label: "Hex" },
-  { id: "cloud",    label: "Cloud" },
-  { id: "teardrop", label: "Teardrop" },
+  { id: "wedge",    label: "Wedge" },
+  { id: "gem",      label: "Gem" },
+  { id: "crystal",  label: "Crystal" },
 ];
 
 export const PICK_SHAPES = SHAPES.map((s) => s.id);
