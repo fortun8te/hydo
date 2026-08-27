@@ -31,9 +31,25 @@ export const KEYMAP = {
   "alt+down": "sand.nextAgent",
 };
 
-// Chords that must keep working even while the caret is sitting in an
-// <input>/<textarea>/contenteditable (composer, search boxes, etc.).
-const TYPING_ALLOWED = new Set(["mod+enter", "mod+k", "mod+f"]);
+// Which chords survive a caret sitting in an <input>/<textarea>/contenteditable.
+//
+// This was an explicit allowlist of three, which meant Cmd-, did nothing while
+// focus was in ANY text field — including the "Search or create Bots" box that
+// the + menu focuses the moment it opens. So the sequence "start making a
+// teammate, then open Settings" left the picker sitting there and Settings
+// never arrived, which reads as the app ignoring you.
+//
+// The rule is not a list, it is what the chord IS. A Command-modified chord is
+// not something anyone types into a field — on macOS Cmd-, opens preferences
+// from inside a text box in every app there is, and the same goes for Cmd-B,
+// Cmd-N and the rest. Suppressing them is the surprise.
+//
+// Alt-only chords are the genuine exception and stay suppressed: macOS text
+// fields bind Option-Up/Down to paragraph movement, so stealing those WOULD
+// break typing.
+function survivesTyping(chord) {
+  return typeof chord === "string" && chord.startsWith("mod+");
+}
 
 // Every command id chat-channels.json knows about, human-labelled and
 // grouped for the palette. `keys` lists every chord bound to it (bound
@@ -161,6 +177,6 @@ export function matchEvent(e, opts = {}) {
   if (!chord) return null;
   const id = KEYMAP[chord];
   if (!id) return null;
-  if (isTypingTarget(e.target) && !TYPING_ALLOWED.has(chord)) return null;
+  if (isTypingTarget(e.target) && !survivesTyping(chord)) return null;
   return id;
 }

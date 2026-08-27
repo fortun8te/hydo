@@ -497,7 +497,17 @@ export default function Shell({ state }) {
       case "sand.commandPalette": setPaletteOpen((v) => !v); break;
       case "sand.findInChat": setFindOpen((v) => !v); break;
       case "sand.newAgent": window.hydo.createAgent(); break;
-      case "sand.openSettings": setSettingsOpen(true); break;
+      // Settings replaces whatever modal you were in, it does not stack on it.
+      //
+      // The + menu focuses its own search box, so opening Settings from there
+      // left the Bot picker sitting UNDER the Settings dialog — two dialogs at
+      // once, and from the user's side the picker simply "didn't disappear".
+      case "sand.openSettings":
+        setBotCreate(false);
+        setPaletteOpen(false);
+        setFindOpen(false);
+        setSettingsOpen(true);
+        break;
       // Same reason as Sidebar's hidden toggle button: below the breakpoint
       // the rail is forced, so flipping `collapsed` here changes nothing on
       // screen and only springs out later when the window is widened again.
