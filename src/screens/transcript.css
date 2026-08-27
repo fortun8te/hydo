@@ -813,3 +813,19 @@
   min-width: 0;
   gap: 6px;
 }
+
+/* The label used to be `display: none` until you hovered the row, so a turn
+   that was pushing a PR looked identical to one that was thinking: a face and
+   nothing else. Measured in a real window — the span was 0x0. Now the line is
+   ON for a row that is actually working, which is the only kind whose label
+   is a tool line; `wait` and `linger` rows keep the hover behaviour, because
+   there is nothing true for them to say. */
+.sand-transcript .sand-inchat[data-kind="work"] .sand-inchat__busy {
+  display: inline;
+}
+
+/* A brand mark with no visible sentence next to it is a claim with no
+   subject. It goes wherever the label goes. */
+.sand-transcript .sand-inchat:not([data-kind="work"]) .hy-act-mark {
+  display: none;
+}

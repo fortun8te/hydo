@@ -7,6 +7,7 @@ import { pipLabelOf, pipOf } from "../lib/presence.js";
 import { pluginPrettyName } from "../lib/plugin-icons.js";
 import { BOT_PRESETS, roleFor } from "../lib/bot-presets.js";
 import { liveStateOf } from "./PlanCard.jsx";
+import ActivityMark from "./ActivityMark.jsx";
 
 const FALLBACK_PROFILES = [
   { name: "chat", tokens: 5100 },
@@ -119,6 +120,10 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   const pip = pipOf(agent);
   const pipLabel = pipLabelOf(agent, agent?.id);
   const todos = Array.isArray(agent?.todos) ? agent.todos : [];
+  // `activityDetail` is the tool line; `activity` is whatever last spoke,
+  // including Hermes' own status.update text. Either is a real sentence about
+  // this turn, so the more specific one wins and the other is the fallback.
+  const activityNow = String(agent?.activityDetail || agent?.activity || "").trim();
   const toolProfile = agent?.toolProfile || "chat";
   const reasoningEffort = agent?.reasoningEffort || "low";
   // After the two above, not before: reading them earlier is a temporal dead
@@ -271,6 +276,19 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           />
         ) : null}
       </span>
+      {/* What it is doing RIGHT NOW, under the face that is spinning about it.
+          The pip next to the face already says a turn is running; this says
+          which tool that turn is in, from the real `tool.start` name (see
+          electron/activity.cjs). It renders only while there is a turn —
+          `botBusy` is the same source the pip reads, so the two can never
+          disagree — and disappears the moment one ends rather than leaving a
+          stale claim on screen. */}
+      {botBusy(agent) && activityNow ? (
+        <div className="bot-rail__now hy-act">
+          <ActivityMark plugin={agent?.activityIcon} size={15} />
+          <span className="hy-act__text">{activityNow}</span>
+        </div>
+      ) : null}
       <label className="bot-rail__field">
         <span className="bot-rail__field-label">Name</span>
         <input value={name} onChange={(e) => onChange({ name: e.target.value })} />

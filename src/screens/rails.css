@@ -1534,3 +1534,19 @@ aside.routine-rail .routine-rail__toolbar {
   background: rgba(228, 161, 27, 0.1);
   border: 1px solid rgba(228, 161, 27, 0.24);
 }
+
+/* -- what it is doing now ------------------------------------------------ */
+/* The live tool line under the bot rail's face. Same secondary text colour as
+   the plan below it, on the same raised chip the rail uses for its own
+   read-only rows — this is a report, never a control. */
+.bot-rail .bot-rail__now {
+  align-self: center;
+  max-width: calc(100% - 32px);
+  margin: -4px 0 2px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--sand-fill-secondary, #7777772c);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 12.5px;
+  line-height: 16px;
+}
