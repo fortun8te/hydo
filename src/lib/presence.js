@@ -79,6 +79,33 @@ export function pipOf(agent) {
   return agent.workingIn ? "work" : null;
 }
 
+/**
+ * What the pip MEANS, for a caller that has a conversation to compare against.
+ *
+ * `pipOf` answers "is a turn of this teammate's running", which is the right
+ * question for the sidebar because the sidebar lists every conversation at
+ * once. It is not the whole answer in a channel or on a rail, where a lit dot
+ * reads as "working on THIS" — and a bot busy in its own 1:1 would be wearing
+ * that claim without it being true.
+ *
+ * So the pip keeps one shape and one colour, and this supplies the sentence.
+ * The word is never "Online": `workingIn` is set for the life of a turn and
+ * cleared the moment it ends, so the only thing it can honestly report is work
+ * happening right now. "Online" would be a claim about a warm process that
+ * nothing on this side can see.
+ *
+ * @param {Object} agent
+ * @param {string} [conversationId]  the thread being looked at; defaults to
+ *                                   the teammate's own 1:1
+ * @returns {string} "" when there is no turn to describe
+ */
+export function pipLabelOf(agent, conversationId) {
+  const at = agent && agent.workingIn;
+  if (!at) return "";
+  const conv = conversationId ?? (agent && agent.id);
+  return String(at) === String(conv) ? "Working here" : "Working in another conversation";
+}
+
 export function userTypingOf(draft, lastKeyAt, now, idleMs = USER_IDLE_MS) {
   if (!String(draft || "").trim()) return false;
   const t = Number(lastKeyAt) || 0;

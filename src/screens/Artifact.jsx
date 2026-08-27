@@ -119,6 +119,45 @@ function shell(inner) {
 </style></head><body>${inner}</body></html>`;
 }
 
+/**
+ * The popover the preview lives in.
+ *
+ * It used to be an aside docked to the right edge, sharing the slot with the
+ * bot rail — so opening a file squeezed the conversation you opened it from,
+ * and a chart got `min(46vw, 620px)` to be a chart in. Worse, it was the only
+ * surface in the app that showed you something WITHOUT taking the foreground:
+ * everything else that demands a look (Settings, the sheets, the confirm) is a
+ * centred card over a darkened room, and the one thing you open in order to
+ * actually LOOK at something was the one thing shoved into a column.
+ *
+ * So it is a modal now, built on the same three parts as `Sheet`: a scrim that
+ * closes on click, a centred card, and Escape. The scrim is what makes it a
+ * preview rather than a panel — the room goes dark and the file is the only
+ * thing lit.
+ *
+ * Escape is handled here rather than by reusing `Sheet` because the body is an
+ * iframe: `Sheet`'s focus trap would fight a sandboxed document for focus on
+ * every Tab, and there is nothing in here to tab through anyway.
+ */
+function ArtifactFrame({ label, onClose, children }) {
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onClose?.();
+    }
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  return (
+    <div className="artifact-modal" role="dialog" aria-modal="true" aria-label={label || "File preview"}>
+      <div className="artifact-modal__scrim" onClick={onClose} />
+      <div className="artifact">{children}</div>
+    </div>
+  );
+}
+
 export default function Artifact({ artifactId, onClose }) {
   const [art, setArt] = useState({ state: "loading" });
   const frameRef = useRef(null);
@@ -143,19 +182,19 @@ export default function Artifact({ artifactId, onClose }) {
 
   if (art.state === "loading") {
     return (
-      <aside className="artifact" aria-label="Artifact">
+      <ArtifactFrame label="Artifact" onClose={onClose}>
         <ArtifactHead title="Opening…" onClose={onClose} />
         <p className="artifact__note mute">Reading…</p>
-      </aside>
+      </ArtifactFrame>
     );
   }
 
   if (art.state === "error") {
     return (
-      <aside className="artifact" aria-label="Artifact">
+      <ArtifactFrame label="Artifact" onClose={onClose}>
         <ArtifactHead title={art.name || "Artifact"} onClose={onClose} />
         <p className="artifact__note mute">{reasonText(art)}</p>
-      </aside>
+      </ArtifactFrame>
     );
   }
 
@@ -163,37 +202,37 @@ export default function Artifact({ artifactId, onClose }) {
   // frame. No sandbox needed: none of them execute anything.
   if (art.kind === "image" || art.kind === "vector") {
     return (
-      <aside className="artifact" aria-label={art.title || "Artifact"}>
+      <ArtifactFrame label={art.title || "Artifact"} onClose={onClose}>
         <ArtifactHead title={art.title || art.name} versions={art.versions} onClose={onClose} />
         <div className="artifact__media">
           <img src={art.src} alt={art.name || ""} draggable="false" />
         </div>
         <ArtifactFoot art={art} />
-      </aside>
+      </ArtifactFrame>
     );
   }
 
   if (art.kind === "video" || art.kind === "audio") {
     const Tag = art.kind === "video" ? "video" : "audio";
     return (
-      <aside className="artifact" aria-label={art.title || "Artifact"}>
+      <ArtifactFrame label={art.title || "Artifact"} onClose={onClose}>
         <ArtifactHead title={art.title || art.name} versions={art.versions} onClose={onClose} />
         <div className="artifact__media">
           <Tag src={art.src} controls preload="metadata" />
         </div>
         <ArtifactFoot art={art} />
-      </aside>
+      </ArtifactFrame>
     );
   }
 
   if (art.kind === "pdf") {
     return (
-      <aside className="artifact" aria-label={art.title || "Artifact"}>
+      <ArtifactFrame label={art.title || "Artifact"} onClose={onClose}>
         <ArtifactHead title={art.title || art.name} versions={art.versions} onClose={onClose} />
         {/* Chromium's own PDF viewer. Sandboxed like everything else here. */}
         <iframe className="artifact__frame" title={art.name || "PDF"} sandbox={SANDBOX} src={art.src} />
         <ArtifactFoot art={art} />
-      </aside>
+      </ArtifactFrame>
     );
   }
 
@@ -202,7 +241,7 @@ export default function Artifact({ artifactId, onClose }) {
   // both a worse experience and a bigger surface than opening the browser.
   if (art.kind === "url" || art.kind === "server") {
     return (
-      <aside className="artifact" aria-label="Artifact">
+      <ArtifactFrame label="Artifact" onClose={onClose}>
         <ArtifactHead title={art.title || art.url} onClose={onClose} />
         <div className="artifact__link">
           <p className="mute">{art.kind === "server" ? "A local dev server." : "A web page."}</p>
@@ -215,12 +254,12 @@ export default function Artifact({ artifactId, onClose }) {
             Open in browser
           </button>
         </div>
-      </aside>
+      </ArtifactFrame>
     );
   }
 
   return (
-    <aside className="artifact" aria-label={art.title || "Artifact"}>
+    <ArtifactFrame label={art.title || "Artifact"} onClose={onClose}>
       <ArtifactHead
         title={art.title || art.name}
         versions={art.versions}
@@ -242,7 +281,7 @@ export default function Artifact({ artifactId, onClose }) {
         referrerPolicy="no-referrer"
       />
       <ArtifactFoot art={art} />
-    </aside>
+    </ArtifactFrame>
   );
 }
 
@@ -287,8 +326,10 @@ function ArtifactHead({ title, versions, onClose, onReload }) {
           <i className="gb-icon gb-icon-arrow-u-up-left" />
         </button>
       ) : null}
+      {/* Not `chevrons-right`: that glyph means "push this rail back to the
+          edge", and there is no edge any more. */}
       <button type="button" className="icon-btn" title="Close" onClick={onClose}>
-        <i className="gb-icon gb-icon-chevrons-right" />
+        <i className="gb-icon gb-icon-remove-close" />
       </button>
     </header>
   );

@@ -1,4 +1,6 @@
 import UmbraFace from "../umbra/UmbraFace.jsx";
+import { botWorks } from "../lib/working.js";
+import { pipLabelOf } from "../lib/presence.js";
 
 export const MAX_MEMBERS = 6;
 
@@ -51,6 +53,12 @@ export default function ChannelRail({ channel, agents, onChange, onClose, onTogg
           {agents.map((a) => {
             const on = members.includes(a.id);
             const locked = !on && full;
+            // "Who is working" was the one thing this list did not say, which
+            // is odd for the screen whose whole subject is which teammates are
+            // on a channel. Scoped to THIS channel, not to the bot: a member
+            // busy in its own 1:1 is not working on this, and a pip that did
+            // not distinguish the two would be claiming it was.
+            const here = on && botWorks(a, channel?.id);
             return (
               <button
                 key={a.id}
@@ -61,7 +69,16 @@ export default function ChannelRail({ channel, agents, onChange, onClose, onTogg
                 title={locked ? `A channel holds up to ${MAX_MEMBERS}` : a.name}
                 onClick={() => onToggleMember(a.id)}
               >
-                <UmbraFace tint={a.blob} shape={a.shape} size={28} />
+                <span className="sand-member__face">
+                  <UmbraFace tint={a.blob} shape={a.shape} size={28} live={here} mood={here ? "spin" : "idle"} />
+                  {here ? (
+                    <span
+                      className="sand-row__dot sand-member__dot is-work"
+                      title={pipLabelOf(a, channel?.id)}
+                      aria-label={pipLabelOf(a, channel?.id)}
+                    />
+                  ) : null}
+                </span>
                 <span className="sand-member__body">
                   <span className="sand-member__name">{a.name}</span>
                   {a.label ? <span className="sand-member__label">{a.label}</span> : null}

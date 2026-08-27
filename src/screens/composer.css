@@ -509,6 +509,9 @@
   display: block;
 }
 .hy-plan__tick.is-done { background: var(--sand-ok, #2bb673); }
+/* Retired, not finished: it will never move again, so it must not read as
+   progress and must not read as work still to come either. */
+.hy-plan__tick.is-dropped { background: var(--sand-line, rgba(252, 252, 252, 0.18)); opacity: 0.45; }
 .hy-plan__tick.is-live {
   background: var(--sand-accent, #2a92fe);
   animation: hy-plan-pulse 1.6s ease-in-out infinite;
@@ -558,17 +561,36 @@
   color: var(--sand-text-secondary, rgba(252, 252, 252, 0.6));
 }
 
-.hy-plan__dot {
+/* The state marker is a BOX, not a dot.
+   A row of dots that differ only in colour asks you to hold a legend in your
+   head; a checklist does not, because an empty box and a ticked box are the
+   same shape twice and the difference is the answer. The running step gets the
+   third obvious form — a filled pip inside the box — so all three states are
+   distinguishable without colour at all, which is what makes the strip legible
+   at a glance over a busy transcript. */
+.hy-plan__box {
   flex: none;
-  width: 6px;
-  height: 6px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: var(--sand-line, rgba(252, 252, 252, 0.22));
+  width: 13px;
+  height: 13px;
+  margin-top: 2px;
+  color: var(--sand-line, rgba(252, 252, 252, 0.3));
 }
-.hy-plan__step.is-done .hy-plan__dot { background: var(--sand-ok, #2bb673); }
-.hy-plan__step.is-live .hy-plan__dot { background: var(--sand-accent, #2a92fe); }
+.hy-plan__box--done { color: var(--sand-ok, #2bb673); }
+.hy-plan__box--live { color: var(--sand-accent, #2a92fe); }
+.hy-plan__box--dropped { color: var(--sand-text-tertiary, rgba(252, 252, 252, 0.42)); }
+
+/* Only the pip breathes. Animating the whole box makes the row edge shimmer,
+   which is noise; the pip alone reads as a heartbeat inside a static frame. */
+.hy-plan__pip { animation: hy-plan-pulse 1.6s ease-in-out infinite; }
+
 .hy-plan__step.is-live { color: var(--sand-text-primary, #fcfcfc); }
+/* The one row that is happening earns a real surface. Struck-out history and
+   grey pending steps look alike at 12px; a lit row does not. */
+.hy-plan__step.is-live .hy-plan__text { font-weight: 500; }
+.hy-plan__step.is-dropped .hy-plan__text {
+  text-decoration: line-through;
+  opacity: 0.45;
+}
 /* Struck through, not hidden: what it already did is context for what it is
    doing now. */
 .hy-plan__step.is-done .hy-plan__text { text-decoration: line-through; opacity: 0.6; }
@@ -576,17 +598,8 @@
 .hy-plan--done .hy-plan__now { color: var(--sand-text-secondary, rgba(252, 252, 252, 0.6)); }
 
 @media (prefers-reduced-motion: reduce) {
-  .hy-plan__tick.is-live { animation: none; }
-}
-
-/* A tick once a step is finished. A dot that only changes colour asks you to
-   remember which colour meant done. */
-.hy-plan__tickmark {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  margin-top: 2px;
-  color: var(--sand-ok, #2bb673);
+  .hy-plan__tick.is-live,
+  .hy-plan__pip { animation: none; }
 }
 
 /* When it ran. Right-aligned in its own column so the times stack, and
@@ -600,4 +613,7 @@
   color: var(--sand-text-tertiary, rgba(252, 252, 252, 0.42));
   white-space: nowrap;
 }
+/* The running step's time is the one you are actually watching, so it is not
+   dimmed with the rest of the history column. */
+.hy-plan__step.is-live .hy-plan__span { color: var(--sand-text-secondary, rgba(252, 252, 252, 0.6)); }
 .hy-plan__step .hy-plan__text { flex: 1 1 auto; min-width: 0; }

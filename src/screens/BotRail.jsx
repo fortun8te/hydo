@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import UmbraFace from "../umbra/UmbraFace.jsx";
 import ColorWheel from "./ColorWheel.jsx";
 import { COLORS, SHAPES, isCustomHex } from "../lib/marks.js";
-import { botWorks } from "../lib/working.js";
-import { pipOf } from "../lib/presence.js";
+import { botBusy } from "../lib/working.js";
+import { pipLabelOf, pipOf } from "../lib/presence.js";
 import { pluginPrettyName } from "../lib/plugin-icons.js";
 import { BOT_PRESETS, roleFor } from "../lib/bot-presets.js";
+import { stateOf } from "./PlanCard.jsx";
 
 const FALLBACK_PROFILES = [
   { name: "chat", tokens: 5100 },
@@ -104,11 +105,19 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   // background process is a rare thing and this is an RPC, so a permanent
   // timer would cost far more than the answer is worth.
   const [procs, setProcs] = useState([]);
+  // The last answer from `openWorkspace`, so the button can report instead of
+  // swallowing it: {} | {busy} | {path} | {error}.
+  const [workspace, setWorkspace] = useState({});
   // What the LIVE session reports as enabled, which is a different question
   // from what Hydo configured. Read only while Advanced is open.
   const [live, setLive] = useState(null);
   const customOn = isCustomHex(agent?.blob);
-  const pip = botWorks(agent, agent?.id) ? "work" : pipOf(agent);
+  // The rail is opened ON a teammate, not on a conversation, so the pip means
+  // "a turn of theirs is running" and the label says where. It used to say
+  // "Online" whenever the value was not exactly "work" — an unreachable branch
+  // that could only ever have printed a claim nothing here can check.
+  const pip = pipOf(agent);
+  const pipLabel = pipLabelOf(agent, agent?.id);
   const todos = Array.isArray(agent?.todos) ? agent.todos : [];
   const toolProfile = agent?.toolProfile || "chat";
   const reasoningEffort = agent?.reasoningEffort || "low";
@@ -177,6 +186,12 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
     .filter(Boolean)
     .join(" · ");
 
+  // A path or an error belongs to ONE teammate. Carrying it across a switch
+  // would print another bot's folder under this bot's button.
+  useEffect(() => {
+    setWorkspace({});
+  }, [agent?.id]);
+
   useEffect(() => {
     if (!agent?.id) return undefined;
     let gone = false;
@@ -240,14 +255,19 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           size={72}
           morph
           live
-          mood={botWorks(agent, agent?.id) ? "spin" : "fidget"}
+          /* Spins whenever a turn of theirs is running, not only when it is
+             running in their own thread. The pip right next to it already
+             reads `workingIn`; the face reading a narrower question meant the
+             two could disagree on the same teammate at the same moment, with
+             the dot lit and the face idling. */
+          mood={botBusy(agent) ? "spin" : "fidget"}
           poke
         />
         {pip ? (
           <span
             className={`sand-row__dot bot-rail__online is-${pip}`}
-            title={pip === "work" ? "Working" : "Online"}
-            aria-label={pip === "work" ? "Working" : "Online"}
+            title={pipLabel}
+            aria-label={pipLabel}
           />
         ) : null}
       </span>
@@ -425,7 +445,12 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
               second author on a list it re-reads as its own. */}
           <ul className="bot-rail__plan">
             {todos.map((t, i) => (
-              <li key={t.id || i} className={`bot-rail__plan-item is-${t.status}`}>
+              /* `stateOf`, not `t.status`. Hermes sends the same state as
+                 `in_progress`, `in-progress`, `active` or `running` depending
+                 on the model, and interpolating it raw meant three of those
+                 four matched no rule in rails.css at all — the running step
+                 just looked pending. */
+              <li key={t.id || i} className={`bot-rail__plan-item is-${stateOf(t)}`}>
                 <span className="bot-rail__plan-dot" aria-hidden="true" />
                 <span>{t.text}</span>
               </li>
@@ -649,14 +674,46 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
         </button>
         <p>Put back files this Bot changed on your disk.</p>
       </div>
+      {/* THIS IS NOT THE TOGGLE ABOVE, and the two wearing the same word was
+          most of the problem: the switch is permission to use a shared Ubuntu
+          machine, this opens the folder ON YOUR DISK that this one teammate
+          reads and writes. One bare button said neither of those things.
+
+          It also used to be fire-and-forget: `openWorkspace` answers
+          {ok, path} or {ok:false, reason}, and every one of those answers was
+          thrown away — so a bot with no workspace yet, or a folder the shell
+          refused to open, produced a button that did nothing at all and said
+          nothing about it. The path is worth showing on success too: "its
+          files" is abstract until you can see where they are. */}
       <div className="bot-rail__workspace">
+        <span className="bot-rail__notify-title">Workspace on this Mac</span>
         <button
           type="button"
           className="ghost ghost--solid"
-          onClick={() => window.hydo?.openWorkspace?.(agent?.id)}
+          onClick={async () => {
+            setWorkspace({ busy: true });
+            try {
+              const res = await window.hydo?.openWorkspace?.(agent?.id);
+              if (!res) setWorkspace({ error: "This build cannot open folders." });
+              else if (res.ok) setWorkspace({ path: res.path });
+              else setWorkspace({ error: res.reason || "Could not open it." });
+            } catch (err) {
+              setWorkspace({ error: err?.message || "Could not open it." });
+            }
+          }}
         >
-          Open workspace
+          {workspace.busy ? "Opening…" : "Open workspace"}
         </button>
+        {workspace.error ? (
+          <p className="bot-rail__workspace-note is-bad">{workspace.error}</p>
+        ) : workspace.path ? (
+          <p className="bot-rail__workspace-note">{workspace.path}</p>
+        ) : (
+          <p className="bot-rail__workspace-note">
+            The folder on your disk this Bot reads and writes — not the shared
+            Linux machine above. Everything it makes lands here.
+          </p>
+        )}
       </div>
       <div className="bot-rail__routines">
         <button type="button" className="bot-rail__routines-open" onClick={onOpenRoutines}>

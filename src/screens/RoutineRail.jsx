@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CADENCES, labelRoutine, labelTrigger, newTrigger } from "../lib/routine-ui.js";
+import { CADENCES, EVENT_TRIGGERS, labelRoutine, labelTrigger, newTrigger } from "../lib/routine-ui.js";
 
 function fmtWhen(at) {
   if (!at) return "";
@@ -16,9 +16,19 @@ function toLocalInput(at) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/**
+ * The two ways a routine starts: a clock, or something happening.
+ *
+ * `EVENT_TRIGGERS` was exported, rendered by `labelTrigger`, and given its own
+ * card in `TriggerCard` — and then never offered anywhere, so the only trigger
+ * you could actually add was a schedule. Half a feature is worse than none of
+ * it: the rest of the rail was written as if a Linear issue could start a
+ * routine, and the one screen that could create one did not say so.
+ */
 function AddMenu({ onPick, onClose }) {
   return (
     <div className="routine-rail__menu" role="menu">
+      <span className="routine-rail__menu-head">On a schedule</span>
       {CADENCES.map((c) => (
         <button
           key={c.id}
@@ -27,6 +37,17 @@ function AddMenu({ onPick, onClose }) {
           onClick={() => onPick(newTrigger("schedule", c.id))}
         >
           {c.label}
+        </button>
+      ))}
+      <span className="routine-rail__menu-head">When something happens</span>
+      {EVENT_TRIGGERS.map((t) => (
+        <button
+          key={t.kind}
+          type="button"
+          role="menuitem"
+          onClick={() => onPick(newTrigger(t.kind))}
+        >
+          {t.label}
         </button>
       ))}
       <button type="button" className="routine-rail__menu-cancel" onClick={onClose}>
@@ -114,7 +135,14 @@ export default function RoutineRail({
 
   function setTriggers(next) {
     if (!item) return;
-    onChange(item.id, { triggers: next, at: next.find((t) => t.kind === "schedule")?.at || item.at });
+    // `|| item.at` was the bug: the legacy top-level `at` is what
+    // `labelRoutine` falls back to when there are no triggers, so deleting the
+    // last schedule left the old date behind and the row went on announcing
+    // "Once · Mar 4" for a routine that no longer had a trigger at all. The
+    // schedule trigger is the only authority on `at` once triggers exist; with
+    // none, there is no date.
+    const sched = next.find((t) => t.kind === "schedule");
+    onChange(item.id, { triggers: next, at: sched ? sched.at || null : null });
   }
 
   if (!item) {

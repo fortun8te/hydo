@@ -343,6 +343,25 @@ aside.bot-rail > .bot-rail__blob-wrap {
 
 aside.bot-rail > .bot-rail__workspace {
   margin: 0 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.bot-rail .bot-rail__workspace-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  /* A real path is long and has no spaces, so it must be allowed to break
+     anywhere rather than push the rail wider than the rail. */
+  word-break: break-all;
+}
+
+.bot-rail .bot-rail__workspace-note.is-bad {
+  color: var(--sand-text-danger, #ff5667);
+  word-break: normal;
 }
 
 /* ---------- routines card (BotRail) ---------- */
@@ -471,6 +490,21 @@ aside.bot-rail > .bot-rail__routines {
 
 .bot-rail .sand-member .umbra-face {
   flex: none;
+}
+
+/* The face needs a positioned box of its own before the pip can sit on its
+   corner — `.sand-row__dot` is absolute, and without this it would anchor to
+   the whole member row and land in the middle of the name. */
+.bot-rail .sand-member__face {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+
+.bot-rail .sand-member__dot {
+  /* Ringed in the member row's own ground, not the rail's, or the ring reads
+     as a light halo on the selected (is-on) rows. */
+  box-shadow: 0 0 0 2px var(--sand-bg-elevated, #181818);
 }
 
 /* ---------- routine rail ---------- */
@@ -683,6 +717,29 @@ aside.routine-rail .routine-rail__toolbar {
 
 .routine-rail .routine-rail__menu button:hover {
   background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+/* The menu now offers two genuinely different kinds of trigger — a clock and
+   an event — and fourteen unlabelled rows in one column would make you read
+   all of them to find out which is which. */
+.routine-rail .routine-rail__menu-head {
+  padding: 8px 10px 4px;
+  color: var(--sand-text-tertiary, #fcfcfc73);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.routine-rail .routine-rail__menu-head:first-child {
+  padding-top: 4px;
+}
+
+/* The menu can now be taller than the rail. */
+.routine-rail .routine-rail__menu {
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .routine-rail .routine-rail__menu-sep {
@@ -956,19 +1013,66 @@ aside.routine-rail .routine-rail__toolbar {
 }
 
 
-/* -- Artifact pane ------------------------------------------------------- */
-/* Same slot as the bot rail, wider: a chart in 280px is not a chart. The frame
-   is the point, so it takes all the height that is left. */
+/* -- Artifact popover ---------------------------------------------------- */
+/* A file preview is a modal, not a rail.
+   It used to dock into the bot rail's slot, which capped a chart at
+   `min(46vw, 620px)` and squeezed the conversation you opened it from. It now
+   uses the same vocabulary as every other surface in the app that asks for
+   your attention (.sheet, .settings, .confirm): scrim, centred card, Escape.
+   Same z-index band as .sheet (20) — a preview and a settings sheet are never
+   open at once, and either one over the other would be wrong. */
+
+.artifact-modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.artifact-modal__scrim {
+  position: absolute;
+  inset: 0;
+  background: #000000a6;
+  animation: artifact-scrim-in 140ms ease-out;
+}
+
+/* Darker than the sheets' #00000073 on purpose: those sit over a form you are
+   still half reading, this one sits over a transcript you are meant to stop
+   reading. It is also what makes a transparent PNG or a pale HTML page read as
+   lit rather than as another panel. */
 
 .artifact {
+  position: relative;
   display: flex;
   flex-direction: column;
-  flex: none;
-  width: min(46vw, 620px);
-  min-width: 340px;
-  border-left: 1px solid var(--sand-border-default, #fcfcfc26);
+  /* Big. The whole complaint about the rail was that the thing you opened to
+     LOOK at was the smallest surface in the window. */
+  width: min(1040px, 88vw);
+  height: min(760px, 86vh);
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  border-radius: 16px;
   background: var(--sand-bg-subtle, #111);
+  box-shadow: var(--sand-shadow-modal);
   overflow: hidden;
+  animation: artifact-card-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes artifact-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes artifact-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-modal__scrim,
+  .artifact {
+    animation: none;
+  }
 }
 
 .artifact__head {
@@ -979,11 +1083,9 @@ aside.routine-rail .routine-rail__toolbar {
   height: 44px;
   padding: 0 8px 0 14px;
   border-bottom: 1px solid var(--sand-border-default, #fcfcfc26);
-  -webkit-app-region: drag;
-}
-
-.artifact__head .icon-btn {
-  -webkit-app-region: no-drag;
+  /* No `-webkit-app-region: drag` any more. It was there because the pane met
+     the titlebar; on a centred card it made a dialog header that moves the
+     WINDOW when you try to move the dialog. */
 }
 
 .artifact__title {
@@ -1028,6 +1130,14 @@ aside.routine-rail .routine-rail__toolbar {
 .artifact__note {
   padding: 16px 14px;
   font-size: 13px;
+}
+
+/* "That file is gone." does not need a 760px card under it. The frame branches
+   fill the card; these two say their piece and let it shrink. */
+.artifact:has(> .artifact__note),
+.artifact:has(> .artifact__link) {
+  height: auto;
+  width: min(460px, 88vw);
 }
 
 .artifact__link {
@@ -1082,29 +1192,36 @@ aside.routine-rail .routine-rail__toolbar {
   background: #4a4a4a;
 }
 
-.bot-rail .bot-rail__plan-item.is-in_progress {
+/* `is-live` / `is-done` / `is-dropped`, not Hermes' own status words.
+   These used to key off the raw status — `is-in_progress`, `is-completed` —
+   which quietly did nothing for the `in-progress`, `active` and `running`
+   spellings the same model sends on a different day. PlanCard's `stateOf`
+   normalises all of them to these three, so the rail cannot fall out of step
+   with the plan in the composer again. */
+
+.bot-rail .bot-rail__plan-item.is-live {
   color: var(--sand-text-primary, #fcfcfc);
 }
 
-.bot-rail .bot-rail__plan-item.is-in_progress .bot-rail__plan-dot {
+.bot-rail .bot-rail__plan-item.is-live .bot-rail__plan-dot {
   background: #5aa8ff;
   animation: sand-pip-breathe 1.9s ease-in-out infinite;
 }
 
-.bot-rail .bot-rail__plan-item.is-completed .bot-rail__plan-dot {
+.bot-rail .bot-rail__plan-item.is-done .bot-rail__plan-dot {
   background: #2bb673;
 }
 
-.bot-rail .bot-rail__plan-item.is-completed span:last-child {
+.bot-rail .bot-rail__plan-item.is-done span:last-child {
   text-decoration: line-through;
   text-decoration-color: rgba(252, 252, 252, 0.3);
 }
 
-.bot-rail .bot-rail__plan-item.is-cancelled {
+.bot-rail .bot-rail__plan-item.is-dropped {
   opacity: 0.5;
 }
 
-.bot-rail .bot-rail__plan-item.is-cancelled span:last-child {
+.bot-rail .bot-rail__plan-item.is-dropped span:last-child {
   text-decoration: line-through;
 }
 
