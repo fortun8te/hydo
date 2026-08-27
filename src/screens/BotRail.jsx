@@ -566,6 +566,19 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           onClick={() => onChange({ boxEnabled: !boxEnabled })}
         />
       </div>
+      {/* Two different undos, and conflating them would be the worst outcome:
+          one puts FILES back, the other makes the model forget. Named for what
+          each actually does rather than both being "Undo". */}
+      <div className="bot-rail__routines">
+        <button
+          type="button"
+          className="bot-rail__routines-open"
+          onClick={() => window.hydo?.undoLast?.(agent?.id)}
+        >
+          <span className="bot-rail__notify-title">Forget the last message</span>
+        </button>
+        <p>Rewinds the last exchange out of its memory. Nothing on your disk changes.</p>
+      </div>
       <div className="bot-rail__routines">
         <button type="button" className="bot-rail__routines-open" onClick={onOpenUndo}>
           <span className="bot-rail__notify-title">Undo</span>

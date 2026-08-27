@@ -566,6 +566,11 @@ app.whenReady().then(() => {
 
   // Background processes a teammate left running. Session scoped: one bot
   // cannot see or reap another's.
+  ipcMain.handle("hydo:undoLast", async (_e, agentId) => {
+    const next = await store.undoLast(agentId);
+    push();
+    return next;
+  });
   ipcMain.handle("hydo:processes", (_e, agentId) =>
     gateway.listProcesses(agentId).then((processes) => ok({ processes }))
   );

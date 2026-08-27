@@ -2886,6 +2886,62 @@ function createStore(opts = {}) {
       save();
       return publicState();
     },
+    /**
+     * Undo the last exchange: the model forgets it, and so does the transcript.
+     *
+     * Both halves or neither. Hermes' history and Hydo's thread are two
+     * stores, and rewinding one leaves the visible chat and the model's memory
+     * disagreeing about what was said . which is worse than no undo at all,
+     * because the next turn answers a question you can still see and it does
+     * not.
+     *
+     * So the transcript is only trimmed once Hermes confirms, and only by as
+     * much as Hermes actually removed.
+     */
+    async undoLast(id) {
+      const agent = state.agents.find((a) => a.id === id);
+      if (!agent) return publicState();
+      let removed = 0;
+      try {
+        const gateway = require("./hermes-gateway.cjs");
+        if (typeof gateway.undoTurn !== "function") return publicState();
+        const res = await gateway.undoTurn(agent.id);
+        removed = (res && res.removed) || 0;
+      } catch (err) {
+        // Busy is the common one and it is actionable, so it is said out loud
+        // rather than swallowed: Hermes refuses mid-turn on purpose.
+        pushMsg(agent.id, {
+          id: uuid(),
+          role: "system",
+          kind: "event",
+          fromId: agent.id,
+          text: /busy/i.test(String(err && err.message))
+            ? "Can't undo while it's still working. Stop the turn first."
+            : `Couldn't undo: ${err && err.message}`,
+          at: now(),
+        });
+        save();
+        return publicState();
+      }
+      if (!removed) return publicState();
+
+      // Trim back to and including the last thing the USER said. Popping only
+      // the bot's replies would leave the prompt sitting there with nothing
+      // under it, which reads as a message that was ignored.
+      const list = threadOf(agent.id);
+      let cut = -1;
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (list[i] && list[i].role === "user") {
+          cut = i;
+          break;
+        }
+      }
+      if (cut >= 0) list.splice(cut);
+      agent.last = list.length ? String(list[list.length - 1].text || "") : "";
+      logAction(agent.id, "undo", `rewound ${removed} entr${removed === 1 ? "y" : "ies"}`);
+      save();
+      return publicState();
+    },
     createRoutine(patch = {}) {
       const agent = selected();
       if (!agent) return publicState();

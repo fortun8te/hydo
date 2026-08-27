@@ -1274,6 +1274,30 @@ function killProcess(botId, processId) {
   });
 }
 
+/**
+ * Rewind the last exchange out of Hermes' history.
+ *
+ * Not the same thing as the file rollback Hydo already ships: that one puts
+ * files back, this one makes the model forget. It is the cheap answer to a bad
+ * prompt . the model stops carrying a wrong turn forward, and nothing on disk
+ * is touched.
+ *
+ * Hermes refuses mid-turn (4009) rather than racing prompt.submit's own
+ * history write, which would either clobber the undo or drop the agent's
+ * output. The caller interrupts first; that refusal is passed through as-is so
+ * the UI can say which it was.
+ *
+ * @returns {Promise<{removed:number}>} how many history entries went.
+ */
+function undoTurn(botId) {
+  return Promise.resolve().then(() => {
+    const bot = requireBot(botId);
+    return requestFor(botId, 'session.undo', { session_id: bot.sessionId }).then((res) => ({
+      removed: Number(res && res.removed) || 0,
+    }));
+  });
+}
+
 function steerSubagent(botId, subagentId, text) {
   return Promise.resolve().then(() => {
     const bot = requireBot(botId);
@@ -1997,6 +2021,7 @@ module.exports = {
   interruptSubagent,
   steerSubagent,
   steer,
+  undoTurn,
   listProcesses,
   killProcess,
   close,

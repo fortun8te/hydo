@@ -97,6 +97,9 @@ contextBridge.exposeInMainWorld("hydo", {
   // The ONE shared box. `boxEnsure` starts or resumes it and therefore starts
   // billing; everything else is free to call.
   // What this teammate left running in the background, and stopping one.
+  // Rewind the last exchange: the model forgets it and so does the thread.
+  // Not the file rollback . this one touches nothing on disk.
+  undoLast: (agentId) => ipcRenderer.invoke("hydo:undoLast", agentId),
   processes: (agentId) => ipcRenderer.invoke("hydo:processes", agentId),
   killProcess: (agentId, processId) => ipcRenderer.invoke("hydo:killProcess", agentId, processId),
   boxStatus: () => ipcRenderer.invoke("hydo:boxStatus"),
