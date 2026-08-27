@@ -43,6 +43,12 @@ export default function Shell({ state }) {
   const [sheet, setSheet] = useState(null);
   const [menu, setMenu] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
+  // Below this the roster cannot show a name, a time and a preview line
+  // without all three being useless, so it becomes the icon rail it already
+  // has styles for. Measured against the layout, not picked as a round number:
+  // the sidebar is 260px and the transcript's bubbles stop being readable
+  // under about 620.
+  const [tooNarrow, setTooNarrow] = useState(false);
   const [dmPeerId, setDmPeerId] = useState(null);
   const [linger, setLinger] = useState(false);
   // When the current linger began, so presence can fade at the end of it
@@ -120,6 +126,27 @@ export default function Shell({ state }) {
     setReplyTo(null);
     setTitleEdit(false);
   }, [selected?.id]);
+
+  // The window is a window: it gets dragged narrow, and half-screened next to
+  // a browser. The rail is not a fallback, it IS the narrow layout . which is
+  // why the manual toggle still works above the breakpoint and is simply
+  // overruled below it.
+  useEffect(() => {
+    if (typeof matchMedia !== "function") return undefined;
+    const mq = matchMedia("(max-width: 880px)");
+    const on = () => setTooNarrow(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    // AND resize. `change` is the right API and fires on a real window drag,
+    // but it is one signal and this has to be right while somebody is
+    // dragging the corner. `resize` fires constantly and setState with an
+    // unchanged boolean is a no-op, so the redundancy is free.
+    window.addEventListener("resize", on);
+    return () => {
+      mq.removeEventListener("change", on);
+      window.removeEventListener("resize", on);
+    };
+  }, []);
 
   useEffect(() => {
     document.getElementById("transcript-end")?.scrollIntoView({ block: "end" });
@@ -310,7 +337,7 @@ export default function Shell({ state }) {
         selectedId={atHome ? "home" : selected?.id}
         query={query}
         onQuery={setQuery}
-        collapsed={collapsed}
+        collapsed={collapsed || tooNarrow}
         onToggle={() => setCollapsed((v) => !v)}
         onCreate={() => setBotCreate(true)}
         onCreateBot={() => setBotCreate(true)}

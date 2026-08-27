@@ -294,6 +294,15 @@ export default function Composer({
     }
   }
 
+  // The handler is rebuilt every render (it reads `rows`, `active`, `replyTo`),
+  // but it is REGISTERED once. Written as a dependency-less effect, this
+  // removed and re-added a window keydown listener on every render — and the
+  // composer re-renders on every keystroke AND on the shell's 240ms clock for
+  // the whole time a teammate is working, so it was churning the window's
+  // listener list about five times a second for the life of a turn. The ref
+  // keeps the closure fresh, which is the only thing the missing dependency
+  // array was ever buying.
+  const keyRef = useRef(null);
   useEffect(() => {
     function onKey(e) {
       if (mode) {
@@ -324,9 +333,14 @@ export default function Composer({
         onCancelReply?.();
       }
     }
+    keyRef.current = onKey;
+  });
+
+  useEffect(() => {
+    const onKey = (e) => keyRef.current?.(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   const replying = !!replyTo;
   const hasImages = images.length > 0;

@@ -13,6 +13,42 @@ const nope = (reason) => ({ ok: false, reason });
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL || "http://127.0.0.1:5173";
 
+/**
+ * Be Hydo, not Electron.
+ *
+ * Unpackaged, Electron takes the app name from its OWN bundle for the menu
+ * bar and the Dock, so both said "Electron" and the About item said "About
+ * Electron".
+ *
+ * userData was already correct . Electron resolves that from package.json's
+ * `name`, which is "hydo", so state.json and every bot workspace already live
+ * in ~/Library/Application Support/Hydo. The explicit setPath is therefore not
+ * a move, it is a PIN: setName changes what the path would resolve to, and on
+ * a case-sensitive volume "hydo" and "Hydo" are two different directories.
+ * Naming it outright means renaming the app can never silently orphan
+ * somebody's teammates.
+ *
+ * Both must run before `whenReady`: userData is cached on first access.
+ */
+app.setName("Hydo");
+app.setAppUserModelId("com.hydo.app");
+try {
+  app.setPath("userData", path.join(app.getPath("appData"), "Hydo"));
+} catch {
+  /* already resolved: keep whatever it picked rather than crash on boot */
+}
+
+/** The Dock icon, which a packaged .app gets from its bundle and dev does not. */
+function brandDock() {
+  if (process.platform !== "darwin" || !app.dock) return;
+  const icon = path.join(__dirname, "..", "build", "icon-512.png");
+  try {
+    if (fs.existsSync(icon)) app.dock.setIcon(icon);
+  } catch {
+    /* a missing raster is not worth failing to launch over */
+  }
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -74,6 +110,7 @@ function createWindow() {
 let liveStore = null;
 
 app.whenReady().then(() => {
+  brandDock();
   let push = () => {};
   let win;
 

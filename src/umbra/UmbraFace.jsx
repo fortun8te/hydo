@@ -358,20 +358,47 @@ function stillFrame(shapeId, motionId) {
 
 const SEEN_MARGIN = "220px";
 
-function useOnScreen(ref) {
-  const [seen, setSeen] = useState(true);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver !== "function") return undefined;
-    const io = new IntersectionObserver(
+// ONE observer for every face, not one each — the same reason there is one rAF
+// above. A roster plus a channel transcript is easily 60+ marks, and 60
+// IntersectionObservers is 60 sets of bookkeeping the browser runs on every
+// scroll for an answer they could all share.
+const seenFns = new WeakMap();
+let seenIO = null;
+
+function watchSeen(el, fn) {
+  if (!el || typeof IntersectionObserver !== "function") return () => {};
+  if (!seenIO) {
+    seenIO = new IntersectionObserver(
       (entries) => {
-        for (const e of entries) setSeen(e.isIntersecting);
+        for (const e of entries) {
+          const cb = seenFns.get(e.target);
+          if (cb) cb(e.isIntersecting);
+        }
       },
       { rootMargin: SEEN_MARGIN }
     );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [ref]);
+  }
+  seenFns.set(el, fn);
+  seenIO.observe(el);
+  return () => {
+    seenFns.delete(el);
+    if (seenIO) seenIO.unobserve(el);
+  };
+}
+
+/**
+ * Whether this face is anywhere near the viewport.
+ *
+ * Defaults to TRUE and only ever moves on a real observation, so every path
+ * that cannot observe — no IntersectionObserver, a test renderer, a document
+ * whose observations are suspended because it is hidden — leaves the face
+ * animating exactly as it did before. Being wrong in that direction costs
+ * frames; being wrong in the other direction freezes a mark the user is
+ * looking at.
+ */
+function useOnScreen(ref) {
+  const [seen, setSeen] = useState(true);
+  useEffect(() => watchSeen(ref.current, setSeen), [ref]);
   return seen;
 }
 
