@@ -15,6 +15,43 @@ const routinesLib = require("./routines.cjs");
 // under plain `node` (test scripts require this file directly).
 require("./approval-settings.cjs").registerIpc();
 
+// Tokens/sec, and ONLY for a turn that actually ran on hardware the user owns.
+//
+// A hosted turn's rate is not the number Settings is asking about, and worse:
+// left in the same slot it would still be sitting there after a switch back to
+// local and read as the local machine's speed. So the provider is checked
+// against local-providers' own `isLocalHost` set (via gateway.paceFor) and the
+// sample carries the provider id it was taken on, so the UI can refuse to show
+// a rate measured somewhere else.
+//
+// `agent.rateMark` is the previous cumulative output count — see
+// contextMgmt.measureRate for why a delta is the only honest source.
+function recordLocalRate(state, agent, usage, elapsedMs) {
+  if (!agent) return;
+  const prev = agent.rateMark;
+  const now = contextMgmt.outputTokensOf(usage);
+  if (now != null) agent.rateMark = now;
+  const provider = modelPick.sessionProvider(agent, state.settings);
+  if (!provider) return;
+  let local = false;
+  try {
+    local = Boolean(require("./hermes-gateway.cjs").paceFor(provider).local);
+  } catch {
+    local = false;
+  }
+  if (!local) return;
+  const m = contextMgmt.measureRate(prev, usage, elapsedMs);
+  if (!m) return;
+  state.settings.localRate = {
+    rate: m.rate,
+    tokens: m.tokens,
+    seconds: m.seconds,
+    provider,
+    model: modelPick.sessionModel(agent, state.settings),
+    at: Date.now(),
+  };
+}
+
 const BLOBS = [
   "black",
   "brown",
@@ -2119,6 +2156,10 @@ function createStore(opts = {}) {
       saveSoon();
     };
 
+    // Wall clock for the tokens/sec sample. Started here, at the same place the
+    // prompt goes on the wire, so the number includes prefill — which on a
+    // local box is a real part of how long you wait.
+    const turnStartedAt = Date.now();
     try {
       const submitP = gateway.submit(agent.id, userText, {
         onDelta: (chunk) => {
@@ -2319,7 +2360,10 @@ function createStore(opts = {}) {
           }
         },
         onComplete: (out) => {
-          if (out && out.usage) contextMgmt.applyUsageToAgent(agent, out.usage);
+          if (out && out.usage) {
+            contextMgmt.applyUsageToAgent(agent, out.usage);
+            recordLocalRate(state, agent, out.usage, Date.now() - turnStartedAt);
+          }
           if (submitBackground && agent.backgroundTurn && !flags.jobWake) {
             const live = (agent.subagentIds && agent.subagentIds.length) || 0;
             if (live === 0) {

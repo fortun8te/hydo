@@ -410,6 +410,36 @@ export default function Settings({
   }
   const activeStatus = (activeLocal && localState[activeLocal.id]) || { state: "unknown", detail: "" };
 
+  // Tokens/sec. Measured by electron/store.cjs on a COMPLETED turn (a delta of
+  // Hermes' cumulative output counters over the turn's wall time) — there is no
+  // live rate to show mid-turn, so the label says "last turn" and means it.
+  // Three gates, all of which must hold, because a stale or borrowed number
+  // here would be worse than no number: we must be running local, the sample
+  // must have been taken on the endpoint that is showing, and it must exist.
+  // Nothing has run yet → nothing is rendered.
+  const sample = settings.localRate;
+  const rateText =
+    runningLocal &&
+    sample &&
+    typeof sample.rate === "number" &&
+    sample.rate > 0 &&
+    activeLocal &&
+    sample.provider === activeLocal.id
+      ? ` · ${sample.rate.toFixed(1)} tok/s last turn`
+      : "";
+
+  const harness = settings.codingHarness || "grok-build";
+  const HARNESS_NAME = { "grok-build": "Grok Build", opencode: "OpenCode", cursor: "Cursor", shell: "Workspace shell" };
+  const chatIsGrok = /grok-/i.test(chatModel);
+  const harnessDesc =
+    harness === "shell"
+      ? "Heavy coding stays in this workspace's shell. Nothing is handed to an outside CLI."
+      : harness === "grok-build"
+        ? runningLocal
+          ? "Heavy coding shells out to `grok -p`, which signs in to xAI — it does NOT run on your hardware. Pick Workspace shell to keep coding local too."
+          : "Heavy coding shells out to `grok -p`. The working row says Connecting to Grok Build when it runs."
+        : `Heavy coding shells out to the ${HARNESS_NAME[harness] || harness} CLI, on its own account — not your hardware.`;
+
   return (
     <Dialog label="Settings" onClose={onClose}>
       <DialogNav
@@ -484,31 +514,23 @@ export default function Settings({
                       onChange={(v) => onChange({ language: v })}
                     />
                   </Row>
-                  <Row divided label="Chat model" description="Hermes uses this for turns. Default is grok-4.6.">
-                    <Select
-                      ariaLabel="Chat model"
-                      value={chatModel}
-                      options={modelSelectOptions(chatModel, modelOpts, localByModel)}
-                      onChange={(v) => {
-                        const patch = { model: v };
-                        // Picking a self-hosted model out of the flat list used
-                        // to leave `provider: xai-oauth` behind it, so the turn
-                        // went to xAI with a model it has never heard of.
-                        const local = localByModel.get(v);
-                        if (local) patch.provider = local.id;
-                        else if (/muse/i.test(v)) patch.provider = "meta-ai";
-                        else if (/grok/i.test(v)) patch.provider = "xai-oauth";
-                        onChange(patch);
-                      }}
-                    />
-                  </Row>
+                  {/* Order, and why it is this one.
+                      It used to read: Chat model → Own hardware → Local
+                      endpoint → harness. So you picked a model before you had
+                      said whose machine it runs on, and the switch that
+                      decides the whole thing sat UNDER the thing it decides.
+                      Now it is the same order as the decision: local or not →
+                      which machine → which model → what does the heavy coding. */}
                   {activeLocal && (
                     <Row
                       divided
-                      label="Own hardware"
+                      label="Where turns run"
                       description={
-                        activeStatus.detail ||
-                        `${activeLocal.name} · ${activeLocal.host}${activeLocal.model ? ` · ${activeLocal.model}` : ""}`
+                        <>
+                          {activeStatus.detail ||
+                            `${activeLocal.name} · ${activeLocal.host}${activeLocal.model ? ` · ${activeLocal.model}` : ""}`}
+                          {rateText && <span className="settings__rate">{rateText}</span>}
+                        </>
                       }
                     >
                       <div className="settings__local-ctl">
@@ -536,11 +558,19 @@ export default function Settings({
                       </div>
                     </Row>
                   )}
+                  {/* Kept visible on hosted, unlike the harness model row below.
+                      It is not a dead control there: it aims the Local half of
+                      the switch, so you have to be able to set it BEFORE you
+                      flip. The description says which of the two it is doing. */}
                   {localList.length > 1 && (
                     <Row
                       divided
                       label="Local endpoint"
-                      description="Which of your own machines the Local side of the switch points at."
+                      description={
+                        runningLocal
+                          ? "The machine your turns are running on."
+                          : "Local is off. This is the machine the Local button would switch to."
+                      }
                     >
                       <Select
                         ariaLabel="Local endpoint"
@@ -563,42 +593,79 @@ export default function Settings({
                       />
                     </Row>
                   )}
-                  <Row
-                    divided
-                    label="Coding harness"
-                    description="Heavy coding goes here. The working row says Connecting to this when it runs."
-                  >
+                  <Row divided label="Chat model" description="Hermes uses this for turns. Default is grok-4.6.">
+                    <Select
+                      ariaLabel="Chat model"
+                      value={chatModel}
+                      options={modelSelectOptions(chatModel, modelOpts, localByModel)}
+                      onChange={(v) => {
+                        const patch = { model: v };
+                        // Picking a self-hosted model out of the flat list used
+                        // to leave `provider: xai-oauth` behind it, so the turn
+                        // went to xAI with a model it has never heard of.
+                        const local = localByModel.get(v);
+                        if (local) patch.provider = local.id;
+                        else if (/muse/i.test(v)) patch.provider = "meta-ai";
+                        else if (/grok/i.test(v)) patch.provider = "xai-oauth";
+                        onChange(patch);
+                      }}
+                    />
+                  </Row>
+                  {/* The harness is NOT a router. `agentsModelBlock` in
+                      electron/model-pick.cjs writes it into AGENTS.md as an
+                      instruction to shell out to a CLI — so with Grok Build
+                      selected, heavy coding runs `grok -p`, which signs in to
+                      xAI, no matter what the chat model is. Saying "Grok Build"
+                      under a local chat model without saying that is the app
+                      quietly sending half the work off the user's machine.
+                      Workspace shell is the one option that keeps it here. */}
+                  <Row divided label="Coding harness" description={harnessDesc}>
                     <Select
                       ariaLabel="Coding harness"
-                      value={settings.codingHarness || "grok-build"}
+                      value={harness}
                       options={[
                         { value: "grok-build", label: "Grok Build" },
                         { value: "opencode", label: "OpenCode" },
                         { value: "cursor", label: "Cursor" },
-                        { value: "shell", label: "Workspace shell" },
+                        { value: "shell", label: "Workspace shell — local" },
                       ]}
                       onChange={(v) => onChange({ codingHarness: v })}
                     />
                   </Row>
-                  <Row
-                    divided
-                    label="Coding / Grok Build"
-                    description="Model flag for grok -p when the harness is Grok Build."
-                  >
-                    <Select
-                      ariaLabel="Coding model"
-                      value={settings.codingModel || ""}
-                      options={[
-                        { value: "", label: "Same as chat" },
-                        { value: "grok-4.6", label: "grok-4.6" },
-                        { value: "grok-4.5", label: "grok-4.5" },
-                        ...modelSelectOptions(settings.codingModel, modelOpts, localByModel).filter(
-                          (o) => o.value && o.value !== "grok-4.6" && o.value !== "grok-4.5",
-                        ),
-                      ]}
-                      onChange={(v) => onChange({ codingModel: v })}
-                    />
-                  </Row>
+                  {/* Hidden, not disabled, when the harness is not Grok Build.
+                      Its own description already said "when the harness is Grok
+                      Build" — a row that admits it does nothing is a row that
+                      should not be drawn. This is the one row in the card that
+                      really is inert in the other modes, so it is the one that
+                      goes; the endpoint row above stays because it is not. */}
+                  {harness === "grok-build" && (
+                    <Row
+                      divided
+                      label="Coding / Grok Build"
+                      description="Model flag for grok -p when the harness is Grok Build."
+                    >
+                      <Select
+                        ariaLabel="Coding model"
+                        value={settings.codingModel || ""}
+                        options={[
+                          // grokCliModel() (electron/model-pick.cjs) emits -m only
+                          // for a grok-* id. With a local chat model "Same as chat"
+                          // therefore sends NO flag and Grok picks its own default,
+                          // so the old label was a promise the code does not keep.
+                          {
+                            value: "",
+                            label: chatIsGrok ? "Same as chat" : "Grok's own default (chat model is not a Grok id)",
+                          },
+                          { value: "grok-4.6", label: "grok-4.6" },
+                          { value: "grok-4.5", label: "grok-4.5" },
+                          ...modelSelectOptions(settings.codingModel, modelOpts, localByModel).filter(
+                            (o) => o.value && o.value !== "grok-4.6" && o.value !== "grok-4.5",
+                          ),
+                        ]}
+                        onChange={(v) => onChange({ codingModel: v })}
+                      />
+                    </Row>
+                  )}
                   <Row divided label="Timezone" description="Bots use this timezone for routines and scheduled work.">
                     <Select
                       ariaLabel="Timezone"

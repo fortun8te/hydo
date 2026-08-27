@@ -178,3 +178,122 @@ into the renderer and never appears in a status line.
 With more than one provider in the block, a **Local endpoint** row picks which
 machine the switch points at. Changing it does not change the model you are
 running unless you were already on a local one.
+
+---
+
+## Running at 15 tokens a second
+
+### The rate, measured
+
+Three requests to `http://100.74.135.83:8888/v1/chat/completions` on the user's
+own box, `unsloth/Qwen3.8-Flash-Next-GGUF` (UD-IQ4_XS):
+
+| what | completion tokens | wall clock | rate |
+| --- | --- | --- | --- |
+| count 1–60 | 214 | 13.42s | **15.9 tok/s** |
+| three-sentence answer | 152 | 9.39s | **16.2 tok/s** |
+| count 1–60, thinking off | 171 | 3.82s | 44.8 tok/s |
+
+So ~16 tok/s with thinking on, and that is the number every deadline below is
+quoted against. A 2,000-token answer takes **125 seconds**.
+
+The third row is the interesting one and is discussed under *reasoning effort*.
+
+### What actually breaks at that rate — and what does not
+
+Read out of `~/.hermes/hermes-agent` rather than guessed:
+
+| deadline | value | verdict at 16 tok/s |
+| --- | --- | --- |
+| httpx stream read (`chat_completion_helpers.py`) | 120s cloud, **1800s** when `is_local_endpoint(base_url)` | fine — and Tailscale CGNAT counts as local, deliberately |
+| stale-stream detector | 180s cloud, **900s** local (`agent.local_stream_stale_timeout`) | fine |
+| compaction aux call (`auxiliary_client.py`) | idle 300s floor, total ceiling `max(600, 4×300)` = **1200s**, and streamed so the timeout is per-chunk, not a total budget | fine |
+| Hydo `REQUEST_TIMEOUT_MS` | 120s | fine — no RPC Hydo issues waits on generation; `prompt.submit` returns `{status:"streaming"}` at once, and `session.compress`, the one that does, is already issued at the turn ceiling |
+| Hydo `STARTUP_TIMEOUT_MS` | 60s | fine — gateway start does not touch the model |
+| **Hydo `TURN_TIMEOUT_MS`** | **900s** | **too tight.** 900s is 14,400 tokens for the WHOLE agent loop — every tool round trip is another generation — and a single legal Hermes compaction may consume 1200s of it on its own. The ceiling could fire while Hermes was doing exactly what it was told to. |
+
+The fix is `LOCAL_TURN_TIMEOUT_MS` = 3600s, applied **only** when the session's
+provider resolves to a local endpoint. The hosted 900s does not move: a hosted
+turn silent for fifteen minutes is a wedged stream, and a timeout that never
+fires is its own bug — the user gets a spinner instead of an answer.
+
+"Local" is the same set Hermes uses (`agent/model_metadata.py`
+`is_local_endpoint`): loopback, container DNS, unqualified hostnames, RFC-1918,
+link-local, and **Tailscale CGNAT 100.64/10**. That last one is why the drawn
+line has to match Hermes exactly — `100.74.135.83` is not RFC-1918 and reads as
+a public cloud host to a naive check, and if Hydo disagreed with Hermes about
+it, Hydo's ceiling would kill streams Hermes was still happily waiting on.
+`electron/local-providers.cjs` `isLocalHost` / `paceOf` / `paceFor`.
+
+### Reasoning effort is not sent to this endpoint at all
+
+Hydo sends `reasoning_effort` on `session.create` (`low` normally, `minimal`
+for the landing turn). On this transport it is inert, and it is worth being
+exact about why rather than pretending it tuned something.
+
+Hermes puts `reasoning_effort` (or `extra_body.reasoning`) on a
+`chat_completions` request only when `AIAgent._supports_reasoning_extra_body()`
+returns true (`run_agent.py:7629`). That method says yes to: nousresearch.com,
+ai-gateway.vercel.sh, GitHub Models / Copilot, provider id `lmstudio`,
+ollama.com, and OpenRouter URLs — and then ends
+`if not self._is_openrouter_url(): return False`. An Unsloth box, llama.cpp,
+vLLM, any plain OpenAI-compatible server is none of those. The transport
+(`agent/transports/chat_completions.py:664`) gates the emit on the same flag.
+There is also no user lever: provider-level `extra_body` in config.yaml is read
+by `auxiliary_client.py` for **aux calls only** and never reaches the main turn.
+
+So the field was never on the wire — but sending it was not free. `sessionFor`
+treats a changed `reasoningEffort` as a different session and tears the old one
+down, so the landing turn (`minimal`) followed by the first real turn (`low`)
+rebuilt the session every time: a cold agent init and a re-prefill at 16 tok/s,
+bought with a field the endpoint never saw. Hydo now omits it, and stops
+counting it as a session difference, whenever the provider is one Hermes will
+not send it to. `lmstudio` keeps it, because Hermes really does honour it there.
+
+**The lever that does work** on this server is `chat_template_kwargs:
+{enable_thinking: false}` — verified by sending it: `reasoning_content` came
+back empty and the same prompt finished in 3.82s instead of 13.42s. Hermes has
+no config path that puts that on a main-turn request, so today it is something
+to set server-side (the Unsloth/llama.cpp launch flags) if the thinking tokens
+are not worth their seconds. Hydo cannot turn it on for you and does not claim
+to.
+
+### Two minutes of "Working" is not a hang
+
+At 16 tok/s a 2,000-token answer is 125 seconds during which the working row
+said one unchanging word. That is indistinguishable from a wedge, and the only
+thing a user can do about a wedge is abandon a turn that was fine.
+
+The row now carries an elapsed clock after 20s (`elapsedLabel` in
+`src/lib/presence.js`). 20s is ~320 tokens at the measured rate: past every
+short local answer, and well past anything a hosted model does routinely, so it
+is silent on hosted work. It is a legibility threshold, **not** a deadline —
+nothing gives up when it passes, and `presenceOf` has no time limit on a
+working turn (asserted at 30 minutes in `scripts/slow-model-test.cjs`).
+
+### Compaction is native, on, and now says so
+
+Hydo does not disable or duplicate Hermes' compaction. `compression.enabled` is
+true by default and Hydo's profile config only narrows `tail_mode` to `lean`;
+`electron/context-mgmt.cjs` is a between-turn nudge at 70%, which Hermes is
+free to decline (and it hands back the real percent either way).
+
+What was wrong was the telling. Hydo has two compaction paths and only the
+post-turn one posted an event; the **pre-turn** one wrote a line to the action
+log and nothing else. On a 200K hosted window that barely matters. On a
+modest-context local model it is the path that fires, so the visible effect was
+a teammate pausing before it answered, forgetting things, and never saying why.
+Both paths now post the same sentence, from one definition, into the
+conversation it happened in.
+
+### Verified vs read
+
+**Run here:** the three timing rows above, against the real endpoint; the
+`enable_thinking:false` probe; `npm test` (now including
+`scripts/slow-model-test.cjs`) and `npm run build`.
+
+**Read, not run:** every Hermes deadline in the table — they come from the
+Python in `~/.hermes/hermes-agent`, with file names given so the next person
+can check them rather than trust this file. No Hydo turn was driven end to end
+against the box; the context cap discussed at the top of this file was still
+being raised on the PC side while this was written.

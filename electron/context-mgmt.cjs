@@ -40,6 +40,55 @@ function applyUsageToAgent(agent, usage) {
   return agent;
 }
 
+// ── Tokens per second on your own hardware ───────────────────────────────
+//
+// Hermes' `session.usage` counters are CUMULATIVE for the session
+// ({calls,input,output,total,…}), and the `usage` payload that rides on
+// `message.complete` is the same shape. Nothing on the wire reports a single
+// turn's output token count, so the only honest per-turn number is the DELTA
+// between two consecutive completions, divided by the wall time of the second
+// one. Measured against the user's own endpoint, a turn of 280 completion
+// tokens took 20.45s (13.7 tok/s) and one of 67 took 5.69s (11.8 tok/s), so
+// this is a low-double-digit figure, not a headline number.
+const OUTPUT_KEYS = ["output", "output_tokens", "completion_tokens"];
+
+/** Cumulative output tokens out of a usage payload, or null if it has none. */
+function outputTokensOf(usage) {
+  if (!usage || typeof usage !== "object") return null;
+  for (const k of OUTPUT_KEYS) {
+    const n = Number(usage[k]);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return null;
+}
+
+// Floors, because the alternative is a confident lie. Below ~1.5s the elapsed
+// time is mostly connect + prefill + first-token latency, and a two-token
+// acknowledgement returned in 40ms would compute as "50 tok/s" for a box that
+// measurably does 12-14. Under either floor this returns null and the UI shows
+// nothing rather than a number.
+const MIN_MS = 1500;
+const MIN_TOKENS = 24;
+
+/**
+ * One turn's generation rate, or null when it cannot be measured honestly.
+ * @param {number|null} prevOutput cumulative output at the previous completion
+ * @param {Object|null} usage      this completion's usage payload
+ * @param {number} elapsedMs       wall time of this turn
+ * @returns {{rate:number, tokens:number, seconds:number}|null}
+ */
+function measureRate(prevOutput, usage, elapsedMs) {
+  const now = outputTokensOf(usage);
+  const prev = Number(prevOutput);
+  if (now == null || !Number.isFinite(prev)) return null;
+  const tokens = now - prev;
+  const ms = Number(elapsedMs);
+  if (!Number.isFinite(ms) || ms < MIN_MS) return null;
+  if (!(tokens >= MIN_TOKENS)) return null;
+  const seconds = ms / 1000;
+  return { rate: tokens / seconds, tokens, seconds };
+}
+
 function agentsMarkdown(stamp, soul) {
   const s = String(stamp || "").trim();
   const v = String(soul || "").trim();
@@ -51,5 +100,7 @@ module.exports = {
   contextPercent,
   shouldCompact,
   applyUsageToAgent,
+  outputTokensOf,
+  measureRate,
   agentsMarkdown,
 };

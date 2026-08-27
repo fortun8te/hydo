@@ -291,3 +291,19 @@
   cursor: default;
   opacity: 0.45;
 }
+
+/* Tokens/sec, appended to the local row's description. Subtle by request:
+   same 13px secondary line as the status text it follows, only dimmer, so it
+   reads as an aside rather than a second status. It is a <span> inside
+   `.hy-row__desc-text`, whose own colour is the secondary token — a bare
+   `.settings__rate` at (0,1,0) would NOT have overridden that had it been set
+   on the child (it is not), so the colour here is declared outright rather
+   than inherited, and the opacity does the dimming.
+   Deliberately not `display:block`: it must sit on the same line. */
+.hy-row__desc-text .settings__rate,
+.settings__rate {
+  color: var(--sand-text-secondary, #fcfcfc99);
+  opacity: 0.72;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
