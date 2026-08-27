@@ -325,28 +325,36 @@ function useReducedMotion() {
 // it produces a shiny plastic ball. This is a VERTICAL ramp with deliberately
 // tight stops: the sharp transitions are what the eye reads as polish, and
 // softening them turns it back into plastic.
+// Tuned against the FULL body, top to bottom. Chrome on a dark app has to
+// stay bright overall or it reads as a hole in the page, so the darkest value
+// here is a mid-slate, not black — the contrast comes from the sharpness of
+// the horizon, not from how far down the ramp goes.
 const CHROME_RAMP = [
-  // Grazing angle at the very top: the sky compresses and goes slightly dim
-  // before it blows out. Without this the top edge looks cut off.
-  [0.0, "#AEB7C2"],
-  [0.05, "#F7FAFD"],  // sky, blown out
-  [0.2, "#CBD3DC"],
-  [0.33, "#8B939D"],  // sky falling toward the horizon
-  [0.4, "#4A515A"],
-  // The horizon. Two stops 3% apart, not one: a real horizon in polished
-  // metal is a LINE, and the sharpness of that line is the entire difference
-  // between chrome and grey plastic.
-  [0.445, "#171A1E"],
-  [0.475, "#20242A"],
-  [0.53, "#3E4550"],
-  // Floor bounce, warmed. Real chrome indoors picks up wood, skin and
-  // tungsten off the floor, so the lower half is never neutral grey.
-  [0.6, "#7E8590"],
-  [0.68, "#B9BCC0"],
-  [0.76, "#E6E3DF"],  // warm bounce, the brightest thing below the horizon
-  [0.84, "#A9A9AA"],
-  [0.93, "#6E7178"],
-  [1.0, "#484D56"],   // terminator
+  // HARD EDGES ARE THE WHOLE THING.
+  //
+  // A smooth vertical ramp reads as plastic or satin no matter how you tune
+  // the values, because a mirror does not blur what it reflects. What the eye
+  // uses to decide "that is chrome" is sharp discontinuity: the horizon line,
+  // the corner where a wall meets a floor.
+  //
+  // But not EVERY edge is hard, or it reads as a barcode. A real room gives
+  // you two or three crisp lines and a lot of soft falloff between them, and
+  // the bands are uneven. Three hard edges here, at uneven heights, and
+  // everything else blends.
+  [0.0, "#AEBBCB"],   // grazing sky, dim
+  [0.12, "#F4F8FD"],  // sky opening up (soft)
+  [0.26, "#FFFFFF"],  // blown highlight band (soft)
+  [0.38, "#AAB5C2"],  // falling toward the horizon (soft)
+  [0.455, "#79838F"],
+  [0.47, "#1B2028"],  // ── HARD: the horizon. The one everything reads from.
+  [0.53, "#13181E"],
+  [0.545, "#525A65"], // ── HARD: ground plane begins
+  [0.66, "#8A9099"],  // ground receding (soft)
+  [0.75, "#EDE8DF"],  // ── warm floor bounce, brightest below the horizon
+  [0.79, "#F7F3EB"],
+  [0.87, "#9C9A97"],  // falloff (soft)
+  [1.0, "#6B7079"],   // terminator, kept off black so it does not punch a
+                      // hole in a dark page
 ];
 
 function isMetal(colorId) {
@@ -805,13 +813,20 @@ export default function UmbraFace({
               {/* Vertical, in the BODY's own space, so the reflection stays
                   put while the head turns. A reflection that rotates with the
                   object is the classic tell that it is painted on. */}
+              {/* Bounds are the BODY's extent, not `paint.r`.
+                  `paint.r` is `max(rx,ry) * 1.5 * lightSpread` — about 1.4x
+                  the real radius, because it was sized for a light falloff
+                  that is meant to spill past the silhouette. Using it here
+                  meant the body only ever saw the middle ~70% of the ramp:
+                  the blown-out sky and the terminator landed outside the
+                  shape and the visible part was a muddy grey band. */}
               <linearGradient
                 id={gradId}
                 gradientUnits="userSpaceOnUse"
                 x1={0}
-                y1={-paint.r}
+                y1={-extent}
                 x2={0}
-                y2={paint.r}
+                y2={extent}
               >
                 {CHROME_RAMP.map(([off, col]) => (
                   <stop key={off} offset={off} stopColor={col} />
@@ -823,9 +838,9 @@ export default function UmbraFace({
               <radialGradient
                 id={`${gradId}-spec`}
                 gradientUnits="userSpaceOnUse"
-                cx={-paint.r * 0.3}
-                cy={-paint.r * 0.52}
-                r={paint.r * 0.72}
+                cx={-extent * 0.34}
+                cy={-extent * 0.44}
+                r={extent * 0.78}
               >
                 <stop offset="0" stopColor="#ffffff" stopOpacity="0.55" />
                 <stop offset="0.5" stopColor="#ffffff" stopOpacity="0.16" />
@@ -837,9 +852,9 @@ export default function UmbraFace({
               <radialGradient
                 id={`${gradId}-hot`}
                 gradientUnits="userSpaceOnUse"
-                cx={-paint.r * 0.34}
-                cy={-paint.r * 0.6}
-                r={paint.r * 0.22}
+                cx={-extent * 0.36}
+                cy={-extent * 0.5}
+                r={extent * 0.2}
               >
                 <stop offset="0" stopColor="#ffffff" stopOpacity="1" />
                 <stop offset="0.55" stopColor="#ffffff" stopOpacity="0.5" />
@@ -851,9 +866,9 @@ export default function UmbraFace({
               <radialGradient
                 id={`${gradId}-rim`}
                 gradientUnits="userSpaceOnUse"
-                cx={paint.r * 0.16}
-                cy={paint.r * 0.86}
-                r={paint.r * 0.72}
+                cx={extent * 0.14}
+                cy={extent * 0.82}
+                r={extent * 0.68}
               >
                 <stop offset="0.55" stopColor="#ffffff" stopOpacity="0" />
                 <stop offset="0.9" stopColor="#E8EDF4" stopOpacity="0.42" />
