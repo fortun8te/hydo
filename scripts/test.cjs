@@ -142,7 +142,20 @@ mustInclude("electron/store.cjs", [
   assert.ok(!storeSrc.includes("a blank line starts a new bubble"), "standing must not teach blank-line splits");
   assert.ok(!storeSrc.includes("background: !jobWake && liveWorkers"), "first user turn must background without waiting for liveWorkers");
   assert.ok(storeSrc.includes("background: !jobWake"), "speak must pass background: !jobWake");
-  assert.ok(storeSrc.includes('reasoningEffort: agent.reasoningEffort || "low"'), "1:1 turns default reasoningEffort low");
+  assert.ok(
+    storeSrc.includes('agent.reasoningEffort || "low"'),
+    "1:1 turns default reasoningEffort low"
+  );
+  // The landing turn is the one turn EVERY bot takes, and it is a greeting:
+  // no tools to pick, nothing to reason about.
+  assert.ok(storeSrc.includes('flags.lean ? "minimal"'), "the landing turn does not buy thinking");
+  assert.ok(storeSrc.includes("{ lean: true }"), "and landNewBot asks for it");
+  // Nothing may fall back to `builder`. The hydration default is chat and auto
+  // climbs from there, so a builder fallback is 16.6k/turn nobody chose.
+  assert.ok(
+    !/toolProfile \|\| "builder"/.test(storeSrc),
+    "no path falls back to the expensive profile"
+  );
   assert.ok(storeSrc.includes("agent.backgroundTurn || hermesBusy"), "send must return when busy");
   assert.ok(storeSrc.includes("extracted.yielded"), "speak must forward yielded");
 }

@@ -1576,7 +1576,10 @@ function createStore(opts = {}) {
             hermesProfile: home.profile,
             model: modelPick.sessionModel(agent, state.settings),
             provider: modelPick.sessionProvider(agent, state.settings),
-            profile: agent.toolProfile || "builder",
+            // `chat`, not `builder`: a bot with no stored profile must resume
+            // onto the same cheap rung it hydrates at, or a restart silently
+            // promotes it to 16.6k of schema per turn.
+            profile: agent.toolProfile || "chat",
             extraToolsets: Array.isArray(agent.toolsets) ? agent.toolsets : [],
             mcp: Array.isArray(agent.mcp) ? agent.mcp : [],
           })
@@ -1664,9 +1667,17 @@ function createStore(opts = {}) {
       provider: modelPick.sessionProvider(agent, state.settings),
       // Channel turns force low when unpinned. 1:1 also defaults to low unless
       // the bot is pinned higher.
-      reasoningEffort: agent.reasoningEffort || "low",
+      //
+      // `lean` is the landing turn: a teammate saying hello needs no tools and
+      // nothing to think about, and it is the one turn EVERY bot takes. It
+      // used to run on whatever the bot was configured for, so the first thing
+      // creating a teammate did was buy a reasoning budget to write "hey".
+      reasoningEffort: flags.lean ? "minimal" : agent.reasoningEffort || "low",
       ...(typeof agent.fast === "boolean" ? { fast: agent.fast } : {}),
-      profile: agent.toolProfile || "builder",
+      // NOT "builder". The hydration default is `chat` and auto climbs from
+      // there, so a bot with no stored profile reaching this line was paying
+      // 16.6k of schema on every turn for a fallback nobody chose.
+      profile: agent.toolProfile || "chat",
       extraToolsets: Array.isArray(agent.toolsets) ? agent.toolsets : [],
       mcp: Array.isArray(agent.mcp) ? agent.mcp : [],
     };
@@ -2136,7 +2147,7 @@ function createStore(opts = {}) {
     run();
   }
 
-  async function speak(agent, userText, extra, convId) {
+  async function speak(agent, userText, extra, convId, turnOpts = {}) {
     const soul = soulSnapshot(dir, agent.id);
     const memory = memorySnapshot(dir, agent.id);
     // Reactions the user left since this teammate last spoke. Drained here so
@@ -2169,6 +2180,7 @@ function createStore(opts = {}) {
           raw = await streamThroughHermes(agent, soul, userText, notes, convId, {
             background: !jobWake,
             jobWake,
+            lean: !!turnOpts.lean,
           });
         } catch (err) {
           let gw = null;
@@ -2551,7 +2563,7 @@ function createStore(opts = {}) {
       save();
       let opened = "";
       try {
-        const res = await speak(agent, brief, undefined, agent.id);
+        const res = await speak(agent, brief, undefined, agent.id, { lean: true });
         opened = String((res && res.text) || "").trim();
       } catch {
         /* no Hermes: leave the thread empty rather than fake a hello */
