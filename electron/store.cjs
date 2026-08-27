@@ -4,6 +4,7 @@ const path = require("node:path");
 const { soulSnapshot, memorySnapshot } = require("./soul.cjs");
 const botHome = require("./bot-home.cjs");
 const artifactLib = require("./artifacts.cjs");
+const autoProfile = require("./auto-profile.cjs");
 const contextMgmt = require("./context-mgmt.cjs");
 const modelPick = require("./model-pick.cjs");
 const routinesLib = require("./routines.cjs");
@@ -234,6 +235,8 @@ function normalizeState(raw) {
     dms: raw.dms && typeof raw.dms === "object" ? raw.dms : {},
     // Artifacts a teammate produced, newest first, versioned by path.
     artifacts: Array.isArray(raw.artifacts) ? raw.artifacts : [],
+    // What teammates actually did, newest first. See `logAction`.
+    log: Array.isArray(raw.log) ? raw.log.slice(0, 400) : [],
     routines,
     sections: Array.isArray(raw.sections)
       ? raw.sections
@@ -1098,6 +1101,34 @@ function createStore(opts = {}) {
   }
 
   /**
+   * The action log: what actually happened, in order.
+   *
+   * The transcript is what a teammate CHOSE to say. This is what it did —
+   * escalated its own tool profile, hired someone, took a checkpoint, renamed
+   * itself, showed you an artifact, spawned four workers. Those either happen
+   * silently or get one polite sentence, and when something goes wrong there
+   * is nothing to read back.
+   *
+   * Deliberately small: one line each, capped, and never a place for tool
+   * output. It is a ledger, not a debug dump.
+   */
+  const LOG_CAP = 400;
+
+  function logAction(botId, kind, text, extra) {
+    if (!botId) return;
+    state.log ??= [];
+    state.log.unshift({
+      id: uuid(),
+      botId,
+      kind: String(kind || "note"),
+      text: String(text || "").slice(0, 240),
+      at: now(),
+      ...(extra && typeof extra === "object" ? extra : {}),
+    });
+    if (state.log.length > LOG_CAP) state.log.length = LOG_CAP;
+  }
+
+  /**
    * A teammate's plan, lifted off the tool stream.
    *
    * Hermes' `todo` tool has no gateway method and emits no event of its own:
@@ -1178,6 +1209,7 @@ function createStore(opts = {}) {
       });
     }
     const row = state.artifacts.find((a) => a.key === key);
+    logAction(agent.id, "artifact", `${row.versions > 1 ? "updated" : "made"} ${row.title}`);
     // Cap the roster. These are pointers, but an unbounded list still grows
     // state.json without limit on a busy bot.
     if (state.artifacts.length > 200) state.artifacts.length = 200;
@@ -1233,7 +1265,13 @@ function createStore(opts = {}) {
       );
       if (next && !taken && next !== agent.name) patch.name = next;
     }
-    if (typeof spec.label === "string") patch.label = spec.label.trim().slice(0, 24);
+    if (typeof spec.label === "string") {
+      const lab = spec.label.trim().slice(0, 24);
+      // A label that repeats the name tells you nothing and reads as a bug in
+      // the roster ("Finn  finn"). The label is a ROLE.
+      const nameNow = String(patch.name || agent.name || "").toLowerCase();
+      patch.label = lab.toLowerCase() === nameNow ? "" : lab;
+    }
     if (typeof spec.description === "string") {
       patch.description = spec.description.trim().slice(0, 600);
     }
@@ -1243,6 +1281,7 @@ function createStore(opts = {}) {
     const before = agent.name;
     for (const [k, v] of Object.entries(patch)) agent[k] = v;
     agent.updatedAt = now();
+    logAction(agent.id, "self", Object.keys(patch).join(", ") + " updated");
     if (patch.name && before !== patch.name) {
       // NOT "You renamed" — you did not. Say who actually did it.
       pushMsg(agent.id, {
@@ -1304,7 +1343,8 @@ function createStore(opts = {}) {
       activity: "",
       workingIn: null,
       // Same defaults a hand-made bot gets: cheap until someone raises it.
-      toolProfile: "builder",
+      toolProfile: "chat",
+      profilePinned: false,
       reasoningEffort: "low",
       toolsets: [],
       mcp: [],
@@ -1321,6 +1361,7 @@ function createStore(opts = {}) {
 
     // The hirer's thread shows the hire the way the reference app does: an
     // event line, then the same "Messaged X" tally a ping leaves.
+    logAction(hirer.id, "hire", `hired ${name}`);
     pushMsg(hirer.id, {
       id: uuid(),
       role: "system",
@@ -1458,6 +1499,20 @@ function createStore(opts = {}) {
       }
     } catch {
       fs.writeFileSync(agentsPath, agentsWant);
+    }
+
+    // ── auto mode ────────────────────────────────────────────────────────
+    // Pick the cheapest profile this turn can be answered with, and ratchet up
+    // if it needs more. `profilePinned` means the user chose by hand in the
+    // rail, and a hand-picked profile is a decision, never overridden.
+    if (!agent.profilePinned) {
+      const want = autoProfile.pickProfile(userText, agent.toolProfile || "chat", {
+        hasAttachments: !!(flags && flags.hasAttachments),
+      });
+      if (want !== agent.toolProfile) {
+        logAction(agent.id, "profile", `${agent.toolProfile || "chat"} to ${want}`);
+        agent.toolProfile = want;
+      }
     }
 
     const sessionOpts = {
@@ -2253,7 +2308,11 @@ function createStore(opts = {}) {
         status: "working",
         activity: "Working",
         workingIn: id,
-        toolProfile: "builder",
+        // Auto mode: start at the cheapest rung and climb only when a turn
+        // actually needs more. `builder` on a bot that says "hey" was ~16.6k
+        // of tool schema for a two-word answer.
+        toolProfile: "chat",
+        profilePinned: false,
         reasoningEffort: "low",
         // Extra Hermes toolsets on top of the profile (browser, vision, ...).
         toolsets: [],
@@ -2381,7 +2440,7 @@ function createStore(opts = {}) {
       // bot on Hermes' own default pays 18,327 — 72% of which is tool
       // definitions it never calls. Changing either moves the bot to a
       // different gateway child on its next turn (see hermes-gateway.cjs).
-      const allowed = ["name", "label", "description", "notifications", "blob", "shape", "status", "draft", "color", "activity", "activityDetail", "model", "provider", "reasoningEffort", "fast", "toolProfile", "toolsets", "mcp", "sectionId", "backgroundTurn", "subagentIds", "lastSubagentId"];
+      const allowed = ["name", "label", "description", "notifications", "blob", "shape", "status", "draft", "color", "activity", "activityDetail", "model", "provider", "reasoningEffort", "fast", "toolProfile", "profilePinned", "toolsets", "mcp", "sectionId", "backgroundTurn", "subagentIds", "lastSubagentId"];
       const before = agent.name;
       for (const key of allowed) {
         if (Object.prototype.hasOwnProperty.call(patch, key)) agent[key] = patch[key];
@@ -3101,6 +3160,11 @@ function createStore(opts = {}) {
       const home = botHome.prepare(dir, row.botId);
       const res = artifactLib.readArtifact(home.cwd, row.target);
       return { ...res, id: row.id, title: row.title, versions: row.versions, botId: row.botId };
+    },
+    /** The action log, newest first. `botId` narrows to one teammate. */
+    listLog(botId) {
+      const rows = state.log || [];
+      return botId ? rows.filter((r) => r.botId === botId) : rows;
     },
     /** Artifacts, newest first. `botId` narrows to one teammate. */
     listArtifacts(botId) {

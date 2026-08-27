@@ -235,7 +235,10 @@ export default function Shell({ state }) {
     if (selected) window.hydo.setDraft(selected.id, next);
   }
 
-  const mentionables = agents.filter((a) => a.id !== selected?.id);
+  // Every bot, including the one whose thread this is. Excluding it meant
+  // that in a 1:1 with your only teammate, `@` offered nothing but
+  // "everyone" — you could not tag Finn in Finn's own chat.
+  const mentionables = agents;
   const members = isChannel
     ? (selected.members || []).map((id) => agents.find((a) => a.id === id)).filter(Boolean)
     : [];

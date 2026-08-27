@@ -561,10 +561,14 @@ async function main() {
     assert.ok((store.getState().messages[id] || []).filter((m) => m.role === 'user').length >= 3);
   });
 
-  await test('new bots pin builder + low reasoning, not full', async () => {
+  await test('new bots start cheap under auto mode, never full', async () => {
     const { store, id } = await withBot('ok');
     const bot = agentOf(store, id);
-    assert.equal(bot.toolProfile, 'builder');
+    // Auto mode (auto-profile.cjs): born on the cheapest rung and climbs only
+    // when a turn actually needs more. It used to be born on `builder`, which
+    // is ~16.6k of tool schema for a bot whose first message is "hey".
+    assert.equal(bot.toolProfile, 'chat');
+    assert.equal(bot.profilePinned, false, 'not pinned, so it can climb');
     assert.equal(bot.reasoningEffort, 'low');
     assert.deepEqual(bot.mcp, []);
     assert.notEqual(bot.toolProfile, 'full');

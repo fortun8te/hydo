@@ -11,17 +11,33 @@
  * after send, a longer idle before leave, then a brief fade window.
  */
 
-export const USER_JOIN_MS = 1400;
+// He should show up while you are still typing, not after you have stopped.
+// 1400ms was long enough that on a short message he arrived as you hit send.
+// The jitter is the point: a fixed delay reads as a UI animation, a varying
+// one reads as someone noticing you at their own pace.
+export const USER_JOIN_MS = 620;
+export const USER_JOIN_JITTER_MS = 520;
+
+/** A stable per-face join delay in [JOIN, JOIN+JITTER). `seed` is the bot id. */
+export function joinDelayOf(seed) {
+  let h = 0;
+  const s = String(seed || "");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return USER_JOIN_MS + (Math.abs(h) % USER_JOIN_JITTER_MS);
+}
 // A teammate that vanishes the instant you stop typing reads as a glitch, not
 // as presence. These three are the whole "does he stick around" feel:
 //   IDLE  — how long a paused draft still counts as you being at the keyboard
 //   LEAVE — the fade once that runs out
 //   LINGER— how long he stays after HIS turn ends, before drifting off
 // They were 7.2s / 1.1s / 2.2s, which is why he left the moment you paused.
-export const USER_IDLE_MS = 26000;
-export const USER_LEAVE_MS = 2600;
+export const USER_IDLE_MS = 45000;
+export const USER_LEAVE_MS = 4200;
 export const READ_HOLD_MS = 1100;
-export const LINGER_MS = 9000;
+// How long he stays after HIS OWN message. He was going the moment the last
+// token landed, which is the exact moment you are reading it and most likely
+// to reply. Staying is the cheap part of feeling present.
+export const LINGER_MS = 22000;
 
 // ---------------------------------------------------------------- online pip
 //

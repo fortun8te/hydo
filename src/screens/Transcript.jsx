@@ -3,7 +3,7 @@ import UmbraFace from "../umbra/UmbraFace.jsx";
 import ChoiceCard from "./ChoiceCard.jsx";
 import * as RC from "./RichContent.jsx";
 import { botWorks } from "../lib/working.js";
-import { composerExtrasForMember, presenceOf } from "../lib/presence.js";
+import { composerExtrasForMember, presenceOf, joinDelayOf } from "../lib/presence.js";
 
 function dayKey(iso) {
   const d = new Date(iso);
@@ -960,6 +960,9 @@ export default function Transcript({
     if (!agent) return null;
     const busy = humanActivity(agent.activity) || humanActivity(agent.activityDetail) || "Working";
     const presence = presenceOf({
+      // Per-bot join delay, so two faces in a channel do not appear in
+      // lockstep like a UI animation.
+      joinMs: joinDelayOf(agent.id),
       working: busyHere(agent, convId),
       sending: !!sending,
       linger: !!linger,

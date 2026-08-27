@@ -102,6 +102,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   // see it, and no test renders this component, so it reached the browser.
   const profileTokens = profiles.find((p) => p.name === toolProfile)?.tokens || 0;
   const activePreset = presetOf(toolProfile, reasoningEffort);
+  const pinned = !!agent?.profilePinned;
   const pinnedMcp = useMemo(
     () => (Array.isArray(agent?.mcp) ? agent.mcp.map(String) : []),
     [agent?.mcp]
@@ -271,8 +272,20 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
       <div className="bot-rail__field">
         <span className="bot-rail__field-label">Mode</span>
         <div className="bot-rail__presets" role="group" aria-label="Mode">
+          <button
+            type="button"
+            className={pinned ? "bot-rail__preset" : "bot-rail__preset is-on"}
+            aria-pressed={!pinned}
+            title="Start cheap and climb only when a turn needs more."
+            onClick={() => onChange({ profilePinned: false, toolProfile: "chat" })}
+          >
+            <span>Auto</span>
+            <span className="bot-rail__preset-cost">
+              {pinned ? "off" : tokenLabel(profileTokens)}
+            </span>
+          </button>
           {PRESETS.map((p) => {
-            const on = activePreset === p.id;
+            const on = pinned && activePreset === p.id;
             const cost = profiles.find((x) => x.name === p.profile)?.tokens;
             return (
               <button
@@ -281,7 +294,15 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
                 className={on ? "bot-rail__preset is-on" : "bot-rail__preset"}
                 aria-pressed={on}
                 title={p.hint}
-                onClick={() => onChange({ toolProfile: p.profile, reasoningEffort: p.effort })}
+                onClick={() =>
+                  onChange({
+                    toolProfile: p.profile,
+                    reasoningEffort: p.effort,
+                    // Choosing by hand is a decision. Auto stops overriding it
+                    // until you hand it back with the Auto button.
+                    profilePinned: true,
+                  })
+                }
               >
                 <span>{p.label}</span>
                 <span className="bot-rail__preset-cost">{tokenLabel(cost)}</span>
@@ -290,7 +311,9 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           })}
         </div>
         <p className="bot-rail__cost">
-          {activePreset
+          {!pinned
+            ? `Auto: on ${profileLabel(toolProfile)} now, climbs when a turn needs more.`
+            : activePreset
             ? PRESETS.find((p) => p.id === activePreset).hint
             : "Custom. Tools and Reason are set individually below."}
         </p>

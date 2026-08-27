@@ -229,7 +229,11 @@ async function chatPersist() {
   const firstId = store.getState().selectedId;
   {
     const born = store.getState().agents.find((a) => a.id === firstId);
-    assert.equal(born.toolProfile, "builder", "new bot toolProfile");
+    // Auto mode: a new bot starts on the CHEAPEST rung and climbs only when a
+    // turn actually needs more (auto-profile.cjs). It used to be born on
+    // `builder`, ~16.6k of tool schema for a bot whose first message is "hey".
+    assert.equal(born.toolProfile, "chat", "new bot starts cheap under auto mode");
+    assert.equal(born.profilePinned, false, "and is not pinned, so it can climb");
     assert.equal(born.reasoningEffort, "low", "new bot reasoningEffort");
     assert.deepEqual(born.mcp, [], "new bot mcp must be empty");
   }
