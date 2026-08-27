@@ -1,9 +1,14 @@
 /* palette.css — src/screens/CommandPalette.jsx (.hy-palette) and
    src/screens/FindInChat.jsx (.hy-find). Loads after tokens.css/icons.css;
    every rule is scoped under one of those two root classes so nothing here
-   collides with the rest of the app. Colors come only from the --sand-*/
-   --cursor-* custom properties already defined in src/kit/tokens.css, each
-   with a literal fallback in case a token is ever missing. */
+   collides with the rest of the app. Colours come only from the `--sand-` and
+   `--cursor-` custom properties already defined in src/kit/tokens.css, each
+   with a literal fallback in case a token is ever missing.
+
+   Do not write those prefixes with a trailing star here. This comment used to
+   say `--sand-*` at the end of a line, and the star plus the following slash
+   CLOSED THE COMMENT two lines early — so the remaining prose was parsed as
+   stylesheet, which is what the build's "Unexpected *" warning was. */
 
 /* ---------------------------------------------------------------------- */
 /* Command palette                                                        */
