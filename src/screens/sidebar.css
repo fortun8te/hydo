@@ -336,18 +336,7 @@
   box-shadow: 0 0 0 2.5px var(--row-ground, #111);
 }
 
-.sand-sidebar .sand-row__dot.is-work {
-  animation: sand-pip-breathe 1.9s ease-in-out infinite;
-}
 
-@keyframes sand-pip-breathe {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.55; transform: scale(0.82); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sand-sidebar .sand-row__dot.is-work { animation: none; }
-}
 
 /* -- unread ------------------------------------------------------------- */
 /* A row with something new gets a blue dot at the end of the preview line and

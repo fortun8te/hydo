@@ -889,6 +889,31 @@ function artifactIcon(kind) {
   return ARTIFACT_ICONS[String(kind || "")] || "file-text";
 }
 
+/** Bytes as a person would say them. */
+function sizeLabel(bytes) {
+  const n = Number(bytes) || 0;
+  if (n <= 0) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+
+/**
+ * What the row says under the name.
+ *
+ * It used to be `artifactLabel(kind)` alone, and `classify` returns "file" for
+ * anything with a path . so every attachment in the thread read "File",
+ * whether it was a 2MB docx or an empty csv. The extension is what people
+ * actually recognise, and the size is what tells you it worked.
+ */
+function artifactMeta(msg) {
+  const ext = String(msg.artifactExt || "").toUpperCase();
+  const size = sizeLabel(msg.artifactBytes);
+  const kindWord = artifactLabel(msg.artifactKind);
+  const lead = ext || kindWord;
+  return [lead, size, msg.versions > 1 ? `v${msg.versions}` : ""].filter(Boolean).join(" · ");
+}
+
 function artifactLabel(kind) {
   switch (String(kind || "")) {
     case "html":
@@ -1111,10 +1136,7 @@ export default function Transcript({
                 </span>
                 <span className="hy-artifact__copy">
                   <span className="hy-artifact__name">{msg.text || "Artifact"}</span>
-                  <span className="hy-artifact__meta">
-                    {artifactLabel(msg.artifactKind)}
-                    {msg.versions > 1 ? ` · v${msg.versions}` : ""}
-                  </span>
+                  <span className="hy-artifact__meta">{artifactMeta(msg)}</span>
                 </span>
                 <i className="gb-icon gb-icon-chevron-right" aria-hidden="true" />
               </button>

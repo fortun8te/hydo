@@ -74,7 +74,12 @@ assert.equal(A.artifactKey("b1", "/w/a.html"), A.artifactKey("b1", "/w/a.html"))
 assert.notEqual(A.artifactKey("b1", "/w/a.html"), A.artifactKey("b2", "/w/a.html"));
 assert.notEqual(A.artifactKey("b1", "/w/a.html"), A.artifactKey("b1", "/w/b.html"));
 assert.equal(A.titleFor("/w/chart.html", ""), "chart.html");
-assert.equal(A.titleFor("/w/chart.html", "Steps"), "Steps");
+// A FILE keeps its filename even when the bot passes a label. "Steps" hides
+// that the thing on disk is chart.html . which is what you look for in Finder,
+// and what tells you at a glance what kind of file it is. Labels still name
+// the things that have no filename:
+assert.equal(A.titleFor("/w/chart.html", "Steps"), "chart.html");
+assert.equal(A.titleFor("https://example.com/x", "Steps"), "Steps");
 
 // ---- THE SANDBOX. This is the security property; assert it in the source. --
 const art = fs.readFileSync(path.join(ROOT, "src", "screens", "Artifact.jsx"), "utf8");

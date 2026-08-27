@@ -175,7 +175,13 @@ function classify(target) {
     return { kind: local ? "server" : "url", url: raw };
   }
   const clean = raw.replace(/^file:\/\//, "");
-  return { kind: "file", filePath: clean };
+  // `ext` and `previewKind` ride along so a ROW can say what a file actually
+  // is. `kind` stays "file" because Artifact.jsx switches on it to decide how
+  // to frame the thing, and that decision is about the payload, not the name.
+  // Without this every attachment in the thread was labelled "File", docx and
+  // csv and png alike.
+  const ext = path.extname(clean).slice(1).toLowerCase();
+  return { kind: "file", filePath: clean, ext, previewKind: kinds.kindOf(clean) };
 }
 
 /**
@@ -322,9 +328,13 @@ function artifactKey(botId, target) {
 
 function titleFor(target, label) {
   const clean = String(label || "").trim();
-  if (clean) return clean.slice(0, 80);
   const c = classify(target);
-  if (c.kind === "file") return path.basename(c.filePath) || "Artifact";
+  // A FILE is named by its filename, even when the bot passed a label.
+  // A label like "Todo" hides the fact that the thing on disk is called
+  // random-todo-list.docx, which is what you would look for in Finder and what
+  // tells you at a glance that it is a Word file at all.
+  if (c.kind === "file") return path.basename(c.filePath) || clean.slice(0, 80) || "Artifact";
+  if (clean) return clean.slice(0, 80);
   try {
     const u = new URL(c.url);
     return (u.hostname + u.pathname).replace(/\/$/, "").slice(0, 80) || "Artifact";

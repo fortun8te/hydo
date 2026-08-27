@@ -1269,11 +1269,24 @@ function createStore(opts = {}) {
     const cls = artifactLib.classify(target);
     const t = now();
     state.artifacts ??= [];
+    // Size, read once when the artifact is recorded. A row that says "Todo /
+    // File" tells you nothing you could not see from the title; "DOCX · 18 KB"
+    // tells you what it is and whether it is empty.
+    let bytes = 0;
+    try {
+      if (cls.filePath) bytes = require("node:fs").statSync(cls.filePath).size;
+    } catch {
+      /* a file the bot named but has not written yet */
+    }
     const existing = state.artifacts.find((a) => a.key === key);
     if (existing) {
       existing.versions = (existing.versions || 1) + 1;
       existing.updatedAt = t;
       existing.title = artifactLib.titleFor(target, label) || existing.title;
+      // Re-read on every version: an artifact that is rewritten changes size,
+      // and a stale number is worse than none.
+      existing.bytes = bytes;
+      existing.ext = cls.ext || existing.ext || "";
       // Move to the front: most recently shown is most relevant.
       state.artifacts = [existing, ...state.artifacts.filter((a) => a.key !== key)];
     } else {
@@ -1283,6 +1296,8 @@ function createStore(opts = {}) {
         botId: agent.id,
         target: String(target),
         kind: cls.kind,
+        ext: cls.ext || "",
+        bytes,
         title: artifactLib.titleFor(target, label),
         versions: 1,
         createdAt: t,
@@ -1312,6 +1327,10 @@ function createStore(opts = {}) {
         fromId: agent.id,
         artifactId: row.id,
         artifactKind: row.kind,
+        // What it IS and how big. Without these the row could only say "File",
+        // because `classify` returns that for anything with a path.
+        artifactExt: row.ext || "",
+        artifactBytes: row.bytes || 0,
         target: row.target,
         versions: row.versions,
         text: row.title,

@@ -42,11 +42,16 @@ aside.bot-rail > .bot-rail__blob-wrap {
   margin-right: auto;
 }
 
+/* Tucked INTO the mark, not parked beside it.
+   The wrap is a 72px square but most bodies do not fill their corners . a
+   teardrop or a leaf is empty down there . so at right/bottom 2px the pip sat
+   in open space with a visible gap, reading as a stray dot rather than as this
+   teammate's status. */
 .bot-rail .bot-rail__online {
-  width: 14px;
-  height: 14px;
-  right: 2px;
-  bottom: 2px;
+  width: 12px;
+  height: 12px;
+  right: 8px;
+  bottom: 6px;
   box-shadow: 0 0 0 3px var(--sand-bg-elevated, #181818);
 }
 

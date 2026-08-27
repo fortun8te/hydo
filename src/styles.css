@@ -202,7 +202,7 @@ textarea {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #22c55e;
+  background: #59c67a;
   box-shadow: 0 0 0 2px var(--sand-bg-subtle, #111);
 }
 
@@ -1085,8 +1085,22 @@ textarea {
   height: min(640px, 86vh);
 }
 
+@keyframes sand-pip-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sand-row__dot.is-work { animation: none; }
+}
+
+/* `pipOf` has exactly one state: a turn that is HAPPENING. So the pip has
+   exactly one colour. This used to be amber here and green in the sidebar,
+   which is the same fact wearing two colours in two panels . and amber reads
+   as a warning, not as "up". The breathing is what says working; the colour
+   just says present. */
 .sand-row__dot.is-work {
-  background: #fbbf24;
+  animation: sand-pip-breathe 1.9s ease-in-out infinite;
 }
 
 .sand-day {
