@@ -56,3 +56,16 @@ assert.equal(pinFor({ profile: "writer" }).includes("file"), true);
 assert.equal(pinFor({ profile: "writer", hermesProfile: "bot-home-xyz" }), pinFor({ profile: "writer" }));
 
 console.log("context-mgmt-test ok");
+
+// ---- the compaction gate cannot be stuck shut ----------------------------
+// `agent.contextPercent` is a cache filled from `out.usage`. If a backend
+// never reports context_percent it stays 0, the >= threshold branch is never
+// taken, and a long-lived teammate silently overruns its window. A bot reset
+// weekly never sees this; one you keep does.
+assert.ok(storeSrc.includes("BLIND_COMPACT_AFTER"), "there is a no-usage fallback");
+assert.ok(storeSrc.includes("flyingBlind"), "and the turn actually uses it");
+assert.ok(
+  /if \(pre && pre\.percent != null\) agent\.contextPercent = pre\.percent;/.test(storeSrc),
+  "asking Hermes unsticks the cache even when it declines to compress"
+);
+assert.ok(/logAction\(agent\.id, "compact"/.test(storeSrc), "a compaction is logged, not silent");

@@ -668,6 +668,10 @@ function createStore(opts = {}) {
   // Must live at the top of createStore: streamThroughHermes reads it, and a
   // later `const` would TDZ.
   const COMPACT_AT_PERCENT = 70;
+  // How long a thread may run with NO usage number reported before Hydo stops
+  // assuming it is fine and asks Hermes outright, and how often it re-asks.
+  const BLIND_COMPACT_AFTER = 24;
+  const BLIND_COMPACT_EVERY = 12;
   const dir = opts.dir;
   if (!dir) throw new Error("createStore requires opts.dir");
   const file = path.join(dir, "state.json");
@@ -1684,10 +1688,32 @@ function createStore(opts = {}) {
         })
         .catch(() => {});
     }
-    if ((agent.contextPercent || 0) >= COMPACT_AT_PERCENT) {
+    // Between-turn compaction.
+    //
+    // `agent.contextPercent` is a CACHE, filled from `out.usage` when a turn
+    // completes. `compressIfNeeded` re-reads the real number itself, so this
+    // gate exists only to avoid two RPCs on every turn.
+    //
+    // Which makes it a gate that can be stuck shut: if a backend never reports
+    // `context_percent`, the cache stays 0 forever, the branch is never taken,
+    // and a teammate kept for months rides into the context wall in silence.
+    // A bot you reset weekly never hits this. One you keep does.
+    //
+    // So when the cache has never been filled, ask Hermes directly on a
+    // cadence instead of trusting a number nobody wrote.
+    const cachedPct = agent.contextPercent || 0;
+    const turnCount = (state.messages[convId || agent.id] || []).length;
+    const flyingBlind = !agent.contextPercent && turnCount >= BLIND_COMPACT_AFTER;
+    if (cachedPct >= COMPACT_AT_PERCENT || (flyingBlind && turnCount % BLIND_COMPACT_EVERY === 0)) {
       try {
         const pre = await gateway.compressIfNeeded(agent.id, COMPACT_AT_PERCENT);
-        if (pre && pre.compressed) persistHermesIds();
+        if (pre && pre.compressed) {
+          persistHermesIds();
+          logAction(agent.id, "compact", `history compressed at ${Math.round(pre.percent || 0)}%`);
+        }
+        // Even when it declines to compress it hands back the real percent,
+        // which unsticks the cache for every turn after this one.
+        if (pre && pre.percent != null) agent.contextPercent = pre.percent;
       } catch {
         /* Hermes auto-compact may already have run */
       }
