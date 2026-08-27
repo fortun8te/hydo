@@ -195,3 +195,44 @@ in `main.cjs` is a check, not a screen watcher.
 Each has a test in `scripts/box-runtime-test.cjs`, along with source-level
 guards for every ban above and for the four properties the AGENTS.md block must
 keep.
+
+---
+
+## The disk really does persist, including browser logins
+
+Tested, not assumed. Planted a marker inside Chrome's own profile directory
+(`~/.config/google-chrome/Default/`), stopped the box, waited for
+`lastSnapshotStatus: completed`, resumed, and read it back:
+
+```
+cookie-persist-1787844338
+```
+
+Intact. The box is a single ext4 root on `/dev/sda1` with no separate mounts
+under `/home`, so the snapshot takes the whole disk — a Chrome profile, and the
+cookies and sessions in it, is just more of that disk. A teammate that signs
+into something once leaves it signed in for the next one, across sleeps.
+
+Resume measured at ~1s to return, but the machine is NOT usable that fast: the
+first `box exec` afterwards can come back empty while it finishes booting. Poll
+for real output rather than trusting the resume call's own timing.
+
+---
+
+## `box exec` quoting: a false-negative that cost two wrong conclusions
+
+This bit twice in one session, and both times the wrong conclusion was reached
+first — once accusing a teammate of inventing a file it had genuinely written.
+
+```
+# LIES. Returns empty stdout for a file that exists and has content.
+box exec <id> -- bash -lc 'cat ~/file.txt 2>/dev/null'
+
+# TRUTH.
+box exec <id> -- cat /home/user/file.txt
+```
+
+The wrapped `bash -lc` form with a redirect can swallow stdout through the RPC
+while still reporting `exitCode: 0`. Absence of output from that form is NOT
+evidence of absence of the file. Prefer the direct argv form with an absolute
+path, and confirm with `ls -la` before concluding anything is missing.
