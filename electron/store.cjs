@@ -172,10 +172,12 @@ function normalizeAgent(agent) {
     status: "idle",
     draft: "",
     activity: "",
-    // Builder by default: files + skills + web + shell + sub-agents, still
-    // sandboxed to this bot's workspace. Sits before the spread so a stored
-    // choice wins. 1:1 reasoning defaults to low unless the bot is pinned higher.
-    toolProfile: "builder",
+    // The cheapest rung by default, because auto climbs. This was `builder`,
+    // which meant any record without a stored profile hydrated at ~16.6k of
+    // schema and the rail read "Auto: on Builder now" on a bot that had never
+    // done anything . the escalate-only ladder then had no way back down.
+    // Sits before the spread, so a hand-pinned choice still wins.
+    toolProfile: "chat",
     reasoningEffort: "low",
     mcp: [],
     // Roster flags. Defaults sit before the spread so an older state.json that
@@ -2369,7 +2371,7 @@ function createStore(opts = {}) {
         status: "idle",
         activity: "",
         workingIn: null,
-        toolProfile: src.toolProfile || "builder",
+        toolProfile: src.toolProfile || "chat",
         reasoningEffort: src.reasoningEffort || "low",
         toolsets: Array.isArray(src.toolsets) ? src.toolsets.slice() : [],
         mcp: Array.isArray(src.mcp) ? src.mcp.slice() : [],

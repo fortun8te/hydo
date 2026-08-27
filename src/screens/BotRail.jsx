@@ -15,7 +15,13 @@ const FALLBACK_PROFILES = [
 ];
 
 // One action instead of two dropdowns and the knowledge of what they cost.
-// The numbers are the profile cost; reasoning is on top of it either way.
+//
+// The number is SCHEMA: input tokens spent describing the tools, every turn,
+// before the bot has said anything. Reasoning is output, it is variable, and
+// adding the two would be inventing a figure . so Deep carries a word instead
+// of a second number. Work and Deep share a profile, and the row used to print
+// "16.6k" under both of them, which made the two chips look like the same
+// button twice.
 const PRESETS = [
   { id: "cheap", label: "Cheap", profile: "chat", effort: "minimal",
     hint: "Talks, remembers, keeps a todo. No files, no shell, no web." },
@@ -95,7 +101,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   const customOn = isCustomHex(agent?.blob);
   const pip = botWorks(agent, agent?.id) ? "work" : pipOf(agent);
   const todos = Array.isArray(agent?.todos) ? agent.todos : [];
-  const toolProfile = agent?.toolProfile || "builder";
+  const toolProfile = agent?.toolProfile || "chat";
   const reasoningEffort = agent?.reasoningEffort || "low";
   // After the two above, not before: reading them earlier is a temporal dead
   // zone that throws at render and blanks the whole app. `vite build` cannot
@@ -141,6 +147,18 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
       gone = true;
     };
   }, [agent?.id]);
+
+  // What is folded away, said in the header so opening it is a choice rather
+  // than a search. Hand-picking anything in there desyncs it from the preset
+  // row, and the row says "Custom" . that is the honest state, not a bug.
+  const advancedMeta = [
+    profileLabel(toolProfile),
+    reasoningEffort !== "low" ? reasoningEffort : "",
+    extraToolsets.length ? `+${extraToolsets.length}` : "",
+    pinnedMcp.length ? `${pinnedMcp.length} app${pinnedMcp.length > 1 ? "s" : ""}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   function toggleToolset(name, on) {
     const next = on
@@ -307,7 +325,13 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
                 }
               >
                 <span>{p.label}</span>
-                <span className="bot-rail__preset-cost">{tokenLabel(cost)}</span>
+                {/* The arrow is the whole distinction between Work and Deep,
+                    which share a profile and so share a number. A word does
+                    not fit in a fifth of the rail; a caret does. */}
+                <span className="bot-rail__preset-cost">
+                  {tokenLabel(cost)}
+                  {p.effort === "high" || p.effort === "medium" ? "\u2191" : ""}
+                </span>
               </button>
             );
           })}
@@ -320,6 +344,35 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             : "Custom. Tools and Reason are set individually below."}
         </p>
       </div>
+      {todos.length ? (
+        <div className="bot-rail__field">
+          <span className="bot-rail__field-label">Plan</span>
+          {/* The bot's own todo list, mirrored off the tool stream. Read only:
+              it is the model's working plan, and editing it here would put a
+              second author on a list it re-reads as its own. */}
+          <ul className="bot-rail__plan">
+            {todos.map((t, i) => (
+              <li key={t.id || i} className={`bot-rail__plan-item is-${t.status}`}>
+                <span className="bot-rail__plan-dot" aria-hidden="true" />
+                <span>{t.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="bot-rail__field">
+        <button
+          type="button"
+          className="bot-rail__disclose"
+          aria-expanded={abilitiesOpen}
+          onClick={() => setAbilitiesOpen((v) => !v)}
+        >
+          <span className="bot-rail__field-label">Advanced</span>
+          <span className="bot-rail__disclose-meta">{advancedMeta}</span>
+          <i className={`gb-icon gb-icon-chevron-${abilitiesOpen ? "down" : "right"}`} />
+        </button>
+        {abilitiesOpen ? (
+          <>
       <label className="bot-rail__field">
         <span className="bot-rail__field-label">Tools</span>
         <select
@@ -348,10 +401,10 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
         ) : null}
       </label>
       <label className="bot-rail__field">
-        <span className="bot-rail__field-label">Reason</span>
+        <span className="bot-rail__field-label">Thinking</span>
         <select
           value={REASON_OPTS.some((o) => o.value === reasoningEffort) ? reasoningEffort : "low"}
-          aria-label="Reason"
+          aria-label="Thinking"
           onChange={(e) => onChange({ reasoningEffort: e.target.value })}
         >
           {REASON_OPTS.map((o) => (
@@ -365,37 +418,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           delegates rarely needs more than Low.
         </p>
       </label>
-      {todos.length ? (
-        <div className="bot-rail__field">
-          <span className="bot-rail__field-label">Plan</span>
-          {/* The bot's own todo list, mirrored off the tool stream. Read only:
-              it is the model's working plan, and editing it here would put a
-              second author on a list it re-reads as its own. */}
-          <ul className="bot-rail__plan">
-            {todos.map((t, i) => (
-              <li key={t.id || i} className={`bot-rail__plan-item is-${t.status}`}>
-                <span className="bot-rail__plan-dot" aria-hidden="true" />
-                <span>{t.text}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      <div className="bot-rail__field">
-        <button
-          type="button"
-          className="bot-rail__disclose"
-          aria-expanded={abilitiesOpen}
-          onClick={() => setAbilitiesOpen((v) => !v)}
-        >
-          <span className="bot-rail__field-label">Abilities</span>
-          <span className="bot-rail__disclose-meta">
-            {extraToolsets.length ? `+${extraToolsets.length}` : "Profile only"}
-          </span>
-          <i className={`gb-icon gb-icon-chevron-${abilitiesOpen ? "down" : "right"}`} />
-        </button>
-        {abilitiesOpen ? (
-          toolsets.length === 0 ? (
+          {toolsets.length === 0 ? (
             <p className="bot-rail__hint mute">
               Hermes is not answering, so its toolsets cannot be listed.
             </p>
@@ -430,9 +453,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
                 })}
               </div>
             </>
-          )
-        ) : null}
-      </div>
+          )}
       <div className="bot-rail__field">
         <span className="bot-rail__field-label">Connections</span>
         {connections.length === 0 ? (
@@ -454,6 +475,9 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             })}
           </div>
         )}
+      </div>
+          </>
+        ) : null}
       </div>
       <div className="bot-rail__notify">
         <div>
