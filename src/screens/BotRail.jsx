@@ -19,10 +19,18 @@ function tokenLabel(n) {
   return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
 }
 
+// Hermes accepts eight levels (hermes_constants.py:1185); Hydo offered three,
+// so the two cheapest — the ones most dispatcher turns actually want — were
+// unreachable. Labelled by what the bot is doing, not by the word, because
+// "minimal" tells you nothing about whether your bot should be on it.
 const REASON_OPTS = [
-  { value: "low", label: "Low" },
+  { value: "none", label: "None — no thinking, cheapest" },
+  { value: "minimal", label: "Minimal — routing and short replies" },
+  { value: "low", label: "Low — the default" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra high" },
+  { value: "max", label: "Max — slow and expensive" },
 ];
 
 function profileLabel(name) {
@@ -279,6 +287,10 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             </option>
           ))}
         </select>
+        <p className="bot-rail__cost">
+          Thinking tokens, on top of the profile above. A bot that answers or
+          delegates rarely needs more than Low.
+        </p>
       </label>
       {todos.length ? (
         <div className="bot-rail__field">

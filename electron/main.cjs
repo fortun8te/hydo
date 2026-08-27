@@ -479,12 +479,32 @@ app.whenReady().then(() => {
 
 // One shared python child backs every teammate; close its sessions cleanly
 // rather than orphaning them when the window goes away.
+//
+// The store's disk write is DEBOUNCED (store.cjs `save`), so the flush here is
+// not tidiness: without it, quitting inside the 900ms window silently drops
+// whatever happened in it. Flush first, unconditionally, before anything that
+// can end the process.
 app.on("will-quit", (e) => {
+  store.flush();
   if (!gateway.available()) return;
   e.preventDefault();
   gateway.shutdown().finally(() => app.exit(0));
 });
 
+app.on("before-quit", () => store.flush());
+
 app.on("window-all-closed", () => {
+  store.flush();
   if (process.platform !== "darwin") app.quit();
 });
+
+// A crash or a SIGTERM from `npm run relaunch` skips the app events entirely.
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(sig, () => {
+    try {
+      store.flush();
+    } finally {
+      app.exit(0);
+    }
+  });
+}
