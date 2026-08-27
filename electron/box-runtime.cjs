@@ -212,7 +212,12 @@ function createBoxRuntime(opts = {}) {
       // about which is the team's, and guessing at that is how you end up
       // writing to a stranger's disk.
       if (!st.id) {
-        const existing = await exec(["list"], { timeout: 30_000 });
+        // `--all`, because `box list` defaults to `--filter r` . RUNNING only.
+        // A stopped box is invisible to the default, so adoption would never
+        // see the machine the user already made and would create a second one
+        // beside it: exactly the outcome adoption exists to prevent, undone by
+        // a default I had not checked.
+        const existing = await exec(["list", "--all"], { timeout: 30_000 });
         const rows =
           existing.ok && existing.json
             ? Array.isArray(existing.json)

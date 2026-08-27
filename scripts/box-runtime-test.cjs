@@ -175,7 +175,7 @@ async function main() {
   // will never see each other.
   {
     // One box on the account, made outside Hydo.
-    const theirs = { id: "bx_843rh875", state: "idle", type: "default" };
+    const theirs = { id: "bx_843rh875", state: "stopped", type: "default" };
     const h = { id: "", adopted: "" };
     const rt = createBoxRuntime({
       installed: () => true,
@@ -186,7 +186,14 @@ async function main() {
       exec: async (args) => {
         if (args[0] === "status") return { ok: true, json: { account: { loginState: "signed in" } } };
         if (args[0] === "limits") return { ok: true, json: { accessTier: "trial" } };
-        if (args[0] === "list") return { ok: true, json: { boxes: [theirs] } };
+        // The fake mirrors the real CLI: the default filter is RUNNING only,
+        // so a stopped box is only visible with --all. Without this the test
+        // would pass against a call that finds nothing in practice.
+        if (args[0] === "list") {
+          return args.includes("--all")
+            ? { ok: true, json: { boxes: [theirs] } }
+            : { ok: true, json: { boxes: [] } };
+        }
         if (args[0] === "new") throw new Error("must NOT create when one already exists");
         return { ok: true, json: {} };
       },
