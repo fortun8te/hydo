@@ -694,6 +694,20 @@ function recentHistory(list, limit = 12) {
     .join("\n");
 }
 
+/**
+ * Does this turn actually reach for the shared Linux machine?
+ *
+ * Deliberately narrow. The cost of a false positive is a machine waking up to
+ * do nothing; the cost of a false negative is the bot finding it asleep and
+ * waking it itself, which is the same call one step later. So this errs toward
+ * NOT waking . the expensive mistake is the one that bills.
+ */
+const WANTS_BOX =
+  /\b(box exec|box ssh|on the (linux|shared) (box|machine)|linux (box|machine|workspace)|apt-get|apt install|sudo |docker |chrome on the box|the shared machine)\b/i;
+function wantsBox(text) {
+  return WANTS_BOX.test(String(text || ""));
+}
+
 function createStore(opts = {}) {
   // Must live at the top of createStore: streamThroughHermes reads it, and a
   // later `const` would TDZ.
@@ -713,6 +727,10 @@ function createStore(opts = {}) {
   // and has notifications turned on. The store decides WHETHER to notify; the
   // main process decides HOW (see main.cjs).
   const onNotify = typeof opts.onNotify === "function" ? opts.onNotify : null;
+  // The shared Linux machine, injected so the store never imports it directly:
+  // waking a box costs money, and a store that can do that on its own is a
+  // store that will eventually do it in a test.
+  let box = opts.box || null;
 
   let state;
 
@@ -1675,6 +1693,23 @@ function createStore(opts = {}) {
 
     const home = botHome.prepare(dir, agent.id, soulText);
     const cwd = home.cwd;
+
+    // Wake the shared machine, but only for a teammate that is allowed to use
+    // it and only when this turn actually reaches for Linux. Waking on every
+    // greeting would bill for "hey".
+    //
+    // The hold is released in a finally below: a refcount that leaks on an
+    // error is a machine that never stops, which is the expensive direction to
+    // be wrong in.
+    let releaseBox = null;
+    if (box && agent.boxEnabled && wantsBox(userText)) {
+      try {
+        const up = await box.ensureRunning({ reason: "turn", agentId: agent.id });
+        if (up && up.ok) releaseBox = box.hold(`turn-${agent.id}`);
+      } catch {
+        /* the turn still runs; the bot just will not find the machine awake */
+      }
+    }
     // Hermes context engine owns history. AGENTS.md is workspace rules + soul
     // only — dumping MEMORY.md here every turn pays for it forever.
     // Hermes loads identity from profile SOUL.md. AGENTS.md is workspace law only.
@@ -1684,7 +1719,18 @@ function createStore(opts = {}) {
     // prefix, so anything that makes the prefix look new costs the 75%
     // cached-input discount on everything behind it.
     const agentsPath = path.join(cwd, "AGENTS.md");
-    const agentsWant = `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n`;
+    // The shared Linux machine, named only for teammates allowed to use it.
+    // Short on purpose: this file sits at the front of every prompt, so a
+    // paragraph here is taxed on every turn forever. The bot does not need a
+    // tutorial, it needs the id and the shape of one command . and it needs no
+    // new tool plumbing, because a profile with `terminal` already has a shell
+    // and `box` is on this Mac.
+    const boxId = String((state.settings && state.settings.boxId) || "");
+    const boxBlock =
+      agent.boxEnabled && boxId
+        ? `\n## Shared Linux machine\n\nOne Ubuntu box for the whole team, id \`${boxId}\`. Run things on it with \`box exec ${boxId} -- <cmd>\`, or \`box ssh ${boxId}\` for a session. The disk is shared: browser logins and installed software stay for the next teammate, and everything on it is visible to all of them. Your scratch folder is \`/home/box/hydo/${agent.id}\`. It sleeps when nobody is using it; a command wakes it.\n`
+        : "";
+    const agentsWant = `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n${boxBlock}`;
     try {
       if (fs.readFileSync(agentsPath, "utf8") !== agentsWant) {
         fs.writeFileSync(agentsPath, agentsWant);
@@ -2133,6 +2179,11 @@ function createStore(opts = {}) {
       if (pending) clearTimeout(pending);
       agent.activityDetail = "";
       throw err;
+    } finally {
+      // Always, on both paths. A refcount that leaks on an error is a machine
+      // that never stops . the expensive direction to be wrong in, and the one
+      // an error path reaches most often.
+      if (releaseBox) releaseBox();
     }
   }
 
@@ -2398,6 +2449,16 @@ function createStore(opts = {}) {
   }
 
   const api = {
+    /**
+     * Hand the store the shared-machine runtime.
+     *
+     * Late rather than at construction because main.cjs builds the runtime
+     * FROM the store (it reads settings.boxId), so one of the two has to come
+     * second. A store with no box simply never wakes one.
+     */
+    attachBox(runtime) {
+      box = runtime || null;
+    },
     getState() {
       return publicState();
     },

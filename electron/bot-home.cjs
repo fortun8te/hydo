@@ -413,6 +413,10 @@ function prepare(hydoDir, botId, soulText) {
   } catch {
     agentsCur = "";
   }
+  // The STAMP is a floor, nothing more. store.cjs owns the full file (stamp +
+  // model block + the shared-machine section) and writes it once per turn; if
+  // this wrote a different full text they would overwrite each other every
+  // turn, which is a bug this file has already had once.
   if (!agentsCur.startsWith(AGENTS_STAMP)) fs.writeFileSync(agentsFile, AGENTS_STAMP);
 
   const hydoMemory = path.join(hydoDir, "bots", botId, "MEMORY.md");

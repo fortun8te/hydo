@@ -70,3 +70,33 @@ try {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.rmSync(profile, { recursive: true, force: true });
 }
+
+// ---- the shared-machine section has exactly ONE writer --------------------
+// bot-home's prepare() runs first every turn and store.cjs writes the full
+// file after it. If prepare() wrote a DIFFERENT full text (stamp + box block)
+// the two would overwrite each other on every single turn — which is the exact
+// bug this file already caught once, and which costs the cached-prefix
+// discount on everything behind AGENTS.md.
+{
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const botHome = fs.readFileSync(path.join(__dirname, "../electron/bot-home.cjs"), "utf8");
+  const store = fs.readFileSync(path.join(__dirname, "../electron/store.cjs"), "utf8");
+
+  assert.ok(
+    !/Shared Linux machine/.test(botHome),
+    "prepare() must not write the box section — it only lays down the stamp floor"
+  );
+  assert.ok(
+    /Shared Linux machine/.test(store),
+    "store.cjs, the single full-file writer, owns the box section"
+  );
+  assert.ok(
+    /agentsWant = `\$\{botHome\.AGENTS_STAMP\}/.test(store),
+    "and it still builds from the shared stamp rather than a copy of it"
+  );
+  // Named only when this teammate may actually use the machine.
+  assert.ok(/agent\.boxEnabled && boxId/.test(store), "gated on the permission AND a real id");
+}
+
+console.log("agents-md-test (box section) ok");

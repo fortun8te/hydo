@@ -530,6 +530,10 @@ app.whenReady().then(() => {
       push();
     },
   });
+  // The store never imports the runtime . it is handed one, so a test store
+  // cannot spend money.
+  if (typeof store.attachBox === "function") store.attachBox(boxes);
+
   ipcMain.handle("hydo:boxStatus", () => boxes.status());
   ipcMain.handle("hydo:boxLimits", () => boxes.limits());
   ipcMain.handle("hydo:boxEnsure", (_e, reason) => boxes.ensureRunning(reason || {}));

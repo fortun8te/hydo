@@ -174,3 +174,47 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+// ---- the store wakes the machine only when it should ----------------------
+// Two ways to be wrong, and they are not symmetric. Waking for "hey" bills for
+// nothing. NOT waking when the bot needed Linux costs one extra call, because
+// the bot wakes it itself a step later. So the predicate errs toward silence.
+{
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const store = fs.readFileSync(path.join(__dirname, "../electron/store.cjs"), "utf8");
+
+  const m = /const WANTS_BOX =\s*\n?\s*(\/.*\/i);/.exec(store);
+  if (!m) throw new Error("WANTS_BOX predicate not found");
+  // eslint-disable-next-line no-eval
+  const re = eval(m[1]);
+
+  for (const quiet of ["hey", "thanks", "what time is it", "write me a poem", "hi!!", "read src/store.js"]) {
+    if (re.test(quiet)) throw new Error(`must NOT wake the machine for: "${quiet}"`);
+  }
+  for (const loud of [
+    "run box exec on the shared machine",
+    "apt-get install ffmpeg",
+    "open chrome on the box",
+    "use the linux workspace for this",
+    "sudo systemctl restart nginx",
+  ]) {
+    if (!re.test(loud)) throw new Error(`should wake the machine for: "${loud}"`);
+  }
+
+  // Permission AND intent, never one alone.
+  if (!/agent\.boxEnabled && wantsBox\(userText\)/.test(store)) {
+    throw new Error("waking must require both the toggle and a turn that needs it");
+  }
+  // A refcount that leaks on an error is a machine that never stops, and the
+  // error path is the one it would leak on.
+  if (!/finally \{[\s\S]{0,600}releaseBox\(\)/.test(store)) {
+    throw new Error("the hold must be released in a finally, not only on success");
+  }
+  // The store must not be able to spend money on its own.
+  if (/require\(["']\.\/box-runtime\.cjs["']\)/.test(store)) {
+    throw new Error("the store must be HANDED a runtime, never import one");
+  }
+}
+
+console.log("box-runtime-test (turn wiring) ok");
