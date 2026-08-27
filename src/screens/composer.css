@@ -79,6 +79,15 @@
 /* The mic is always there; the send arrow joins it the moment there is
    something to send — the real app shows both. */
 .sand-composer .mic,
+/* Send.
+   The button pressed more than any other in the app, and it was a flat white
+   disc . the same weight as the plus beside it, which does far less.
+
+   The treatment is a lit surface rather than a painted one: a pale rim, light
+   pooling from the lower middle, and a soft cast underneath. That inner glow
+   is the whole trick . a plain top-to-bottom gradient reads as a button, a
+   bloom rising off the floor of the shape reads as something switched on.
+   Everything around it stays quiet so this is the only thing glowing. */
 .sand-composer .send {
   width: 28px;
   height: 28px;
@@ -87,19 +96,57 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #fcfcfc;
-  color: #141414;
+  color: #06213f;
   cursor: pointer;
+  background:
+    radial-gradient(120% 96% at 50% 118%, #ffffff 0%, #cfe6ff 30%, rgba(207,230,255,0) 62%),
+    linear-gradient(180deg, #8dbcff 0%, #2f7ff0 52%, #1d63d8 100%);
+  box-shadow:
+    /* the rim: a hairline of light around the edge, not a border */
+    inset 0 0 0 1px rgba(255, 255, 255, 0.62),
+    inset 0 -5px 10px rgba(255, 255, 255, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0 14px rgba(47, 127, 240, 0.42);
+  transition: box-shadow 140ms ease, transform 90ms ease;
+}
+
+.sand-composer .send:hover:not(:disabled) {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    inset 0 -5px 10px rgba(255, 255, 255, 0.58),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(47, 127, 240, 0.62);
+}
+
+/* Pressed goes DOWN into the pill: the glow tucks under instead of growing,
+   which is what a physical key does. */
+.sand-composer .send:active:not(:disabled) {
+  transform: translateY(0.5px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+    inset 0 3px 7px rgba(0, 0, 0, 0.22),
+    0 0 10px rgba(47, 127, 240, 0.34);
+}
+
+.sand-composer .send:focus-visible {
+  outline: 2px solid #8dbcff;
+  outline-offset: 2px;
 }
 
 .sand-composer .send:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: default;
+  /* Nothing to send: the light goes out rather than dimming, which would look
+     like a lit button behind a veil. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
+/* Stop is the opposite errand . you press it when something is going wrong .
+   so it keeps the plain disc and none of the glow. */
 .sand-composer .send.send--stop {
   background: #fcfcfc;
   color: #141414;
+  box-shadow: none;
 }
 
 /* -- reply mode --------------------------------------------------------- */

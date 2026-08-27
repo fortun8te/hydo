@@ -6,7 +6,13 @@ export const BLOBS = {
   dijkstra: new URL("../kit/images/dijkstra-ByucqRsn.svg", import.meta.url).href,
 };
 
-export const APP_ICON = new URL("../kit/images/app-icon-C7NKj2u7.png", import.meta.url).href;
+// Ours, generated from the real blob geometry by scripts/make-app-icon.mjs .
+// not the icon that came out of the extracted kit, which was Grok Bot's.
+// SVG on purpose: it is the source, it stays sharp at every size the app draws
+// it, and regenerating it after a body is retuned is one command. Packaging
+// still needs a raster .icns; that conversion needs a rasteriser this machine
+// does not have (rsvg-convert / resvg / sharp).
+export const APP_ICON = new URL("../kit/images/hydo-icon.svg", import.meta.url).href;
 
 export function blobSrc(name) {
   return BLOBS[name] || BLOBS.ada;
