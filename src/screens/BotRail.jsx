@@ -7,12 +7,17 @@ import { pipOf } from "../lib/presence.js";
 import { pluginPrettyName } from "../lib/plugin-icons.js";
 
 const FALLBACK_PROFILES = [
-  { name: "chat" },
-  { name: "writer" },
-  { name: "researcher" },
-  { name: "builder", isDefault: true },
-  { name: "full" },
+  { name: "chat", tokens: 5100 },
+  { name: "writer", tokens: 9800 },
+  { name: "researcher", tokens: 11800 },
+  { name: "builder", isDefault: true, tokens: 16600 },
+  { name: "full", tokens: 24700 },
 ];
+
+function tokenLabel(n) {
+  if (!n) return "";
+  return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
+}
 
 const REASON_OPTS = [
   { value: "low", label: "Low" },
@@ -65,6 +70,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   const customOn = isCustomHex(agent?.blob);
   const pip = botWorks(agent, agent?.id) ? "work" : pipOf(agent);
   const todos = Array.isArray(agent?.todos) ? agent.todos : [];
+  const profileTokens = profiles.find((p) => p.name === toolProfile)?.tokens || 0;
   const toolProfile = agent?.toolProfile || "builder";
   const reasoningEffort = agent?.reasoningEffort || "low";
   const pinnedMcp = useMemo(
@@ -243,9 +249,22 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           {profiles.map((p) => (
             <option key={p.name} value={p.name}>
               {profileLabel(p.name)}
+              {p.tokens ? ` — ${tokenLabel(p.tokens)}/turn` : ""}
             </option>
           ))}
         </select>
+        {/* The recurring cost of this choice, made visible. It was invisible,
+            so every bot sat on the default forever. The second line is the one
+            that matters on a job that fans out: workers inherit this. */}
+        {profileTokens ? (
+          <p className="bot-rail__cost">
+            ~{tokenLabel(profileTokens)} tokens every turn
+            {extraToolsets.length ? `, plus ${extraToolsets.length} extra` : ""}.
+            {profileTokens > 12000
+              ? " Each delegated worker inherits it too."
+              : ""}
+          </p>
+        ) : null}
       </label>
       <label className="bot-rail__field">
         <span className="bot-rail__field-label">Reason</span>

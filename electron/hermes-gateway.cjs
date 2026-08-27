@@ -830,12 +830,33 @@ function isBlockedComputerUseMcp(name) {
   return false;
 }
 
+/**
+ * Measured prompt tokens per turn, per profile (`scripts/toolset-bench.cjs`,
+ * `session.context_breakdown` on a one-line turn). Approximate and drifting —
+ * `desktop_ui` was added to builder and researcher after these were taken —
+ * but the RATIO is the decision, and the ratio holds.
+ *
+ * This number is not just the turn's cost. Hermes spawns subagents with
+ * `toolsets=None`, meaning every `delegate_task` worker INHERITS the parent's
+ * toolsets and cannot narrow them (delegate_tool.py:3884, 4286). So a bot that
+ * fans out ten workers pays this ten more times. On the kind of job that fans
+ * out, choosing the profile is choosing the bill.
+ */
+const PROFILE_COST = {
+  chat: 5100,
+  writer: 9800,
+  researcher: 11800,
+  builder: 16600,
+  full: 24700,
+};
+
 /** The profile names a UI may offer. */
 function toolProfiles() {
   return Object.keys(TOOL_PROFILES).map((name) => ({
     name,
     toolsets: TOOL_PROFILES[name],
     isDefault: name === DEFAULT_PROFILE,
+    tokens: PROFILE_COST[name] ?? null,
   }));
 }
 
@@ -1830,6 +1851,7 @@ module.exports = {
   ensure,
   // tool profiles — the context-cost lever
   TOOL_PROFILES,
+  PROFILE_COST,
   listToolsets,
   DEFAULT_PROFILE,
   toolProfiles,
