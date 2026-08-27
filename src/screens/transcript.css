@@ -805,3 +805,11 @@
   font-size: 13px;
   color: var(--sand-text-tertiary, #8d8d8d);
 }
+
+/* The brand mark in the working row. `.sand-inchat` is a 10px-gap flex row, so
+   the mark lives inside `.hy-act` with the label instead of as a third flex
+   child — otherwise the logo floated a full gap away from its own sentence. */
+.sand-transcript .sand-inchat .hy-act {
+  min-width: 0;
+  gap: 6px;
+}

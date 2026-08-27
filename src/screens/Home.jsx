@@ -1,6 +1,7 @@
 import UmbraFace from "../umbra/UmbraFace.jsx";
 import { botWorks } from "../lib/working.js";
 import { pipOf } from "../lib/presence.js";
+import ActivityMark from "./ActivityMark.jsx";
 
 /**
  * Home.
@@ -174,8 +175,15 @@ export default function Home({
                     <UmbraFace tint={a.blob} shape={a.shape} size={34} live mood="spin" poke={false} />
                     <span className="hy-live__copy">
                       <span className="hy-live__name">{a.name}</span>
-                      <span className="hy-live__what">
-                        {step ? step.text : a.activityDetail || a.activity || "Working"}
+                      {/* The plan step wins when there is one — it is what
+                          the teammate SAID it is doing. Failing that, the
+                          real tool line, which now names the product, and its
+                          brand mark beside it. */}
+                      <span className="hy-live__what hy-act">
+                        {step ? null : <ActivityMark plugin={a.activityIcon} size={14} />}
+                        <span className="hy-act__text">
+                          {step ? step.text : a.activityDetail || a.activity || "Working"}
+                        </span>
                       </span>
                     </span>
                   </button>

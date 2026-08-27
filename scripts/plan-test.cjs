@@ -29,13 +29,19 @@ assert.ok(!/onChange.*todos|setTodos/.test(card), "the card is read only");
 assert.ok(card.includes("useState(false)"), "collapsed until asked");
 assert.ok(/hy-plan__now/.test(card) && /text-overflow: ellipsis/.test(css), "the headline is one line");
 
-// ---- it survives a model that forgets to mark progress -------------------
-// Falling back to the first unfinished step matters: without it a plan whose
-// steps are all still "pending" would show nothing at all.
-assert.ok(
-  card.includes('states.findIndex((s) => s !== "done")'),
-  "falls back to the first unfinished step"
-);
+// ---- only say "active" when it actually is ------------------------------
+// A plan whose owner is not currently mid-turn must not light a step as
+// live, and NEXT is not the same claim as ACTIVE: falling back to the first
+// unfinished step (the old behaviour) said "happening now" about a step
+// nobody was touching. `running` — sourced from `botBusy`/`botWorks` in
+// src/lib/working.js, never inferred from the todos — is what gates it.
+assert.ok(!/list\[states\.findIndex\(\(s\) => s !== "done"\)\]/.test(card), "no longer lights the first pending row");
+assert.ok(card.includes("liveStateOf"), "a stale live status is downgraded when nobody is running it");
+assert.ok(/running/.test(card), "PlanCard takes a running flag from its caller");
+assert.ok(card.includes("Not running right now"), "says so plainly instead of guessing a step is active");
+assert.ok(comp.includes("planRunning"), "the composer forwards whether the owner is actually running");
+assert.ok(shell.includes("botWorks(planOwner"), "the shell derives it from botWorks, not from the todos");
+
 // Hermes' status vocabulary is not fixed, so both spellings are accepted.
 assert.ok(card.includes('"in_progress"') && card.includes('"in-progress"'), "tolerates both spellings");
 assert.ok(card.includes('"completed"') && card.includes('"complete"'));

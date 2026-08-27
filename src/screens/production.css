@@ -166,6 +166,12 @@
 
 .sand-transcript .sand-transcript-row--user .sand-bubble {
   background: var(--sand-fill-bubble-user);
+  /* --sand-fill-bubble-user is #070707 in light mode (an inverted black
+     pill, matching --sand-fill-primary) but the base .sand-bubble rule sets
+     color to --sand-text-primary, which is ALSO near-black in light — near
+     -zero contrast. Dark mode's #5a5a5a mid-grey never exposed this because
+     --sand-text-primary is near-white there. */
+  color: var(--sand-text-on-primary, var(--sand-text-primary));
 }
 
 .sand-transcript .sand-bubble--sending {
@@ -1145,7 +1151,10 @@
   background: transparent;
   color: var(--sand-text-secondary, #fcfcfc99);
 }
-.hy-card--new:hover { background: #ffffff08; }
+/* Unlike .hy-card, this variant stays transparent (border-style: dashed) so
+   it sits directly on the page instead of the MetalForge gradient — an
+   #ffffff08 hover was invisible-on-invisible once the page went light. */
+.hy-card--new:hover { background: var(--sand-fill-ghost-hover, #7777772c); }
 .hy-card__plus { font-size: 22px; line-height: 1; }
 
 /* -- rows: channels, routines, files ------------------------------------ */
@@ -1194,3 +1203,49 @@
 }
 .hy-home .hy-row__sub { font-size: 11.5px; color: var(--sand-text-tertiary, #8d8d8d); }
 .hy-home .hy-row > .gb-icon { flex: none; font-size: 12px; color: var(--sand-text-tertiary, #8d8d8d); }
+
+/* -- activity mark ------------------------------------------------------- */
+/* The brand logo beside a live activity line ("Opening a pull request on
+   GitHub"). Sized from a custom property so the same element works at 14px in
+   the sidebar row and 16px on the home card, and inline-grid so it never
+   collapses to the 0x0 box an unstyled <img> wrapper produces here. */
+.hy-act-mark {
+  --hy-act-mark-size: 14px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--hy-act-mark-size);
+  height: var(--hy-act-mark-size);
+  border-radius: 4px;
+  overflow: hidden;
+  vertical-align: -2px;
+}
+
+.hy-act-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Constant in BOTH themes on purpose — see MONO_DARK_LOGOS in plugin-icons.js.
+   A near-black mark needs light behind it whichever theme is on. */
+.hy-act-mark--chip {
+  background: #f2f2f4;
+  padding: 1px;
+}
+
+/* The line itself: mark and words on one baseline, words truncating rather
+   than wrapping the row to two lines. */
+.hy-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.hy-act__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

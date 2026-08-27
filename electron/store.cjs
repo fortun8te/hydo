@@ -1142,6 +1142,11 @@ function createStore(opts = {}) {
     agent.status = status;
     if (status === "idle") {
       agent.activity = "";
+      // The tool line and its brand mark are claims about a call in flight.
+      // Leaving them set on an idle bot left a Figma logo glowing under a
+      // teammate that had finished ten minutes ago.
+      agent.activityDetail = "";
+      agent.activityIcon = "";
       // `activeAt` is the ONLY honest source for the roster's online pip.
       // A bot that has never taken a turn is not online, and the pip must not
       // claim it is; a bot that just finished one still has a warm Hermes
@@ -1732,19 +1737,20 @@ function createStore(opts = {}) {
             "",
             "## Shared Linux machine",
             "",
-            `One Ubuntu box for the whole team, id \`${boxId}\`. Run things on it with \`box exec ${boxId} --timeout 120 -- <cmd>\`, or \`box ssh ${boxId}\` for a session. Your scratch folder is \`~/hydo/${agent.id}\`. The disk is shared: browser logins and installed software stay for the next teammate, and everything on it is visible to all of them. It sleeps when nobody is using it; a command wakes it.`,
+            `One Ubuntu box for the whole team, id \`${boxId}\`. Run \`box exec ${boxId} --timeout 120 -- <cmd>\`, or \`box ssh ${boxId}\` for a session. Scratch folder \`~/hydo/${agent.id}\`. The disk is shared: logins and installed software stay for the next teammate, and all of them can see it. It sleeps when idle; a command wakes it.`,
             "",
-            // Everything the box prints comes back through this conversation and
-            // is paid for by the token. The box has `rg`, `jq` and `curl`
-            // preinstalled (verified: docs.ascii.dev/box/machines), so there is
-            // never a reason to haul a whole file back to read one line of it.
-            "Keep what it prints small — every byte of it is charged to this conversation. Filter on the box with `rg`, `jq` or `head -c 2000`; never `cat` a whole file, a whole log or a whole page.",
+            // Output is the expensive part, not VM seconds. A 200KB log hauled
+            // back is ~50,000 tokens, re-sent on every later turn. So the cap is
+            // a NUMBER: "keep it small" is advice a model talks itself out of,
+            // `| head -c 2000` is not.
+            "Everything it prints is charged to this conversation by the token, and stays in context for the rest of the thread. Filter ON the box with `rg`/`jq` and end every command with `| head -c 2000`. Never `cat` a whole file, log or page — re-run it narrower instead.",
             "",
-            // The expensive mistake, named before it is made. A 1280x800
-            // screenshot is ~1,400 tokens; a twenty-step click-and-look loop is
-            // ~28,000, and it is the loop a model reaches for by default. `lux`
-            // runs that loop INSIDE the box and answers in text.
-            'For anything graphical — a login, a form, a page that will not yield to `curl` — use `lux start "<what to do>" && lux run`. It drives Chrome and the desktop inside the box and answers in text. Do NOT stream the desktop, take screenshots, or look at a screen in a loop: one screenshot costs more than most whole tasks, and you cannot see the stream anyway.',
+            // Cheapest rung first: a model told to "check a page" reaches for a
+            // screenshot unless handed `curl | rg`. One 1280x800 frame is
+            // ~1,365 tokens, a twenty-step look-and-click loop ~27,000, re-sent
+            // every turn. lux runs that loop in the box and returns text — one
+            // session at a time, 20/day (docs.ascii.dev/box/desktop-streaming).
+            'Text before pixels, always: try `curl -sL <url> | rg <pattern>` first; if the page needs a real browser or a login, use `lux start "<goal>" && lux run`, which drives Chrome and the desktop inside the box and answers in text (one lux session at a time — the box has a single shared desktop). Do NOT take screenshots, stream the desktop, or look at a screen in a loop: one screenshot costs more than most whole tasks, and you cannot see the stream anyway.',
             "",
           ].join("\n")
         : "";
@@ -1976,6 +1982,13 @@ function createStore(opts = {}) {
           flush(false);
         },
         onActivity: (label) => {
+          // Ordering matters and is load-bearing: hermes-gateway.cjs fires
+          // `onTool` BEFORE `onActivity` for the same tool.start, with the
+          // identical string. So when the label no longer matches the detail
+          // this activity came from somewhere else ("Thinking", a
+          // status.update, an approval) and the tool's brand mark is stale —
+          // a Figma logo must not sit next to "Thinking".
+          if (label && label !== agent.activityDetail) agent.activityIcon = "";
           setStatus(agent.id, "working", label || "Working", convId || agent.id);
           flush(false);
         },
@@ -1983,8 +1996,13 @@ function createStore(opts = {}) {
           if (captureTodos(agent, evt)) flush(false);
           if (evt && evt.phase === "start" && evt.name) {
             const name = String(evt.name);
-            const { activityFromTool } = require("./activity.cjs");
-            agent.activityDetail = activityFromTool(name, evt);
+            const { describeTool } = require("./activity.cjs");
+            // The brand mark rides ALONGSIDE the line, never inside it: an
+            // icon with no matching label is how this app has shipped 0x0
+            // boxes before, so the two are set and cleared as one pair.
+            const said = describeTool(name, evt);
+            agent.activityDetail = said.label;
+            agent.activityIcon = said.plugin || "";
             if (!opened && !flags.jobWake && (!convId || convId === agent.id) && /delegate|computer_use|^terminal$|^bash$|web_search|browser/.test(name)) {
               bubble.text = "On it.";
               opened = true;
@@ -2134,10 +2152,12 @@ function createStore(opts = {}) {
               goal: goal || (agent.backgroundTurn && agent.backgroundTurn.goal) || "",
             };
             agent.activityDetail = goal ? `sub-agent: ${goal}` : "Delegating";
+            agent.activityIcon = "";
             flush(false);
             if (submitBackground) releaseEarly();
           } else if (evt.type === "subagent.complete") {
             agent.activityDetail = tracked.live ? agent.activityDetail : "";
+            if (!tracked.live) agent.activityIcon = "";
             flush(false);
             if (tracked.live === 0 && agent.backgroundTurn && !flags.jobWake) {
               const result = String(evt.summary || evt.result || evt.text || "").slice(0, 2000);
@@ -2192,6 +2212,7 @@ function createStore(opts = {}) {
       const result = raced.result;
       if (pending) clearTimeout(pending);
       agent.activityDetail = "";
+      agent.activityIcon = "";
       maybeCompact(agent);
       if (!(agent.subagentIds && agent.subagentIds.length) && !committed) {
         agent.backgroundTurn = null;
@@ -2215,6 +2236,7 @@ function createStore(opts = {}) {
       }
       if (pending) clearTimeout(pending);
       agent.activityDetail = "";
+      agent.activityIcon = "";
       throw err;
     } finally {
       // Always, on both paths. A refcount that leaks on an error is a machine

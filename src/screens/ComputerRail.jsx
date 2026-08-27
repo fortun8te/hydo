@@ -42,6 +42,11 @@ export default function ComputerRail({ agent, onClose, onOpenRoutines, onCreateR
   const [err, setErr] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // One status read per open, and the runtime caches it for eight seconds on
+  // top of that (box-runtime.cjs STATUS_TTL_MS). The user's complaint was
+  // literal: "if I keep clicking/exiting then obviously don't count that as
+  // separate fucking starts." Opening this panel must never resume anything —
+  // it only ever reads. Waking is the button below, and nothing else.
   const refresh = useCallback(async () => {
     const s = await window.hydo?.boxStatus?.();
     setSt({ loading: false, ...(s || {}) });
@@ -60,7 +65,12 @@ export default function ComputerRail({ agent, onClose, onOpenRoutines, onCreateR
     setErr("");
     const res = await window.hydo?.boxEnsure?.({});
     setBusy("");
-    if (!res || !res.ok) setErr((res && res.reason) || "Could not start it.");
+    // The trial's start budget, refused locally before the wire. Create,
+    // resume and fork each spend one of 5/min, 25/hour, 75/day, so a doomed
+    // call is worse than no call: it costs a round-trip and still fails.
+    if (res && !res.ok && res.reason === "start-budget") {
+      setErr(`That is enough starts for one ${res.window || "minute"}. Waking it again costs one of the trial's starts, so give it a moment.`);
+    } else if (!res || !res.ok) setErr((res && res.reason) || "Could not start it.");
     refresh();
   }
 
@@ -142,7 +152,22 @@ export default function ComputerRail({ agent, onClose, onOpenRoutines, onCreateR
                 </button>
               ) : null}
             </div>
-            <p className="computer-rail__caption">{botName}&apos;s screen</p>
+            {/* NOT "<Bot>'s screen", which is what this said and what it could
+                not deliver. Verified against the CLI and docs on 2026-08-27: a
+                Box has exactly ONE desktop. `box info --json` returns a single
+                `desktopUrl` with one Moonlight hostId/appId, `box desktop <ID>`
+                takes no display or session flag, and the streaming docs say
+                outright that "Lux controls the Box's single shared desktop, so
+                run only one Lux session at a time". Per-bot screens would mean
+                one box per bot — the exact bill box-runtime.cjs's header exists
+                to prevent. So the caption names the shared thing, and the line
+                under it says the consequence out loud rather than letting the
+                user discover it by watching another bot move their mouse. */}
+            <p className="computer-rail__caption">Shared screen — one desktop, all bots</p>
+            <p className="computer-rail__sub">
+              {botName} shares this desktop with every other bot you switch on — they see the same windows
+              and take turns.
+            </p>
 
             <div className="computer-rail__actions">
               {running ? (

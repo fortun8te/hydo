@@ -71,7 +71,8 @@ assert.equal(gateway.isBlockedComputerUseMcp("chrome-devtools"), false);
 
 const { activityFromTool } = require("../electron/activity.cjs");
 assert.equal(activityFromTool("computer_use"), "On your computer");
-assert.equal(activityFromTool("read_file"), "On your computer");
+assert.equal(activityFromTool("read_file"), "Reading a file");
+assert.equal(activityFromTool("mcp__github__create_pull_request"), "Opening a pull request on GitHub");
 assert.equal(activityFromTool("browser_exec"), "Browsing");
 assert.equal(activityFromTool("terminal", { command: "grok --no-auto-update -p fix it" }), "Connecting to Grok Build");
 assert.equal(activityFromTool("bash", { args: ["opencode", "run"] }), "Connecting to OpenCode");

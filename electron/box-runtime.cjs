@@ -57,6 +57,51 @@ const MAX_TTL = 2_592_000;
 const IDLE_STOP_MS = 10 * 60 * 1000;
 
 /**
+ * How long a `status()` answer is worth reusing.
+ *
+ * The user's complaint, in their words: "if I keep clicking/exiting then
+ * obviously don't count that as separate fucking starts." Opening the Computer
+ * rail runs `status()`, and `status()` is two CLI round-trips (`box status` +
+ * `box info`). Shell.jsx re-runs it on every `sheet`/`rail` change, so a user
+ * flicking a panel open and shut was firing a pair of API calls per flick.
+ *
+ * Eight seconds because that is shorter than any state change a human can
+ * cause without going through this app (wake and stop both invalidate the
+ * cache themselves, below), and long enough that a burst of clicks collapses
+ * into one round-trip.
+ */
+const STATUS_TTL_MS = 8000;
+
+/**
+ * The local half of the start budget.
+ *
+ * Trial is 5 starts/minute, 25/hour, 75/day, and create, resume AND fork each
+ * spend one. A start that gets rate-limited server-side still cost a round-trip
+ * and, worse, teaches nothing: the next click makes the same call again. So the
+ * ceiling is enforced here, before the wire, and the caller is told which
+ * window it hit.
+ *
+ * Deliberately one under the per-minute limit: `box` itself is not the only
+ * thing on this account that can spend a start (the dashboard, the user's own
+ * shell), so leaving one in hand is cheaper than being the caller that trips it.
+ */
+const START_WINDOWS = [
+  { ms: 60_000, max: 4, name: "minute" },
+  { ms: 3_600_000, max: 24, name: "hour" },
+  { ms: 86_400_000, max: 70, name: "day" },
+];
+
+/**
+ * How long after a start we refuse to start again for the same reason.
+ *
+ * The in-flight `starting` promise coalesces callers that overlap in TIME. It
+ * does nothing for a click 300ms after the previous one resolved — and that is
+ * exactly the double-click the user is describing. A start that just succeeded
+ * is a machine that is already running, so the second click has nothing to do.
+ */
+const START_COOLDOWN_MS = 5000;
+
+/**
  * One CLI call.
  *
  * `--no-update` goes in right AFTER the subcommand, never at the end. `box
@@ -187,6 +232,43 @@ function createBoxRuntime(opts = {}) {
   let lastUsedAt = 0;
   let starting = null;
 
+  /**
+   * Everything that exists so a click is not an API call.
+   *
+   * `statusAt`/`statusValue` is the cache; `statusInFlight` coalesces callers
+   * that arrive while the first round-trip is still open — a rail mount and a
+   * Shell header check land within the same tick, and without this they are two
+   * `box status` calls for one answer.
+   */
+  let statusAt = 0;
+  let statusValue = null;
+  let statusInFlight = null;
+  /** Timestamps of starts we actually spent, newest last. */
+  const startsSpent = [];
+  let lastStartAt = 0;
+  let lastStartResult = null;
+
+  /** Anything that CHANGES the machine must drop the cache, or the UI lies. */
+  function invalidate() {
+    statusAt = 0;
+    statusValue = null;
+  }
+
+  /** Which start window, if any, this call would blow through. */
+  function overBudget(at) {
+    while (startsSpent.length && at - startsSpent[0] > 86_400_000) startsSpent.shift();
+    for (const w of START_WINDOWS) {
+      if (startsSpent.filter((t) => at - t < w.ms).length >= w.max) return w.name;
+    }
+    return "";
+  }
+
+  /** Record a start we spent. Create, resume and fork all count the same. */
+  function spentStart(at) {
+    startsSpent.push(at);
+    lastStartAt = at;
+  }
+
   async function info(id) {
     if (!id) return null;
     const res = await exec(["info", String(id)], { timeout: 30_000 });
@@ -194,7 +276,38 @@ function createBoxRuntime(opts = {}) {
     return res.json && res.json.box ? res.json.box : res.json;
   }
 
-  async function status() {
+  /**
+   * The cached, coalesced front door. Everything outside this file calls this.
+   *
+   * `{ fresh: true }` is for the paths that must not act on a stale answer —
+   * `ensureRunning` above all, because deciding "create" from an eight-second-
+   * old "missing" is how you end up with a second machine.
+   */
+  async function status(opts = {}) {
+    if (!opts.fresh && statusValue && now() - statusAt < STATUS_TTL_MS) {
+      // `busy` is a live number, not a cached one: a job that started since the
+      // snapshot must not read as idle, or the Stop button offers to yank the
+      // machine out from under it.
+      return { ...statusValue, busy: inFlight.size, cached: true };
+    }
+    if (statusInFlight) return statusInFlight;
+    statusInFlight = statusFresh()
+      .then((s) => {
+        // Only a real answer is worth caching. Caching "not installed" or a
+        // failed round-trip would pin a wrong state for eight seconds.
+        if (s && s.installed && s.signedIn) {
+          statusValue = s;
+          statusAt = now();
+        }
+        return s;
+      })
+      .finally(() => {
+        statusInFlight = null;
+      });
+    return statusInFlight;
+  }
+
+  async function statusFresh() {
     if (!isInstalled()) return { ok: true, installed: false, signedIn: false };
     const st = await exec(["status"], { timeout: 20_000 });
     const acct = (st.ok && st.json && st.json.account) || {};
@@ -266,8 +379,20 @@ function createBoxRuntime(opts = {}) {
     if (!isInstalled()) return { ok: false, reason: "not-installed" };
     if (starting) return starting;
 
+    // A start that just succeeded is a machine that is already running. The
+    // in-flight promise only merges callers that OVERLAP; a second click 300ms
+    // after the first resolved is a fresh call, and on the trial's 5/minute
+    // budget that is the one the user actually noticed. Serving it from the
+    // last result costs nothing and spends nothing.
+    if (lastStartResult && lastStartResult.ok && now() - lastStartAt < START_COOLDOWN_MS) {
+      lastUsedAt = now();
+      return { ...lastStartResult, coalesced: true };
+    }
+
     starting = (async () => {
-      const st = await status();
+      // Fresh, never cached: deciding "create" from a stale "missing" is a
+      // second machine against a two-machine limit.
+      const st = await status({ fresh: true });
       if (!st.signedIn) return { ok: false, reason: "signed-out" };
       if (st.state === "running") {
         lastUsedAt = now();
@@ -280,8 +405,12 @@ function createBoxRuntime(opts = {}) {
         // the trial ceiling is not a question here . and this is the common
         // path, walked every time the desk wakes up. It was paying for an API
         // round-trip whose answer it then threw away.
+        const over = overBudget(now());
+        if (over) return { ok: false, reason: "start-budget", window: over };
         const res = await exec(["resume", st.id], { timeout: 180_000 });
         if (!res.ok) return res;
+        spentStart(now());
+        invalidate();
         lastUsedAt = now();
         return { ok: true, id: st.id, resumed: true };
       }
@@ -322,16 +451,25 @@ function createBoxRuntime(opts = {}) {
           setBoxId(rows[0].id);
           lastUsedAt = now();
           if (!isLive(rows[0])) {
+            const over = overBudget(now());
+            if (over) return { ok: false, reason: "start-budget", window: over };
             const back = await exec(["resume", rows[0].id], { timeout: 180_000 });
             if (!back.ok) return back;
+            spentStart(now());
+            invalidate();
             return { ok: true, id: rows[0].id, adopted: true, resumed: true };
           }
+          invalidate();
           return { ok: true, id: rows[0].id, adopted: true };
         }
       }
 
       // Only a real CREATE needs to know about the trial, because only
       // `--ttl` on `box new` can be refused for exceeding it.
+      // Creating spends a start too, so the budget is checked before the
+      // `limits` round-trip rather than after it.
+      const over = overBudget(now());
+      if (over) return { ok: false, reason: "start-budget", window: over };
       const lim = await limits();
       const trial = !!(lim.ok && lim.trial);
       const ttl = ttlFor(reason.ttlSeconds, trial);
@@ -347,11 +485,23 @@ function createBoxRuntime(opts = {}) {
       const id = made.id || idFrom(res.frames || []);
       if (!id) return { ok: false, reason: "create returned no id" };
       setBoxId(id);
+      spentStart(now());
+      invalidate();
       lastUsedAt = now();
       return { ok: true, id, created: true, ttl, type: reason.type || DEFAULT_TYPE };
-    })().finally(() => {
-      starting = null;
-    });
+    })()
+      .then((res) => {
+        // Remembered so the cooldown above can answer the next click without a
+        // call. Only successes: a failed start must stay retryable.
+        if (res && res.ok) {
+          lastStartResult = res;
+          lastStartAt = now();
+        }
+        return res;
+      })
+      .finally(() => {
+        starting = null;
+      });
 
     return starting;
   }
@@ -378,6 +528,12 @@ function createBoxRuntime(opts = {}) {
     const id = getBoxId();
     if (!id) return { ok: true, reason: "no-box" };
     if (inFlight.size && !force) return { ok: false, reason: "busy", busy: inFlight.size };
+    // Both of these would otherwise make the app lie about a machine it just
+    // put to sleep: the cached status would keep saying "running" for eight
+    // seconds, and — worse — a Wake click inside the cooldown would be answered
+    // from `lastStartResult` and never actually resume.
+    invalidate();
+    lastStartResult = null;
     return plainExec(["stop", String(id)], { timeout: 120_000 });
   }
 
@@ -410,6 +566,9 @@ module.exports = {
   TRIAL_MAX_TTL,
   MAX_TTL,
   IDLE_STOP_MS,
+  STATUS_TTL_MS,
+  START_COOLDOWN_MS,
+  START_WINDOWS,
   isLive,
   parseFrames,
   idFrom,

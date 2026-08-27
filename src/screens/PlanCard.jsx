@@ -44,6 +44,29 @@ export function stateOf(t) {
   return "todo";
 }
 
+/**
+ * `stateOf` reads what Hermes last said about a step, not whether anyone is
+ * still turning it. Nothing rewrites the todo array when a run ends or the
+ * owner switches conversations, so a step left `in_progress` by a finished or
+ * abandoned turn keeps reading "live" forever — the strip would go on
+ * claiming a step is happening after the model has gone quiet.
+ *
+ * `running` is the one honest answer to "is a turn of the owner's actually
+ * happening right now" (`botBusy`/`botWorks` in src/lib/working.js, the same
+ * source the roster pip uses) — never inferred from the todos themselves.
+ * A live status downgrades to plain "todo" when it isn't backed by that,
+ * which is also why it never falls back to lighting the first pending row:
+ * NEXT is not the same claim as ACTIVE.
+ *
+ * @param {{status?:string}} t
+ * @param {boolean} running
+ * @returns {"done"|"live"|"dropped"|"todo"}
+ */
+export function liveStateOf(t, running) {
+  const s = stateOf(t);
+  return s === "live" && !running ? "todo" : s;
+}
+
 const clock = (v) => {
   const d = new Date(v);
   return Number.isFinite(d.getTime())
@@ -70,7 +93,7 @@ function spanOf(t) {
   return to !== from ? `${from} - ${to}` : from;
 }
 
-export default function PlanCard({ todos, name }) {
+export default function PlanCard({ todos, name, running }) {
   const [open, setOpen] = useState(false);
   const list = (Array.isArray(todos) ? todos : []).filter((t) => t && t.text);
 
@@ -89,17 +112,22 @@ export default function PlanCard({ todos, name }) {
 
   if (!list.length) return null;
 
-  const states = list.map(stateOf);
+  // `running` — is the owner actually mid-turn — comes from the caller via
+  // `botBusy`/`botWorks`, not from the todos. `liveStateOf` downgrades a stale
+  // "live" status to "todo" whenever it isn't, so a plan left over from a
+  // finished or abandoned turn never keeps narrating itself as in progress.
+  const states = list.map((t) => liveStateOf(t, running));
   const settled = states.filter((s) => s === "done" || s === "dropped").length;
   const done = states.filter((s) => s === "done").length;
-  const live = list[states.indexOf("live")];
+  const live = states.includes("live") ? list[states.indexOf("live")] : null;
   const allDone = settled === list.length;
 
-  // The headline is the step actually happening. Falling back to the first
-  // unfinished one matters: a model that forgets to mark something in_progress
-  // would otherwise leave the strip saying nothing at all.
-  const current = live || list[states.findIndex((s) => s !== "done")] || null;
-  const headline = allDone ? "Plan finished" : (current && current.text) || "Working";
+  // The headline says what is ACTUALLY happening, never what is merely next.
+  // Falling back to the first unfinished step used to fill the strip's
+  // silence, but that silence was the truth: nobody was running that step,
+  // and the fallback said otherwise. When nothing is running, say so.
+  const current = live;
+  const headline = allDone ? "Plan finished" : current ? current.text : running ? "Working" : "Not running right now";
   const who = name ? `${name}'s plan` : "Plan";
   // Open, the strip stops repeating the row directly above it and says the one
   // thing the list does not: how much of it is left.

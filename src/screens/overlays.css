@@ -68,19 +68,19 @@
      hover/active transforms below once the animation has finished. */
   animation: ov-gate-fade-in 360ms ease-out 190ms backwards;
   transition: filter 140ms ease, transform 100ms ease, box-shadow 140ms ease;
-  box-shadow: 0 1px 2px #00000040;
+  box-shadow: 0 1px 2px var(--hy-shadow);
 }
 
 .gate__btn:hover {
   filter: brightness(0.94);
   transform: translateY(-1px);
-  box-shadow: 0 6px 18px -6px #00000066;
+  box-shadow: 0 6px 18px -6px var(--hy-shadow-heavy);
 }
 
 .gate__btn:active {
   filter: brightness(0.88);
   transform: translateY(0) scale(0.98);
-  box-shadow: 0 1px 2px #00000040;
+  box-shadow: 0 1px 2px var(--hy-shadow);
 }
 
 .gate__btn:focus-visible {

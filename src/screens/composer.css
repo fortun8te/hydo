@@ -511,12 +511,18 @@
   background: var(--sand-line, rgba(252, 252, 252, 0.18));
   display: block;
 }
-.hy-plan__tick.is-done { background: var(--sand-ok, #2bb673); }
+/* Greyscale on purpose: this strip sits directly over the conversation and
+   must not compete with it for the eye's attention the way a green/blue
+   status colour would. The state still reads at a glance because the ticks
+   form a brightness ramp — todo is the dimmest, done a step up, live the
+   brightest plus the only one that moves — the same ramp the checkboxes
+   below use, so progress and detail never disagree with each other. */
+.hy-plan__tick.is-done { background: var(--sand-text-secondary, rgba(252, 252, 252, 0.6)); }
 /* Retired, not finished: it will never move again, so it must not read as
    progress and must not read as work still to come either. */
 .hy-plan__tick.is-dropped { background: var(--sand-line, rgba(252, 252, 252, 0.18)); opacity: 0.45; }
 .hy-plan__tick.is-live {
-  background: var(--sand-accent, #2a92fe);
+  background: var(--sand-text-primary, #fcfcfc);
   animation: hy-plan-pulse 1.6s ease-in-out infinite;
 }
 @keyframes hy-plan-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
@@ -578,8 +584,12 @@
   margin-top: 2px;
   color: var(--sand-line, rgba(252, 252, 252, 0.3));
 }
-.hy-plan__box--done { color: var(--sand-ok, #2bb673); }
-.hy-plan__box--live { color: var(--sand-accent, #2a92fe); }
+/* Same brightness ramp as the meter above: dim outline for todo, mid grey
+   filled for done, brightest for the one step actually running. Shape still
+   carries the state on its own (filled square / open ring+pip / crossed
+   ring) — colour is reinforcement here, never the only signal. */
+.hy-plan__box--done { color: var(--sand-text-secondary, rgba(252, 252, 252, 0.6)); }
+.hy-plan__box--live { color: var(--sand-text-primary, #fcfcfc); }
 .hy-plan__box--dropped { color: var(--sand-text-tertiary, rgba(252, 252, 252, 0.42)); }
 
 /* Only the pip breathes. Animating the whole box makes the row edge shimmer,

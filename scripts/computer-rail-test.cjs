@@ -43,7 +43,21 @@ assert.ok(rail.includes("desktopUrl"), "ComputerRail should use the runtime's ow
 
 // The hover-to-open affordance and the caption the user asked for.
 assert.ok(rail.includes("computer-rail__open"), "missing the hover Open pill");
-assert.ok(rail.includes("'s screen") || rail.includes("&apos;s screen"), 'missing the "<Bot>\'s screen" caption');
+// The caption must not claim a per-bot screen. Checked against the CLI and
+// docs on 2026-08-27: a Box has ONE desktop — a single `desktopUrl` with one
+// Moonlight hostId/appId, no display/session flag on `box desktop`, and the
+// streaming docs say Lux "controls the Box's single shared desktop, so run only
+// one Lux session at a time". "<Bot>'s screen" over a desktop every bot shares
+// is the quiet kind of lie this codebase treats as a bug, so it is pinned out.
+assert.ok(
+  !/\{botName\}&apos;s screen|\{botName\}'s screen/.test(rail),
+  "the caption must not claim the shared desktop belongs to one bot"
+);
+assert.ok(/Shared screen/.test(rail), "the caption should name the screen as shared");
+assert.ok(
+  /same\s+windows/.test(rail),
+  "the rail must say out loud that teammates see the same desktop"
+);
 
 // Every icon class ComputerRail renders must actually resolve to a glyph.
 // This is the exact failure mode named in the task: gb-icon-desktop doesn't

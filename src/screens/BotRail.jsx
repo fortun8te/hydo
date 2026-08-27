@@ -6,7 +6,7 @@ import { botBusy } from "../lib/working.js";
 import { pipLabelOf, pipOf } from "../lib/presence.js";
 import { pluginPrettyName } from "../lib/plugin-icons.js";
 import { BOT_PRESETS, roleFor } from "../lib/bot-presets.js";
-import { stateOf } from "./PlanCard.jsx";
+import { liveStateOf } from "./PlanCard.jsx";
 
 const FALLBACK_PROFILES = [
   { name: "chat", tokens: 5100 },
@@ -445,12 +445,17 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
               second author on a list it re-reads as its own. */}
           <ul className="bot-rail__plan">
             {todos.map((t, i) => (
-              /* `stateOf`, not `t.status`. Hermes sends the same state as
+              /* `liveStateOf`, not `t.status`. Hermes sends the same state as
                  `in_progress`, `in-progress`, `active` or `running` depending
                  on the model, and interpolating it raw meant three of those
                  four matched no rule in rails.css at all — the running step
-                 just looked pending. */
-              <li key={t.id || i} className={`bot-rail__plan-item is-${stateOf(t)}`}>
+                 just looked pending.
+                 It also does not trust a stale "in_progress" on its own:
+                 `botBusy(agent)` is the same source the roster pip reads, so
+                 a step this teammate is no longer actually turning (turn
+                 ended, or the rail was opened after the fact) cannot still
+                 claim to be live here. */
+              <li key={t.id || i} className={`bot-rail__plan-item is-${liveStateOf(t, botBusy(agent))}`}>
                 <span className="bot-rail__plan-dot" aria-hidden="true" />
                 <span>{t.text}</span>
               </li>

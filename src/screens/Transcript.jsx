@@ -4,6 +4,7 @@ import ChoiceCard from "./ChoiceCard.jsx";
 import * as RC from "./RichContent.jsx";
 import { botWorks } from "../lib/working.js";
 import { composerExtrasForMember, presenceOf, joinDelayOf, readHoldFor } from "../lib/presence.js";
+import ActivityMark from "./ActivityMark.jsx";
 
 function dayKey(iso) {
   const d = new Date(iso);
@@ -1039,7 +1040,15 @@ export default function Transcript({
           mood={presence.mood}
         />
         <span className="sand-inchat__idle" />
-        <span className="sand-inchat__busy">{busy}</span>
+        {/* The mark is a SIBLING of the busy text, never its child: that
+            span is a shimmering background-clip:text gradient with
+            -webkit-text-fill-color:transparent, and anything nested inside it
+            renders as nothing at all. The wrapper is what keeps them a pair
+            without inheriting that. */}
+        <span className="hy-act">
+          <ActivityMark plugin={agent.activityIcon} size={14} />
+          <span className="sand-inchat__busy">{busy}</span>
+        </span>
       </div>
     );
   }

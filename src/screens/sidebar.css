@@ -799,7 +799,7 @@
   left: calc(100% + 10px);
   top: 50%;
   transform: translateY(-50%);
-  background: #1f1f1f;
+  background: var(--hy-menu);
   border: 1px solid var(--sand-border-default, #fcfcfc26);
   border-radius: 6px;
   padding: 5px 9px;

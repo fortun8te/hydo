@@ -1472,6 +1472,17 @@ aside.routine-rail .routine-rail__toolbar {
   color: var(--sand-text-secondary, #fcfcfc99);
 }
 
+/* The honest small print under the caption: one box has one desktop, so the
+   screen above is shared by every box-enabled teammate. Dimmer and tighter
+   than the caption because it is a caveat, not a title. */
+.computer-rail .computer-rail__sub {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--sand-text-tertiary, #fcfcfc66);
+}
+
 .computer-rail .computer-rail__actions {
   display: flex;
   gap: 8px;

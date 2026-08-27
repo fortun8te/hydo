@@ -50,9 +50,14 @@ function seed() {
     ...b,
     description: "",
     notifications: false,
-    status: i === 0 ? "working" : "idle",
-    activity: i === 0 ? "Searching the web" : "",
-    activityDetail: i === 0 ? "web_search" : "",
+    // Two bots working on two different products, because the activity line
+    // and its brand mark are the thing being looked at here: one MCP tool
+    // with a logo that resolves, one without.
+    status: i === 0 || i === 2 ? "working" : "idle",
+    activity: ["Opening a pull request on GitHub", "", "Reading a Figma file", "", ""][i],
+    activityDetail: ["Opening a pull request on GitHub", "", "Reading a Figma file", "", ""][i],
+    activityIcon: ["github", "", "figma", "", ""][i],
+    workingIn: i === 0 || i === 2 ? ["b1", "", "b3", "", ""][i] : null,
     draft: "",
     updatedAt: iso(i * 37),
     last: ["Looking now.", "Dev's in. Told them it was just…", "Cute line's gone.", "I haven't replied.", ""][i],

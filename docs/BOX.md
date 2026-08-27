@@ -52,6 +52,56 @@ There is one box on this account already: `bx_843rh875`, `type: default`,
 - Documented TTL ceiling is 30 days (2,592,000s); larger is capped server-side.
   Default auto-stop is 1 hour **from creation, not from activity**.
 
+## One machine, one screen — the promise Hydo cannot keep
+
+The product line is "each teammate gets its own screen". **It cannot, on this
+platform.** Checked on 2026-08-27 against the CLI and `docs.ascii.dev`, not
+assumed:
+
+- `box info --json` / `box list --json` return exactly **one** `desktopUrl` per
+  box, carrying a single Moonlight `hostId`/`appId` pair. There is no second
+  stream and no per-agent variant of it.
+- `box desktop <ID>` has only `--vnc`, `--public` and `--json`. **No `--display`,
+  no `--session`, no `--user`.** Neither does `exec`, `ssh`, `new`, `resume` or
+  `fork` — `--help` on every subcommand was read.
+- `docs.ascii.dev/box/desktop-streaming`, verbatim: Lux "controls the Box's
+  single shared desktop, so run only one Lux session at a time". The account cap
+  is 20 lux sessions/day, one at a time per box.
+
+So a per-bot screen would mean a per-bot **box**, which is the one thing
+`box-runtime.cjs`'s header exists to prevent: fifty bots would be fifty machines
+against an active limit of two, and the shared disk — the browser already signed
+in, the font already installed — is the actual product.
+
+Nothing was invented to paper over that. The rail used to caption the stream
+"<Bot>'s screen" while every bot opened the same desktop; it now says **"Shared
+screen — one desktop, all bots"**, with a line naming the consequence: they see
+the same windows and take turns. `computer-rail-test.cjs` pins the old caption
+out, so it cannot come back by accident.
+
+What would make the promise true, if it is ever worth paying for: one box per
+bot after the trial lifts the machine limit to 100 — a different cost law, and a
+different product (no shared disk). It is not a UI fix.
+
+## Clicking is not starting
+
+Create, resume and fork each spend one of 5/minute, 25/hour, 75/day, so a panel
+that calls the API on every open is a budget a person runs out of by fidgeting.
+Three changes, all in `box-runtime.cjs`:
+
+| Guard | What it stops |
+|---|---|
+| `STATUS_TTL_MS = 8000` cache + in-flight coalescing on `status()` | Shell.jsx re-reads status on every `sheet`/`rail` change; that was 2 CLI round-trips (`box status` + `box info`) per flick. A burst is now one |
+| `START_COOLDOWN_MS = 5000`, answered from the last successful start | The double-click. `starting` only merges callers that OVERLAP; a click 300ms after the last one resolved was a second start |
+| `START_WINDOWS` (4/min, 24/hour, 70/day) refused locally | A doomed start still costs a round-trip when the API is the one refusing, and teaches the next click nothing. One under each real limit, because the dashboard and the user's own shell can spend starts too |
+
+`ensureRunning` reads status with `{ fresh: true }` — deciding "create" from an
+eight-second-old `missing` would be a SECOND machine on a two-machine account.
+`stop()` drops both the cache and the remembered start, or Stop-then-Wake would
+be answered from the cooldown and never actually resume. Opening the Computer
+rail still only ever READS; waking is the button and nothing else.
+`scripts/box-thrift-test.cjs` pins all of it.
+
 ## Standing bans, and why each one is a ban
 
 - **`--no-auto-stop`** — a machine that runs until somebody notices the bill.
@@ -91,7 +141,9 @@ documented behaviour, not a metered measurement — no box was started.
 
 Note the account cap: 20 lux sessions per day, one at a time per box.
 
-**What the AGENTS.md block now does**, in ~180 tokens per turn (up from ~125):
+**What the AGENTS.md block now does**, in ~250 tokens per turn (estimated at
+~4 chars/token from its 1,294 characters of prose; the surrounding comments are
+source, not prompt, and are not billed):
 
 1. Gives the id and the one command shape, with `--timeout` so a hung command
    cannot burn the turn.
@@ -104,8 +156,24 @@ Note the account cap: 20 lux sessions per day, one at a time per box.
 4. Uses `~/hydo/<agentId>` rather than an absolute home, because the docs put
    lux's own output under a different one and the home path was never verified.
 
-Net: **+55 tokens per turn** on a box-enabled teammate, against **tens of
-thousands saved** the first time one of them has to open a web page.
+5. Caps output with a NUMBER — `| head -c 2000` — rather than the advice "keep
+   it small", which a model talks itself out of the moment a log looks
+   interesting. Estimated: a 200KB log is ~50,000 tokens and re-enters context
+   on every later turn of the thread; the same command capped is ~500, and
+   filtered through `rg` first is ~50.
+6. Puts a **ladder** in front of the pixels: `curl -sL <url> | rg <pattern>`
+   first, `lux` only when the page needs a real browser or a login, screenshots
+   never. The rung that matters is the first one — a model told to "check a
+   page" with no cheaper rung named reaches for a browser, and then for a
+   screenshot.
+7. Names the lux limits (one session at a time per box, 20/day per account), so
+   it reads as a tool to aim once, not one to poll.
+
+Net: **~+125 tokens per turn** on a box-enabled teammate, against **tens of
+thousands saved** the first time one of them opens a web page or reads a log.
+All the numbers in this section are arithmetic from documented sizes and the
+~750-pixels-per-token image rule — **estimates, not meterings**. Nothing here
+was measured against a live box; no box was started to write it.
 
 **No polling, anywhere.** `Computer.jsx` refreshes on mount and after an action,
 never on a timer. `ensureRunning` funnels concurrent callers through a single

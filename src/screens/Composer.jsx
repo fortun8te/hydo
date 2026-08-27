@@ -111,6 +111,7 @@ export default function Composer({
   onAttach,
   todos,
   planOwner,
+  planRunning,
   onSlashAction,
   busy,
   onStop,
@@ -485,7 +486,7 @@ export default function Composer({
           current state, not history, so it must not scroll away with the turn
           that produced it, and anchoring it to the composer means it is in the
           same place every time instead of wherever the thread happens to end. */}
-      <PlanCard todos={todos} name={planOwner} />
+      <PlanCard todos={todos} name={planOwner} running={planRunning} />
 
       <button
         type="button"

@@ -60,7 +60,11 @@ assert.ok(/export function stateOf/.test(plan), "the normaliser is shared");
 for (const spell of ["in_progress", "in-progress", "active", "running", "doing"]) {
   assert.ok(plan.includes(`"${spell}"`), `${spell} is a live spelling`);
 }
-assert.ok(botRail.includes("stateOf(t)"), "the rail uses it too");
+// `liveStateOf`, not `stateOf`, as of the "only say active when it's
+// actually active" fix: the rail now gates a live status on `botBusy(agent)`
+// (the same source the roster pip reads) so a stale in_progress left by a
+// finished turn can't still claim to be running.
+assert.ok(botRail.includes("liveStateOf(t, botBusy(agent))"), "the rail gates live on actually being busy");
 assert.ok(!/is-\$\{t\.status\}/.test(botRail), "the rail no longer prints the raw status as a class");
 assert.ok(/\.bot-rail__plan-item\.is-live/.test(rails) && /\.bot-rail__plan-item\.is-done/.test(rails),
   "rails.css keys off the normalised names");

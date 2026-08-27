@@ -240,6 +240,12 @@ export default function Shell({ state }) {
       null
     );
   })();
+  // The strip's own honesty check. `planOwner` above can fall back to a
+  // teammate that merely HAS a plan (last resort, so the strip still shows
+  // something) — that fallback must not silently make PlanCard say a step is
+  // live. `botWorks` against the open conversation is the same test the face
+  // and pip use, so "active" here can never disagree with "spinning" there.
+  const planRunning = !!(planOwner && selected && botWorks(planOwner, selected.id));
 
   /**
    * Hand files to the selected teammate through the native picker.
@@ -639,6 +645,7 @@ export default function Shell({ state }) {
             onAttach={attachFiles}
             todos={planOwner?.todos}
             planOwner={planOwner?.name}
+            planRunning={planRunning}
             onSlashAction={(id) => runCommand(id)}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}

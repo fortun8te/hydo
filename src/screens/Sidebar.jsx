@@ -5,6 +5,7 @@ import { when } from "../lib/blobs.js";
 import { initialOf } from "../lib/marks.js";
 import { botBusy, botWorks, channelWorks, moodForWorking } from "../lib/working.js";
 import { pipOf } from "../lib/presence.js";
+import ActivityMark from "./ActivityMark.jsx";
 
 function moodFor(live) {
   return moodForWorking(live);
@@ -685,6 +686,11 @@ export default function Sidebar({
           const unread = !on && !!entry.unread;
           const pick = picked.includes(entry.id);
           const renaming = rowRenameId === entry.id;
+          // A channel's "activity" belongs to its members, not to the row, so
+          // only a bot row gets a live line here.
+          const activityLine = isChannel
+            ? ""
+            : String(entry.activityDetail || entry.activity || "").trim();
           const RowTag = renaming ? "div" : "button";
           return (
             <RowTag
@@ -768,9 +774,20 @@ export default function Sidebar({
                   <span className="sand-row__time">{when(entry.updatedAt)}</span>
                 </span>
                 <span className="sand-row__last">
-                  <span className="sand-row__last-text">
-                    {entry.draft ? `Draft: ${entry.draft}` : entry.last || " "}
-                  </span>
+                  {/* While a turn is running, the subtitle says what the
+                      teammate is DOING rather than repeating the last message
+                      — which is stale by definition at that moment. Draft
+                      still wins: that is the user's own unsent text. */}
+                  {!entry.draft && live && activityLine ? (
+                    <span className="sand-row__last-text hy-act">
+                      <ActivityMark plugin={entry.activityIcon} size={13} />
+                      <span className="hy-act__text">{activityLine}</span>
+                    </span>
+                  ) : (
+                    <span className="sand-row__last-text">
+                      {entry.draft ? `Draft: ${entry.draft}` : entry.last || " "}
+                    </span>
+                  )}
                   {unread ? <span className="sand-row__unread" aria-label="Unread" /> : null}
                 </span>
               </span>
