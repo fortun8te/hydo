@@ -69,11 +69,22 @@ async function main() {
   const settled = makeIdleState(1);
   idleStep(settled, 0, (x) => x);
   assert.ok(restlessAt(settled, IDLE.SETTLE_MS * 2) === 0, "fully settled after the window");
-  assert.ok(
-    restlessAt(settled, IDLE.SETTLE_MS / 2) < 0.9 &&
-      restlessAt(settled, IDLE.SETTLE_MS / 2) > 0.1,
-    "and gets there gradually"
-  );
+  // Asserted as a PROPERTY, not at fixed timestamps: `since` is now staggered
+  // per seed so faces do not all calm down together, which means the exact
+  // value at SETTLE_MS/2 is seed-dependent. Monotonic decrease is the thing
+  // that actually matters and it holds for every seed.
+  for (const seed of [1, 0.4, 7.7, 12.3]) {
+    const st = makeIdleState(seed);
+    idleStep(st, 0, (x) => x);
+    let prev = restlessAt(st, 0);
+    for (let t = 0; t <= IDLE.SETTLE_MS * 1.2; t += IDLE.SETTLE_MS / 20) {
+      const now = restlessAt(st, t);
+      assert.ok(now <= prev + 1e-9, `restlessness only ever falls (seed ${seed})`);
+      prev = now;
+    }
+    assert.equal(prev, 0, `and reaches zero (seed ${seed})`);
+    assert.ok(restlessAt(st, 0) > 0.5, `but starts high (seed ${seed})`);
+  }
   const early = a.changes.filter((t) => t < 30_000);
   const late = a.changes.filter((t) => t > 80_000);
   const avg = (list) => {
@@ -115,6 +126,35 @@ async function main() {
   const c = run(mod, 9.13, 40_000);
   assert.deepEqual(run(mod, 0.37, 40_000).changes, b.changes, "same seed, same sequence");
   assert.notDeepEqual(c.changes, b.changes, "different seeds diverge");
+
+  // ---- FACES MUST NOT MOVE IN LOCKSTEP -----------------------------------
+  // Faces mount together and share one rAF clock. Starting every stream at
+  // `now` meant every face's first beat fired on the same frame: the seed only
+  // decided WHICH motion and HOW LONG, never WHEN. A row of them changed
+  // posture in unison and read as one animation on three sprites.
+  {
+    const seeds = [0.11, 0.62, 0.87, 3.4, 9.13];
+    const states = seeds.map((x) => makeIdleState(x));
+    const changes = seeds.map(() => []);
+    const last = seeds.map(() => null);
+    for (let t = 0; t < 30000; t += 50) {
+      states.forEach((st, i) => {
+        const r = idleStep(st, t, (x) => x);
+        if (r.kind !== last[i]) {
+          changes[i].push(t);
+          last[i] = r.kind;
+        }
+      });
+    }
+    // Ignore t=0, where every face necessarily starts.
+    const after = changes.map((c) => c.filter((t) => t > 0));
+    for (const c of after) assert.ok(c.length > 3, "each face actually moves");
+    const together = after[0].filter((t) => after.every((c) => c.includes(t)));
+    assert.equal(together.length, 0, `no beat where all five change at once`);
+    // First beats must be spread out, not identical.
+    const firsts = new Set(after.map((c) => c[0]));
+    assert.ok(firsts.size >= 4, `first beats differ across faces, got ${[...firsts]}`);
+  }
 
   // ---- The grid scheduler must be gone from the renderer.
   const uf = fs.readFileSync(path.join(ROOT, "src/umbra/UmbraFace.jsx"), "utf8");

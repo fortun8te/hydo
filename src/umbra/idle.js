@@ -125,8 +125,18 @@ export function idleStep(st, now, ease) {
   if (!s.started) {
     s.started = true;
     s.since = now;
-    s.until = now;
-    s.lookUntil = now;
+    // PHASE OFFSET. Not `= now`.
+    //
+    // Faces mount together and share one rAF clock, so starting every stream
+    // at `now` meant every face's first beat fired on the same frame. The seed
+    // only ever decided WHICH motion and HOW LONG, never WHEN, so a row of
+    // them changed posture in unison and looked like one animation playing on
+    // three sprites. Start each one at a random point already inside its first
+    // beat and they are never aligned to begin with.
+    s.until = now + IDLE.STILL_MIN * (0.15 + 0.85 * hash01(s.seed * 3.37 + 11.7));
+    s.lookUntil = now + IDLE.LOOK_MIN * (0.1 + 0.9 * hash01(s.seed * 9.11 + 4.2));
+    // Stagger the settling too, or they all calm down together.
+    s.since = now - IDLE.SETTLE_MS * 0.5 * hash01(s.seed * 5.53 + 2.9);
   }
 
   const restless = restlessAt(s, now);

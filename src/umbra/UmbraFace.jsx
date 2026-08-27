@@ -341,12 +341,42 @@ function useReducedMotion() {
 // an average brightness; what separates them is how fast you get from the
 // highlight to the shadow. So the core goes near white, the shadow goes deep,
 // and the distance between them is short.
-const CHROME = {
-  core: "#F4F7FB", // key, almost blown
-  body: "#939CAA", // the broad mid, cool
-  deep: "#3A414B",
-  edge: "#12161C", // terminator
-};
+// Chrome needs BANDS, and the bands have to wrap the form.
+//
+// A smooth falloff gives you light grey plastic, which is what the last pass
+// was. What makes something read as a mirror is high-frequency contrast: hard
+// jumps from bright to dark, because a mirror shows you a room with edges in
+// it, not a soft gradient.
+//
+// Banded RADIALLY, not vertically. A vertical band is a straight line across
+// the face (a decal). A radial band is a ring that compresses toward the
+// silhouette exactly the way a reflection does on a curved surface, and it is
+// centred on the light, so it moves with the form instead of sitting on top
+// of it. This is a studio reflection: a bright source, a dark surround, floor
+// bounce coming back at the rim.
+const CHROME_BANDS = [
+  // Vertical after all, but with the horizon LOW.
+  //
+  // The mistake in the first attempt was not that the environment was
+  // vertical, it was that the dark band sat across the middle of the face, on
+  // the eyes, where it reads as a stripe painted on a head. Dropping it to
+  // roughly two thirds down keeps the whole face in the bright sky, puts the
+  // mirror detail in the lower third where a real reflection is busiest, and
+  // leaves the eyes sitting on clean metal.
+  //
+  // Curvature is not this gradient's job. The elliptical rim and the edge
+  // shading below wrap it to the form; this only supplies the environment.
+  [0.0, "#E9EFF7"],
+  [0.14, "#FBFDFF"], // sky
+  [0.44, "#D2DAE5"],
+  [0.6, "#A8B2C0"], // falling toward the horizon
+  [0.655, "#2B313A"], // ── hard: horizon, low and out of the face
+  [0.7, "#242A33"],
+  [0.735, "#8B96A5"], // ── hard: ground
+  [0.83, "#E4E7EC"], // floor bounce, bright
+  [0.9, "#9AA0AA"],
+  [1.0, "#5C636E"],
+];
 
 function isMetal(colorId) {
   return String(colorId || "") === "chrome";
@@ -783,6 +813,15 @@ export default function UmbraFace({
     const gradId = `uf-grad-${gid}`;
     const scaled = paint.scaleX !== 1 || paint.scaleY !== 1;
     const metal = isMetal(tint);
+    // The body's OWN radii, not a single extent. `spec.er` is what the engine
+    // uses to size this silhouette, so a wedge and a teardrop get reflections
+    // shaped like themselves rather than one circle stretched over both.
+    const er = body.spec && body.spec.er;
+    const erx = typeof er === "number" ? er : (er && er.x) || extent;
+    const ery = typeof er === "number" ? er : (er && er.y) || extent;
+    const metalR = Math.max(erx, ery) || extent;
+    const metalSX = metalR ? erx / metalR : 1;
+    const metalSY = metalR ? ery / metalR : 1;
 
     return (
       <svg
@@ -801,53 +840,61 @@ export default function UmbraFace({
         <defs>
           {metal ? (
             <>
-              {/* Same radial geometry the other colours use, offset toward the
-                  key light. Metal just has a much steeper falloff. */}
-              <radialGradient
+              {/* The environment: vertical, spanning the body's real height. */}
+              <linearGradient
                 id={gradId}
                 gradientUnits="userSpaceOnUse"
-                cx={-extent * 0.3}
-                cy={-extent * 0.36}
-                r={extent * 1.55}
+                x1={0}
+                y1={-extent}
+                x2={0}
+                y2={extent}
               >
-                {/* Tight: most of the range is spent in the first third, so
-                    the falloff is fast. A slow, even ramp is what plastic
-                    does. */}
-                <stop offset="0" stopColor={CHROME.core} />
-                <stop offset="0.11" stopColor="#DCE3EC" />
-                <stop offset="0.26" stopColor="#B4BCC8" />
-                <stop offset="0.44" stopColor={CHROME.body} />
-                <stop offset="0.66" stopColor="#5A626D" />
-                <stop offset="0.85" stopColor={CHROME.deep} />
-                <stop offset="1" stopColor={CHROME.edge} />
+                {CHROME_BANDS.map(([off, col]) => (
+                  <stop key={off} offset={off} stopColor={col} />
+                ))}
+              </linearGradient>
+              {/* The FORM. This is what stops the environment reading as a
+                  decal: an elliptical falloff scaled to THIS shape's own
+                  radii, darkening the sides so the body turns away from you.
+                  A teardrop and a hex get their own proportions, not one
+                  circle stretched over both. */}
+              <radialGradient
+                id={`${gradId}-form`}
+                gradientUnits="userSpaceOnUse"
+                cx={0}
+                cy={0}
+                r={metalR}
+                gradientTransform={`translate(${-metalR * 0.16} ${-metalR * 0.2}) scale(${metalSX} ${metalSY})`}
+              >
+                <stop offset="0.3" stopColor="#0A0E14" stopOpacity="0" />
+                <stop offset="0.72" stopColor="#0A0E14" stopOpacity="0.24" />
+                <stop offset="1" stopColor="#070A0F" stopOpacity="0.62" />
               </radialGradient>
-              {/* The specular. Small, hard-edged and nearly white: this one
-                  highlight is doing most of the work of saying "metal". */}
+              {/* Specular: small, hard, near white. */}
               <radialGradient
                 id={`${gradId}-hot`}
                 gradientUnits="userSpaceOnUse"
-                cx={-extent * 0.33}
-                cy={-extent * 0.46}
-                r={extent * 0.3}
+                cx={-metalR * 0.32}
+                cy={-metalR * 0.44}
+                r={metalR * 0.34}
               >
-                <stop offset="0" stopColor="#ffffff" stopOpacity="1" />
-                <stop offset="0.28" stopColor="#ffffff" stopOpacity="0.7" />
-                <stop offset="0.6" stopColor="#ffffff" stopOpacity="0.18" />
+                <stop offset="0" stopColor="#ffffff" stopOpacity="0.98" />
+                <stop offset="0.4" stopColor="#ffffff" stopOpacity="0.4" />
                 <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
               </radialGradient>
-              {/* Fresnel rim. On a dielectric the edge falls into shadow; on
-                  metal it lights UP, and that inversion is a large part of why
-                  something reads as metallic rather than as grey plastic. */}
+              {/* Fresnel rim: metal goes BRIGHT at grazing angles where a
+                  dielectric goes dark. Elliptical, so it hugs the silhouette. */}
               <radialGradient
                 id={`${gradId}-rim`}
                 gradientUnits="userSpaceOnUse"
                 cx={0}
                 cy={0}
-                r={extent}
+                r={metalR}
+                gradientTransform={`scale(${metalSX} ${metalSY})`}
               >
-                <stop offset="0.74" stopColor="#B9C8DE" stopOpacity="0" />
-                <stop offset="0.92" stopColor="#C9D6E8" stopOpacity="0.4" />
-                <stop offset="1" stopColor="#F2F6FC" stopOpacity="0.8" />
+                <stop offset="0.8" stopColor="#CFDCEE" stopOpacity="0" />
+                <stop offset="0.95" stopColor="#DEE8F6" stopOpacity="0.42" />
+                <stop offset="1" stopColor="#F6FAFF" stopOpacity="0.9" />
               </radialGradient>
             </>
           ) : (
@@ -887,6 +934,9 @@ export default function UmbraFace({
                 the silhouette, and drawn after the fill so it sits on top. */}
             {metal && S.bodyD && !(dots && !morphing) ? (
               <g clipPath={`url(#${clipId})`}>
+                {/* Form first, so it darkens the environment; then the
+                    highlights sit on top of the shaded result. */}
+                <path d={S.bodyD} fill={`url(#${gradId}-form)`} />
                 <path d={S.bodyD} fill={`url(#${gradId}-rim)`} />
                 <path d={S.bodyD} fill={`url(#${gradId}-hot)`} />
               </g>
