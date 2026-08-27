@@ -367,7 +367,31 @@ async function probe(provider, opts = {}) {
       return { state: "unauthorized", detail: `${provider.host} answered but rejected the key.` };
     }
     if (!res.ok) return { state: "http", detail: `${provider.host} answered ${res.status}.` };
-    return { state: "ok", detail: `Answering at ${provider.host}.` };
+    // Answering is not the same as being able to serve.
+    //
+    // Ollama on this Mac returns 200 with `{"object":"list","data":null}` when
+    // no model is pulled. "Reachable" is true and useless: you flip to it and
+    // the first turn fails, which looks like a broken app rather than an empty
+    // server. A model listing with nothing in it is its own state, and its own
+    // fix — load a model, not debug a firewall.
+    let names = [];
+    try {
+      const body = await res.json();
+      const rows = Array.isArray(body) ? body : (body && body.data) || [];
+      names = rows.map((m) => (m && (m.id || m.name)) || "").filter(Boolean);
+    } catch {
+      // A 200 we cannot parse is still a live server; say the true, smaller
+      // thing rather than inventing a diagnosis.
+      return { state: "ok", detail: `Answering at ${provider.host}.` };
+    }
+    if (!names.length) {
+      return {
+        state: "empty",
+        detail: `${provider.host} is up but has no model loaded.`,
+        models: [],
+      };
+    }
+    return { state: "ok", detail: `Answering at ${provider.host}.`, models: names };
   } catch (err) {
     // The message can carry the request URL but never a header, so no key can
     // reach it. Still: only the host and a plain cause are surfaced.

@@ -156,10 +156,17 @@ assert.equal(lp.probeUrl("http://host:1/v1/"), "http://host:1/v1/models");
   assert.ok(/probeLocalProvider/.test(settings), "Settings must probe before the user sends a message");
   assert.ok(/STATE_WORD/.test(settings) && /unconfigured: "Not set up"/.test(settings),
     '"Not set up" must not be the same word as "Offline"');
+  // Two states answer "you cannot run a turn here", for different reasons, and
+  // both must block the switch: a placeholder address was never dialled, and an
+  // `empty` server answered 200 with no model loaded (ollama does exactly this
+  // when nothing is pulled). Reporting the second as Reachable was true and
+  // useless — the flip succeeded and the first turn failed.
   assert.ok(
-    /disabled=\{activeStatus\.state === "unconfigured"\}/.test(settings),
-    "an endpoint whose address is still a placeholder cannot be switched to"
+    /activeStatus\.state === "unconfigured"/.test(settings) &&
+      /activeStatus\.state === "empty"/.test(settings),
+    "neither a placeholder address nor a server with no model can be switched to"
   );
+  assert.ok(/empty: "No model loaded"/.test(settings), '"No model loaded" is its own word');
   // Bug 2: the stale provider.
   assert.ok(
     /const local = localByModel\.get\(v\);\s*\n\s*if \(local\) patch\.provider = local\.id;/.test(settings),

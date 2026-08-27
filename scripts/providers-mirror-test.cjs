@@ -38,6 +38,13 @@ assert.ok(keys.includes("fallback_providers"), "and their fallbacks with them");
 
 // The blocks that were already load-bearing — a future edit must not drop one
 // while adding another.
+// Real-profile browsing is read PER PROFILE by Hermes on purpose
+// (tools/browser_tool.py:1435 — "in a multiplexed gateway each profile's config
+// must decide for itself"), so an unmirrored `browser` block reaches no
+// teammate at all. Third instance of this trap here, after mcp_servers and
+// providers, which is why it is pinned rather than trusted.
+assert.ok(keys.includes("browser"), "browser.use_real_profile must reach the teammate's own profile");
+
 for (const k of ["mcp_servers", "skills", "delegation", "approvals"]) {
   assert.ok(keys.includes(k), `${k} must stay mirrored`);
 }

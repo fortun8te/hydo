@@ -201,6 +201,11 @@ const STATE_WORD = {
   unauthorized: "Key rejected",
   http: "Odd reply",
   unconfigured: "Not set up",
+  // Answering, and unable to serve. Ollama returns 200 with `data: null` when
+  // nothing is pulled, so "Reachable" was true and useless — you flip to it and
+  // the first turn fails looking like a broken app. Its own word, because its
+  // own fix: load a model, not debug a firewall.
+  empty: "No model loaded",
   checking: "Checking…",
   unknown: "Unknown",
 };
@@ -378,7 +383,7 @@ export default function Settings({
               // never over the endpoint the user is already running on.
               setLocalPick((prev) => {
                 if (prev === String(settings.provider || "")) return prev;
-                if (st.state !== "ok") return prev;
+                if (st.state !== "ok") return prev;  // `empty` answers but cannot run a turn
                 const cur = statesRef.current[prev];
                 return cur && cur.state === "ok" ? prev : p.id;
               });
@@ -569,7 +574,9 @@ export default function Settings({
                         running={runningLocal ? "local" : "cloud"}
                         cloudLabel={shortModelLabel(cloudRef.current.model)}
                         localLabel={activeLocal.name}
-                        disabled={activeStatus.state === "unconfigured"}
+                        disabled={
+                          activeStatus.state === "unconfigured" || activeStatus.state === "empty"
+                        }
                         onLocal={(wantLocal) => {
                           if (wantLocal) {
                             if (!activeLocal.model) return;

@@ -321,6 +321,22 @@ const MIRROR_KEYS = [
   // nothing for anybody while looking entirely set up.
   "providers",
   "fallback_providers",
+  // Real-profile browsing: `browser.use_real_profile` lets a teammate browse
+  // with the user's OWN logins, from a managed snapshot of their default
+  // Chrome/Edge/Brave profile (never the live one — that would fight for the
+  // lock). It is the answer to "can it see my sessions", and without it a
+  // teammate hits a login wall on every site the user is already signed into.
+  //
+  // It has to be mirrored because Hermes reads it PER PROFILE, deliberately:
+  // tools/browser_tool.py:1435 says "in a multiplexed gateway each profile's
+  // config must decide for itself". Hydo is exactly that gateway, so a value
+  // set in the launch home would have reached nobody — the third time this
+  // trap has appeared here, after mcp_servers and providers.
+  //
+  // Mirroring it also keeps it a per-teammate decision rather than a global
+  // one, which is the right shape for something whose whole risk is that it
+  // browses as YOU.
+  "browser",
   // Subagent routing. Hermes resolves a delegated child's model from
   // `delegation.model` AT EVERY DISPATCH, and empty means "inherit the
   // parent" (config_defaults.py, the delegation block). So a teammate pinned
