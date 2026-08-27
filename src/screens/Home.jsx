@@ -199,7 +199,7 @@ export default function Home({
                     <UmbraFace
                       tint={a.blob}
                       shape={a.shape}
-                      size={44}
+                      size={56}
                       live
                       mood={pip === "work" ? "spin" : "fidget"}
                       poke={false}

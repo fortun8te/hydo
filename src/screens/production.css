@@ -909,6 +909,19 @@
   text-align: left;
 }
 
+/* On the populated page the glow must sit BEHIND the content, not under the
+   floor. The empty screen anchors it to the bottom because the three marks
+   stand in it; here the page scrolls, so a floor-anchored pool is simply off
+   screen and the app loses its one piece of ambient character. Fixed to the
+   pane and lifted, so it reads as light in the room rather than a footer. */
+.sand-home--full::after {
+  position: fixed;
+  bottom: auto;
+  top: 6%;
+  height: 470px;
+  opacity: 0.55;
+}
+
 .hy-home {
   position: relative;
   z-index: 1;
@@ -953,14 +966,13 @@
   color: var(--sand-text-tertiary, #8d8d8d);
 }
 
+/* A number, not a badge. A pill beside a five-letter label reads as debug
+   output, and the count is the least interesting thing on the row. */
 .hy-home__count {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--hy-raised, #2e2e2e);
-  color: var(--sand-text-secondary, #fcfcfc99);
+  color: var(--sand-text-tertiary, #8d8d8d);
 }
 
 .hy-home__empty {
@@ -1030,8 +1042,8 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
-  padding: 14px;
-  min-height: 132px;
+  padding: 16px;
+  min-height: 148px;
   border: 1px solid var(--sand-line, #ffffff12);
   border-radius: 16px;
   background: var(--hy-menu, #1c1c1c);
@@ -1039,7 +1051,8 @@
   font: inherit;
   text-align: left;
   color: inherit;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease,
+    box-shadow 120ms ease;
 }
 .hy-card:hover { background: var(--hy-raised, #2e2e2e); border-color: #ffffff1f; }
 .hy-card:focus-visible { outline: 2px solid var(--sand-accent, #2a92fe); outline-offset: 2px; }
