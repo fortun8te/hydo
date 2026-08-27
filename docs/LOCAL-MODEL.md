@@ -252,11 +252,11 @@ not send it to. `lmstudio` keeps it, because Hermes really does honour it there.
 
 **The lever that does work** on this server is `chat_template_kwargs:
 {enable_thinking: false}` — verified by sending it: `reasoning_content` came
-back empty and the same prompt finished in 3.82s instead of 13.42s. Hermes has
-no config path that puts that on a main-turn request, so today it is something
-to set server-side (the Unsloth/llama.cpp launch flags) if the thinking tokens
-are not worth their seconds. Hydo cannot turn it on for you and does not claim
-to.
+back empty and the same prompt finished in 3.82s instead of 13.42s. It DOES
+reach a main-turn request, through a `providers:` entry's `extra_body` — which
+this file used to say it could not. See *The fast lane* below for what was
+measured on the wire, the one config shape in which it is safe, and why Hydo
+uses it for a single turn and no other.
 
 ### Two minutes of "Working" is not a hang
 
@@ -319,21 +319,105 @@ and 14.8 / 16.0 / 14.5 without. **The rate is flat at ~15.5 tok/s.** Thinking
 costs ~35% MORE TOKENS for the same answer (105 vs 75), not slower tokens. An
 earlier note in this project framed it as a speed-up; that was wrong.
 
-### And Hydo cannot switch it per turn anyway
+### The fast lane: one turn, and it is the one Hydo wrote
 
-`chat_template_kwargs.enable_thinking` is a server-side setting.
-`agent_init.py:436` only merges a provider's `extra_body` when the session's
-provider is literally `custom` or `custom:<name>`; Hydo sends the provider's own
-key (`unsloth`), so an `extra_body` block on a `providers:` entry is **inert**.
-One was added here during testing and removed again rather than left in the file
-looking load-bearing.
+`chat_template_kwargs.enable_thinking` is a **server-side** setting, and Hydo
+now has a way to reach it per turn — but only in one config shape, and the
+shape that looks obvious is the one that silently breaks.
 
-Per-task control would need two provider entries — one thinking, one not — and a
-Hydo-side choice of which to use per turn. Worth doing only if the ~35% token
-saving on easy turns is worth the wrong answers on hard ones being one
-mis-routing away.
+**What was measured.** A stub OpenAI-compatible server on `127.0.0.1:8899`,
+logging every request body, plus the user's own Hermes driving it
+(`hermes -z … --provider …`). Two `providers:` entries, one carrying
+`extra_body.chat_template_kwargs.enable_thinking: false`:
 
----
+| both entries' `api` | `custom:box` sent | `custom:boxfast` sent |
+| --- | --- | --- |
+| the same string | `enable_thinking: false` | `enable_thinking: false` |
+| same, careful entry pinned `true` | `true` | `true` |
+| `127.0.0.1:8899/v1` vs `localhost:8899/v1` | nothing | `enable_thinking: false` |
+
+Read the first two rows again: **two entries on one url are one entry.**
+Whichever comes first in the file decides for every name pointing at that url.
+Routing a greeting to the "fast" entry in that config would have turned
+thinking off for every turn the teammate ever took — the bat-and-ball answer
+going from 0.05 to 0.10 on work the user cares about, bought for two seconds on
+a hello.
+
+The cause is in Hermes, not the YAML: runtime resolution rewrites
+`custom:<name>` down to a bare `custom` (`runtime_provider.py`
+`_resolve_named_custom_runtime`), and `agent_init.py:429` then picks a
+provider's `extra_body` **by base_url alone**. By the time the merge happens
+the name is gone. (An earlier note in this file said the `extra_body` was inert
+because Hydo sends the bare provider key. That was half right: it is inert for
+a lone entry, and *over*-applied when two share a url. Both were measured
+here, on the wire.)
+
+**So the lane requires two different api strings for one server.** That is not
+a workaround; it is the only shape in which the two lanes exist separately.
+One server is reachable two ways more or less always — this box answers on both
+its Tailscale address and its LAN address, and a loopback server answers to both
+`127.0.0.1` and `localhost`:
+
+```yaml
+providers:
+  unsloth:                      # the careful lane — thinking ON, unchanged
+    api: http://100.74.135.83:8888/v1
+    api_key: sk-unsloth-…
+    default_model: unsloth/Qwen3.8-Flash-Next-GGUF
+    transport: chat_completions
+  unsloth-fast:                 # the SAME server, its other address
+    api: http://192.168.1.42:8888/v1
+    api_key: sk-unsloth-…
+    default_model: unsloth/Qwen3.8-Flash-Next-GGUF
+    transport: chat_completions
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+```
+
+Both addresses must be local by the `is_local_endpoint` rules above, or the
+1800s stream timeouts go away with them. `electron/local-providers.cjs`
+`fastLaneFor` enforces all of it — same model or none, both local, neither a
+placeholder, and **different** api strings — and returns nothing at all when
+any of it fails. No twin, no lane: every config that exists today is unchanged,
+and every hosted provider is untouched. Adding the entry is the opt-in and
+deleting it is the opt-out; the fast entry also shows up in Settings' local
+endpoint row, so it is not hidden.
+
+**Which turns take it: exactly one.** The landing turn — the "say hello" brief
+Hydo writes itself when a teammate is created. It carries no tools, no user
+question, and nothing to get wrong, and it is the one turn every bot takes. A
+turn the user typed never takes it, at any effort, on any provider. That is the
+whole routing rule, and it is deliberately smaller than it could be: the
+measurements at the top of this section say a wrong answer is cheap to produce
+and expensive to have.
+
+**What it is worth.** At the measured ~15.5 tok/s, and thinking costing ~35%
+more tokens rather than slower ones, the scratchpad on a two-line greeting is
+somewhere between the "capital of France" case (37 tokens vs 2 → **~2.3s**) and
+the bat-and-ball case (162 tokens vs 5 → **~10.1s**). Not measured for this
+exact prompt — the endpoint was off limits — so treat it as **20–160 tokens,
+1.3s to 10.4s off the one wait a new teammate makes you sit through.**
+
+Against that, one honest cost: a changed provider is a different session to
+`sessionFor`, so the first real turn rebuilds — measured warm re-prefill with
+the same tools and a new message, **2.6s**. So the win is real but not
+enormous, and at the short end it roughly cancels. What the rebuild must not
+cost is the greeting itself: `session.create` takes a seed history
+(`_coerce_seed_history`, server.py:9204) and Hydo now seeds what the teammate
+opened with, as a `system` line rather than a `user` turn nobody typed.
+Without that, a teammate would answer your reply having forgotten the question
+it had just asked you — a much worse bug than a slow hello.
+
+### Verified vs read, for this section
+
+**Run here:** every row of the table above, on the wire, against the stub;
+`custom:<name>` resolving to a `providers:` entry through the user's real
+Hermes; `npm test` (now including `scripts/fast-lane-test.cjs`, which re-runs
+the Hermes half whenever that install is present) and `npm run build`.
+
+**Not run:** anything against `100.74.135.83`. The user asked for the box to be
+left alone, and every number quoted here was already recorded above.
 
 ## What actually costs the time: prefill, and it is cached
 

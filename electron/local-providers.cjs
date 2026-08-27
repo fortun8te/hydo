@@ -169,36 +169,46 @@ function sameApi(a, b) {
 }
 
 /**
- * The no-thinking twin of a provider, addressed the ONE way Hermes will honour.
+ * The no-thinking twin of a provider: the entry a trivially easy turn may run
+ * on, or "" when the config has no safe one.
  *
- * Two things had to be true before this could be built, and both were read out
- * of `~/.hermes/hermes-agent` rather than assumed:
+ * MEASURED, against the user's own Hermes and a stub OpenAI server on
+ * 127.0.0.1:8899 that logged every request body. Two `providers:` entries, one
+ * carrying `extra_body.chat_template_kwargs.enable_thinking: false`:
  *
- *   1. `agent_init.py:429` `_custom_provider_extra_body_for_agent` merges a
- *      provider's `extra_body` into the main turn ONLY when the session's
- *      provider string is literally `custom` or `custom:<name>`. Hydo has
- *      always sent the bare key (`unsloth`), so an `extra_body` on a
- *      `providers:` entry was inert — which is why one was deleted from this
- *      user's config rather than left there looking load-bearing.
- *   2. `custom:<name>` still resolves to that same entry's api/key/model
- *      (`hermes_cli/runtime_provider.py` `_get_named_custom_provider`, via
- *      `custom_provider_aliases`), so the prefix changes what is merged, not
- *      where the request goes.
+ *   same `api` string on both entries
+ *     custom:box -> enable_thinking False   <-- the CAREFUL lane, silently fast
+ *     custom:boxfast -> enable_thinking False
+ *   and with an explicit `true` on the careful entry, both went True instead:
+ *   whichever entry comes FIRST in the file wins for every name on that url.
  *
- * Run here, against the user's own Hermes install, with a two-entry temp
- * config: `custom:boxfast` -> `{chat_template_kwargs:{enable_thinking:false}}`,
- * `custom:box` -> None, and the bare `boxfast` -> None.
+ *   different `api` strings (`http://127.0.0.1:8899/v1` vs
+ *   `http://localhost:8899/v1` — one server, two spellings)
+ *     custom:box     -> no chat_template_kwargs at all
+ *     custom:boxfast -> enable_thinking False
  *
- * A twin qualifies when it is a DIFFERENT entry pointing at the SAME api, has
- * thinking off, and either names no model or names the one this turn will run.
- * The model check mirrors `_custom_provider_model_matches`: an entry whose
- * `model`/`default_model` disagrees with the session model has its extra_body
- * dropped on the floor, so routing to it would look like a fast lane and be a
- * plain slow turn.
+ * The reason is in Hermes: runtime resolution rewrites `custom:<name>` to a
+ * plain `custom` (`runtime_provider.py` `_resolve_named_custom_runtime`), and
+ * `agent_init.py:429` then matches a provider's extra_body **by base_url
+ * alone** when the provider is bare `custom`. Two entries on one url are
+ * indistinguishable by the time the merge happens.
  *
- * Returns "" — i.e. no fast lane — for anything hosted, anything missing, and
- * any config without such a twin. Nothing here writes config: the user opts in
- * by adding the second entry, and deleting it turns the lane off.
+ * So the twin must have a DIFFERENT api string. That is not a limitation to
+ * work around, it is the only shape in which the lane is real: on the same
+ * string, routing a greeting to the fast entry would have turned thinking off
+ * for every turn the teammate ever takes, which is the bat-and-ball answer
+ * being wrong (0.10 instead of 0.05) on work the user cares about. One server
+ * reached two ways — `100.74.135.83` and the same PC's LAN address, or
+ * `127.0.0.1` and `localhost` — satisfies it; see docs/LOCAL-MODEL.md.
+ *
+ * A twin also has to be local, non-placeholder, and either name no model or
+ * name the one this turn runs (`_custom_provider_model_matches` drops the
+ * extra_body of an entry whose model disagrees, which would look like a fast
+ * lane and be a plain slow turn).
+ *
+ * Returns "" for anything hosted, anything missing, and every config that does
+ * not have such a twin — i.e. all of them until the user adds one. That is the
+ * opt-in; deleting the entry is the opt-out.
  */
 function fastLaneFor(id, model, file = CONFIG) {
   const want = String(id || "").trim().toLowerCase();
@@ -224,7 +234,10 @@ function fastLaneFor(id, model, file = CONFIG) {
   for (const [key, cfg] of entries) {
     if (String(key).toLowerCase() === want) continue;
     if (!thinkingOff(cfg)) continue;
-    if (!sameApi(cfg.api || cfg.base_url, api)) continue;
+    const twinApi = String(cfg.api || cfg.base_url || "").trim();
+    if (!twinApi || isPlaceholder(twinApi) || !isLocalHost(hostOf(twinApi))) continue;
+    // The measured rule. Same string, no lane — see above.
+    if (sameApi(twinApi, api)) continue;
     const twinModel = String(cfg.default_model || "").trim().toLowerCase();
     if (twinModel && selfModel && twinModel !== selfModel) continue;
     return `custom:${String(key).trim().toLowerCase().replace(/ /g, "-")}`;

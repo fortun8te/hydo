@@ -2063,9 +2063,14 @@ function createStore(opts = {}) {
     // question and nothing to get wrong — never one the user typed.
     //
     // `fastLaneFor` returns "" unless the user has added a second `providers:`
-    // entry against the same endpoint with `enable_thinking: false`, so this
-    // whole block is inert on every existing config and on every hosted model.
-    // Adding that entry is the opt-in; deleting it is the opt-out.
+    // entry for the same local server, reached by its OTHER address, with
+    // `enable_thinking: false`. The "other address" is not fussiness: measured
+    // on the wire, two entries sharing one api string are one entry to Hermes,
+    // and the first one in the file decides for both — so that config would
+    // have turned thinking off for EVERY turn. docs/LOCAL-MODEL.md has the
+    // table. Until such an entry exists this whole block is inert, on every
+    // config that exists today and on every hosted model. Adding it is the
+    // opt-in; deleting it is the opt-out.
     // `typeof` because the careful lane is the default in every sense: an
     // older or stubbed gateway without this function must fall through to a
     // thinking turn, never fail one.

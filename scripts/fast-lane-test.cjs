@@ -50,7 +50,7 @@ const twin = cfg(
     name: box
     transport: chat_completions
   boxfast:
-    api: http://100.74.135.83:8888/v1
+    api: http://100.74.135.84:8888/v1
     api_key: sk-x
     default_model: ${MODEL}
     name: boxfast
@@ -106,22 +106,82 @@ const hosted = cfg(
 );
 assert.strictEqual(lp.fastLaneFor("cloud", MODEL, hosted), "", "hosted endpoints are never routed");
 
-// A twin on a DIFFERENT machine is a different model behind the same name.
-const elsewhere = cfg(
-  "elsewhere",
+// ── the collision, which is the whole reason for the different-url rule ──
+// Two entries on ONE api string are indistinguishable by the time Hermes
+// merges extra_body: runtime resolution rewrites `custom:<name>` to bare
+// `custom`, and agent_init.py:429 then matches by base_url alone. Measured on
+// the wire against a stub server: with both entries on the same url, BOTH
+// names sent enable_thinking:false — i.e. the careful lane silently stopped
+// thinking, which is the bat-and-ball answer going wrong on real work.
+const collided = cfg(
+  "collided",
   `providers:
   box:
-    api: http://100.74.135.83:8888/v1
+    api: http://127.0.0.1:8888/v1
     default_model: ${MODEL}
-  otherfast:
-    api: http://192.168.1.9:8888/v1
+  boxfast:
+    api: http://127.0.0.1:8888/v1
     default_model: ${MODEL}
     extra_body:
       chat_template_kwargs:
         enable_thinking: false
 `
 );
-assert.strictEqual(lp.fastLaneFor("box", MODEL, elsewhere), "", "a twin must point at the same endpoint");
+assert.strictEqual(
+  lp.fastLaneFor("box", MODEL, collided),
+  "",
+  "same api string on both entries: Hermes cannot tell them apart, so there is no lane"
+);
+// A trailing slash is the same string to Hermes' normalizer, and must be here.
+const slashed = cfg(
+  "slashed",
+  `providers:
+  box:
+    api: http://127.0.0.1:8888/v1
+    default_model: ${MODEL}
+  boxfast:
+    api: http://127.0.0.1:8888/v1/
+    default_model: ${MODEL}
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+`
+);
+assert.strictEqual(lp.fastLaneFor("box", MODEL, slashed), "", "a trailing slash is not a different endpoint");
+
+// One server, two spellings — the shape that measurably works.
+const spelled = cfg(
+  "spelled",
+  `providers:
+  box:
+    api: http://127.0.0.1:8899/v1
+    default_model: ${MODEL}
+  boxfast:
+    api: http://localhost:8899/v1
+    default_model: ${MODEL}
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+`
+);
+assert.strictEqual(lp.fastLaneFor("box", MODEL, spelled), "custom:boxfast");
+
+// A twin that is not on the user's hardware is not a lane either.
+const remoteTwin = cfg(
+  "remotetwin",
+  `providers:
+  box:
+    api: http://127.0.0.1:8888/v1
+    default_model: ${MODEL}
+  cloudfast:
+    api: https://api.example.com/v1
+    default_model: ${MODEL}
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+`
+);
+assert.strictEqual(lp.fastLaneFor("box", MODEL, remoteTwin), "");
 
 // A twin that names a different model has its extra_body dropped by
 // _custom_provider_model_matches — routing there would look fast and be a
@@ -133,7 +193,7 @@ const mismatched = cfg(
     api: http://127.0.0.1:8888/v1
     default_model: ${MODEL}
   boxfast:
-    api: http://127.0.0.1:8888/v1
+    api: http://localhost:8888/v1
     default_model: some/other-model
     extra_body:
       chat_template_kwargs:
@@ -151,7 +211,7 @@ const anyModel = cfg(
     api: http://127.0.0.1:8888/v1
     default_model: ${MODEL}
   boxfast:
-    api: http://127.0.0.1:8888/v1
+    api: http://localhost:8888/v1
     extra_body:
       chat_template_kwargs:
         enable_thinking: false
@@ -166,7 +226,7 @@ const placeholder = cfg(
   box:
     api: http://REPLACE-WITH-PC-LAN-IP:8888/v1
   boxfast:
-    api: http://REPLACE-WITH-PC-LAN-IP:8888/v1
+    api: http://REPLACE-WITH-PC-LAN-IP-2:8888/v1
     extra_body:
       chat_template_kwargs:
         enable_thinking: false
@@ -222,39 +282,56 @@ assert.ok(
 assert.ok(/bat-and-ball/.test(store), "the measurement that motivates the caution is named at the line");
 
 // ── the assumption this is all built on, checked against Hermes itself ───
-// Read code says `custom:<name>` resolves to a providers: entry AND carries its
-// extra_body. Run, rather than believed, whenever the user's Hermes is present.
+// Read code says a named custom provider's extra_body reaches the main turn.
+// Run, rather than believed, whenever the user's Hermes is present. The bare
+// `custom` fallback in agent_init.py:429 matches by base_url ALONE, which is
+// the collision the different-url rule above exists for — so this asks the
+// question the way Hydo asks it: one url, one entry.
 const py = path.join(os.homedir(), ".hermes/hermes-agent/.venv/bin/python3");
 const agentDir = path.join(os.homedir(), ".hermes/hermes-agent");
 let hermesChecked = false;
 if (fs.existsSync(py) && fs.existsSync(path.join(agentDir, "agent/agent_init.py"))) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "hydo-fast-lane-home-"));
-  fs.copyFileSync(twin, path.join(home, "config.yaml"));
+  fs.copyFileSync(spelled, path.join(home, "config.yaml"));
   const script = `
 import os, sys
 sys.path.insert(0, ${JSON.stringify(agentDir)})
 from hermes_cli.config import load_config, get_compatible_custom_providers
+from hermes_cli.runtime_provider import _get_named_custom_provider as named
 from agent.agent_init import _custom_provider_extra_body_for_agent as eb
 cps = get_compatible_custom_providers(load_config())
-url = "http://100.74.135.83:8888/v1"
-print("prefixed:", eb(provider="custom:boxfast", model=${JSON.stringify(MODEL)}, base_url=url, custom_providers=cps))
-print("bare:", eb(provider="boxfast", model=${JSON.stringify(MODEL)}, base_url=url, custom_providers=cps))
+r = named("custom:boxfast")
+print("resolves:", bool(r), r and r["base_url"])
+print("fast:", eb(provider="custom", model=${JSON.stringify(MODEL)},
+                  base_url="http://localhost:8899/v1", custom_providers=cps))
+print("careful:", eb(provider="custom", model=${JSON.stringify(MODEL)},
+                     base_url="http://127.0.0.1:8899/v1", custom_providers=cps))
 `;
+  let out = "";
   try {
-    const out = execFileSync(py, ["-c", script], {
+    out = execFileSync(py, ["-c", script], {
       env: { ...process.env, HERMES_HOME: home },
       encoding: "utf8",
-      timeout: 60000,
+      timeout: 120000,
     });
-    assert.ok(
-      /prefixed: \{'chat_template_kwargs': \{'enable_thinking': False\}\}/.test(out),
-      `custom:<name> must carry extra_body onto the turn; got:\n${out}`
-    );
-    assert.ok(/bare: None/.test(out), `the bare provider key is inert — that is why the prefix exists; got:\n${out}`);
     hermesChecked = true;
   } catch (err) {
-    // A Hermes that will not import is not this repo's test failing.
+    // A Hermes that will not even import is not this repo's test failing.
     console.log(`fast-lane-test: skipped the Hermes check (${String(err.message || err).split("\n")[0]})`);
+  }
+  if (hermesChecked) {
+    assert.ok(
+      /resolves: True http:\/\/localhost:8899\/v1/.test(out),
+      `custom:<name> must resolve to that providers: entry; got:\n${out}`
+    );
+    assert.ok(
+      /fast: \{'chat_template_kwargs': \{'enable_thinking': False\}\}/.test(out),
+      `the twin's url must carry enable_thinking:false onto the turn; got:\n${out}`
+    );
+    assert.ok(
+      /careful: None/.test(out),
+      `and the careful url must carry nothing — if this fails, the lanes have merged; got:\n${out}`
+    );
   }
 }
 
