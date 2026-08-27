@@ -305,6 +305,15 @@ export default function Settings({
   const [localList, setLocalList] = useState([]);
   const [localState, setLocalState] = useState({});
   const [localPick, setLocalPick] = useState("");
+  // Updates pane. `build` is the running build as the MAIN process reports it
+  // (electron/build-info.cjs); nothing about it is typed into this file.
+  const [build, setBuild] = useState(null);
+  const [buildCheck, setBuildCheck] = useState(null);
+  // "" | "confirm" | "running" | "done" | "failed" — a two-step control,
+  // because the first click starts a 90-second build that swaps the app in
+  // /Applications and the user is told that before it happens, not after.
+  const [rebuild, setRebuild] = useState("");
+  const [rebuildNote, setRebuildNote] = useState("");
   const title = PANES.find((item) => item.id === pane)?.label || "General";
   const chatModel = chatModelOf(settings);
 
@@ -334,6 +343,27 @@ export default function Settings({
       gone = true;
     };
   }, [pane, selectedId, selectedKind, members]);
+
+  // Read the build once the pane is opened. Not on mount: it shells out to git
+  // and the overwhelmingly common case is that nobody opens Updates at all.
+  useEffect(() => {
+    if (pane !== "updates") return undefined;
+    let gone = false;
+    const load = window.hydo?.checkBuild;
+    if (typeof load !== "function") return undefined;
+    Promise.resolve(load())
+      .then((res) => {
+        if (gone || !res) return;
+        setBuild(res.info || null);
+        setBuildCheck(res.check || null);
+      })
+      .catch(() => {
+        if (!gone) setBuildCheck({ state: "unknown", reason: "Could not read the build." });
+      });
+    return () => {
+      gone = true;
+    };
+  }, [pane]);
 
   useEffect(() => {
     const load = window.hydo?.listModels;

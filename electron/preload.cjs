@@ -117,6 +117,13 @@ contextBridge.exposeInMainWorld("hydo", {
   pickFiles: () => ipcRenderer.invoke("hydo:pickFiles"),
   attachAny: (agentId, filePath) => ipcRenderer.invoke("hydo:attachAny", agentId, filePath),
   openExternal: (url) => ipcRenderer.invoke("hydo:openExternal", url),
+  // Updates. No server exists — these compare the running build against the
+  // working copy it was built from, and rebuild from it. See build-info.cjs.
+  buildInfo: () => ipcRenderer.invoke("hydo:buildInfo"),
+  checkBuild: () => ipcRenderer.invoke("hydo:checkBuild"),
+  rebuildAndInstall: () => ipcRenderer.invoke("hydo:rebuildAndInstall"),
+  relaunch: () => ipcRenderer.invoke("hydo:relaunch"),
+
   readArtifact: (id) => ipcRenderer.invoke("hydo:readArtifact", id),
   listArtifacts: (botId) => ipcRenderer.invoke("hydo:listArtifacts", botId),
   deleteArtifact: (id) => ipcRenderer.invoke("hydo:deleteArtifact", id),

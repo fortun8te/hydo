@@ -1,10 +1,23 @@
 # Hydo
 
-Desktop app: Electron 42, React 19, Vite. Entry is `electron/main.cjs`. The renderer lives in `src/`.
+**An open-source desktop app for a team of AI teammates — inspired by Grok Bot, running on Hermes Agent, and yours to run on your own hardware.**
 
-It is a Hydo Bot client: a roster of always-on named teammates you chat with, not a single chatbot. Layout and chrome follow the Grok Bot UI, but the product name is Hydo Bot. Do not put "Grok" in any user-facing string.
+Not a chatbot with one window. A roster of named, always-on teammates: each has its own memory, its own workspace on disk, its own tools, and its own animated face. You talk to them in threads, they talk to each other in channels, and they get on with things on a schedule while you are not looking.
 
-Turns run on Hermes Agent over its `tui_gateway` JSON-RPC protocol (`electron/hermes-gateway.cjs`, `docs/HERMES-GATEWAY.md`). OpenRouter (`electron/store.cjs`) is a fallback only, used when Hermes is unavailable.
+MIT licensed. Electron 42, React 19, Vite. Entry is `electron/main.cjs`; the renderer lives in `src/`.
+
+## What makes it different
+
+- **Runs on your hardware if you want it to.** Point it at any OpenAI-compatible endpoint — an Unsloth server, LM Studio, Ollama — and switch between that and a hosted model with one control. The app tells you honestly whether your endpoint is answering *before* you send a message, because a local server that is off looks exactly like a broken model.
+- **One shared Linux machine for the whole team.** Files, installed software and browser logins live on its disk, so a teammate that signs into something once leaves it signed in for the next one. Billed by the second and switched off when idle.
+- **It says what it is doing.** "Opening a pull request on GitHub", with the real brand mark — read from the actual tool call, not guessed.
+- **Everything is measured.** `docs/` records what things cost and what was tested versus merely read. Several entries are corrections of earlier claims that turned out to be wrong.
+
+Turns run on [Hermes Agent](https://hermes-agent.nousresearch.com) over its `tui_gateway` JSON-RPC protocol (`electron/hermes-gateway.cjs`, `docs/HERMES-GATEWAY.md`). OpenRouter is a fallback only, used when Hermes is unavailable.
+
+## Not affiliated with xAI
+
+Hydo is an independent project. The layout and interaction model take inspiration from Grok Bot's desktop client; the name, the code and the backend are its own, and no user-facing string in the app says "Grok" except where it truthfully names xAI's CLI as a coding harness. Contributors: keep it that way.
 
 ## Quick start
 

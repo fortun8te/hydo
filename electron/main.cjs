@@ -6,6 +6,11 @@ const gateway = require("./hermes-gateway.cjs");
 const plugins = require("./hermes-plugins.cjs");
 const boxRuntime = require("./box-runtime.cjs");
 const localProviders = require("./local-providers.cjs");
+const buildInfo = require("./build-info.cjs");
+
+// One rebuild at a time. Two concurrent `npm run pack` runs share one dist/
+// directory and would race each other into a corrupt bundle.
+let rebuilding = false;
 
 // Every Hermes-backed handler below degrades to a truthful empty answer rather
 // than rejecting into the renderer: `available()` false must leave the app
@@ -811,6 +816,42 @@ app.whenReady().then(() => {
     shell.openExternal(raw);
     return { ok: true };
   });
+  // ── Updates ────────────────────────────────────────────────────────────
+  // There is no update server: no git remote, no valid gh token, no
+  // electron-updater. What exists is the working copy this build came from, so
+  // "update" means "compare against, and rebuild from, that checkout".
+  // electron/build-info.cjs holds the whole mechanism and the reasoning.
+  ipcMain.handle("hydo:buildInfo", () => ok({ info: buildInfo.buildInfo(app.isPackaged) }));
+  ipcMain.handle("hydo:checkBuild", () => {
+    const info = buildInfo.buildInfo(app.isPackaged);
+    return ok({ info, check: buildInfo.check(info) });
+  });
+  ipcMain.handle("hydo:rebuildAndInstall", async () => {
+    const info = buildInfo.buildInfo(app.isPackaged);
+    // Never while a turn is in flight. `npm run pack` pegs the machine for a
+    // minute and a half and then swaps the bundle out from under a running
+    // teammate; a half-finished answer is not something to spend on an update.
+    const busy = (store.getState().agents || []).filter((a) => a.status === "working");
+    if (busy.length) {
+      return { ok: false, reason: "busy", detail: `${busy[0].name || "A teammate"} is mid-turn.` };
+    }
+    if (rebuilding) return { ok: false, reason: "already-running" };
+    rebuilding = true;
+    try {
+      return await buildInfo.rebuildAndInstall({ repo: info.repo });
+    } finally {
+      rebuilding = false;
+    }
+  });
+  // Asked for explicitly by the pane, never done as a side effect of the
+  // install: relaunching without being asked is a crash with a nice name.
+  ipcMain.handle("hydo:relaunch", () => {
+    flushStore();
+    app.relaunch();
+    app.exit(0);
+    return { ok: true };
+  });
+
   ipcMain.handle("hydo:readArtifact", (_e, id) => store.readArtifact(id));
   ipcMain.handle("hydo:listArtifacts", (_e, botId) => ok({ artifacts: store.listArtifacts(botId) }));
   ipcMain.handle("hydo:deleteArtifact", (_e, id) => {

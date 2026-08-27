@@ -22,3 +22,7 @@ _cr.mjs
 
 # electron-builder output
 dist/mac-arm64/
+
+# Written by scripts/stamp-build.cjs on every build. It describes the machine
+# and the moment, not the source — committing it would make every build a diff.
+electron/build-stamp.json
