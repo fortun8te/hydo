@@ -45,6 +45,279 @@ function isSvgFence(lang, text) {
   return /^\s*<svg[\s>]/i.test(String(text || ""));
 }
 
+/* --------------------------------------------------------------------------
+   ```chart — the one charting mechanism a teammate gets.
+
+   A fenced block, tagged `chart`, whose body is JSON. Small schema on
+   purpose: if it can't be described in AGENTS.md in a couple of lines (see
+   electron/bot-home.cjs AGENTS_STAMP), it's too complicated to expect a model
+   to emit reliably.
+
+     { "type": "bar" | "line",
+       "title"?: string,
+       "labels": string[],
+       "series": [{ "name"?: string, "values": (number|null)[] }] }
+
+     { "type": "stat", "label"?: string, "value": string|number, "delta"?: string }
+
+   `null` in `values` means "no data for this point" — it is skipped, never
+   drawn as zero. That is the whole "never invent data" rule as code: nothing
+   here fills a gap.
+   -------------------------------------------------------------------------- */
+
+const CHART_COLORS = [
+  "var(--sand-data-blue-3, #1084fe)",
+  "var(--sand-data-purple-3, #9159fe)",
+  "var(--sand-data-green-3, #00c972)",
+  "var(--sand-data-orange-3, #ff6700)",
+  "var(--sand-data-red-3, #ff263c)",
+  "var(--sand-data-yellow-3, #ff9800)",
+];
+
+function isChartFence(lang) {
+  return String(lang || "").trim().toLowerCase() === "chart";
+}
+
+// Total: returns { ok:false } for anything that isn't a well-formed spec, so
+// the caller can fall back to showing the fence as code — same contract as
+// svgDataUri above and Tex's KaTeX fallback. Never throws.
+function parseChartSpec(text) {
+  let obj;
+  try {
+    obj = JSON.parse(String(text || ""));
+  } catch {
+    return { ok: false };
+  }
+  if (!obj || typeof obj !== "object") return { ok: false };
+  const type = toText(obj.type).trim().toLowerCase();
+  const title = toText(obj.title).trim();
+
+  if (type === "stat") {
+    if (obj.value == null) return { ok: false };
+    const value = toText(obj.value).trim();
+    if (!value) return { ok: false };
+    return {
+      ok: true,
+      spec: {
+        type: "stat",
+        title,
+        label: toText(obj.label).trim(),
+        value,
+        delta: obj.delta == null ? "" : toText(obj.delta).trim(),
+      },
+    };
+  }
+
+  if (type === "bar" || type === "line") {
+    const labels = Array.isArray(obj.labels) ? obj.labels.map((l) => toText(l)) : null;
+    const rawSeries = Array.isArray(obj.series) ? obj.series : null;
+    if (!labels || !labels.length || !rawSeries || !rawSeries.length) return { ok: false };
+    const series = [];
+    for (const s of rawSeries) {
+      if (!s || typeof s !== "object" || !Array.isArray(s.values)) return { ok: false };
+      series.push({
+        name: toText(s.name).trim(),
+        // A missing/non-finite value stays null — a gap, not a zero.
+        values: s.values.map((v) => (typeof v === "number" && Number.isFinite(v) ? v : null)),
+      });
+    }
+    const hasAny = series.some((s) => s.values.some((v) => v != null));
+    if (!hasAny) return { ok: false };
+    return { ok: true, spec: { type, title, labels, series } };
+  }
+
+  return { ok: false };
+}
+
+function ChartStat({ spec }) {
+  return (
+    <div className="hy-rc-chart-stat">
+      {spec.label ? <span className="hy-rc-chart-stat-label">{spec.label}</span> : null}
+      <span className="hy-rc-chart-stat-value">{spec.value}</span>
+      {spec.delta ? <span className="hy-rc-chart-stat-delta">{spec.delta}</span> : null}
+    </div>
+  );
+}
+
+// Shared geometry for bar/line: a fixed-viewBox plot the SVG scales to fit
+// its container, so the figure never forces the bubble wider than it is.
+const CHART_W = 480;
+const CHART_H = 220;
+const CHART_PAD = { top: 14, right: 12, bottom: 26, left: 12 };
+
+function ChartBars({ spec }) {
+  const { labels, series } = spec;
+  const n = labels.length;
+  const plotW = CHART_W - CHART_PAD.left - CHART_PAD.right;
+  const plotH = CHART_H - CHART_PAD.top - CHART_PAD.bottom;
+  const values = series.flatMap((s) => s.values).filter((v) => v != null);
+  const max = values.length ? Math.max(...values, 0) : 1;
+  const min = Math.min(0, ...values);
+  const span = max - min || 1;
+  const y0 = CHART_PAD.top + (plotH * max) / span; // pixel y of the zero line
+  const groupW = plotW / n;
+  const barW = Math.max(2, (groupW * 0.62) / series.length);
+
+  return (
+    <svg
+      className="hy-rc-chart-svg"
+      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+      role="img"
+      aria-label={spec.title || "Bar chart"}
+    >
+      <line
+        className="hy-rc-chart-axis"
+        x1={CHART_PAD.left}
+        x2={CHART_W - CHART_PAD.right}
+        y1={y0}
+        y2={y0}
+      />
+      {labels.map((label, i) => {
+        const cx = CHART_PAD.left + groupW * i + groupW / 2;
+        return (
+          <g key={i}>
+            {series.map((s, si) => {
+              const v = s.values[i];
+              if (v == null) return null;
+              const h = (Math.abs(v) * plotH) / span;
+              const x = cx - (series.length * barW) / 2 + si * barW;
+              const y = v >= 0 ? y0 - h : y0;
+              return (
+                <rect
+                  key={si}
+                  className="hy-rc-chart-bar"
+                  x={x}
+                  y={y}
+                  width={Math.max(1, barW - 1.5)}
+                  height={Math.max(0, h)}
+                  rx={1.5}
+                  fill={CHART_COLORS[si % CHART_COLORS.length]}
+                />
+              );
+            })}
+            <text className="hy-rc-chart-label" x={cx} y={CHART_H - 8} textAnchor="middle">
+              {label.length > 10 ? `${label.slice(0, 9)}…` : label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function ChartLine({ spec }) {
+  const { labels, series } = spec;
+  const n = labels.length;
+  const plotW = CHART_W - CHART_PAD.left - CHART_PAD.right;
+  const plotH = CHART_H - CHART_PAD.top - CHART_PAD.bottom;
+  const values = series.flatMap((s) => s.values).filter((v) => v != null);
+  const max = values.length ? Math.max(...values) : 1;
+  const min = values.length ? Math.min(...values, 0) : 0;
+  const span = max - min || 1;
+  const stepX = n > 1 ? plotW / (n - 1) : 0;
+  const xAt = (i) => CHART_PAD.left + stepX * i;
+  const yAt = (v) => CHART_PAD.top + plotH - ((v - min) * plotH) / span;
+
+  return (
+    <svg
+      className="hy-rc-chart-svg"
+      viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+      role="img"
+      aria-label={spec.title || "Line chart"}
+    >
+      <line
+        className="hy-rc-chart-axis"
+        x1={CHART_PAD.left}
+        x2={CHART_W - CHART_PAD.right}
+        y1={CHART_PAD.top + plotH}
+        y2={CHART_PAD.top + plotH}
+      />
+      {series.map((s, si) => {
+        // A null value breaks the line rather than being interpolated across
+        // — draw one <polyline> per unbroken run of real points.
+        const runs = [];
+        let cur = [];
+        s.values.forEach((v, i) => {
+          if (v == null) {
+            if (cur.length) runs.push(cur);
+            cur = [];
+          } else {
+            cur.push([xAt(i), yAt(v)]);
+          }
+        });
+        if (cur.length) runs.push(cur);
+        const color = CHART_COLORS[si % CHART_COLORS.length];
+        return (
+          <g key={si}>
+            {runs.map((pts, ri) => (
+              <polyline
+                key={ri}
+                className="hy-rc-chart-line"
+                points={pts.map((p) => p.join(",")).join(" ")}
+                fill="none"
+                stroke={color}
+              />
+            ))}
+            {s.values.map((v, i) =>
+              v == null ? null : (
+                <circle key={i} className="hy-rc-chart-dot" cx={xAt(i)} cy={yAt(v)} r={2.4} fill={color} />
+              )
+            )}
+          </g>
+        );
+      })}
+      {labels.map((label, i) => (
+        <text key={i} className="hy-rc-chart-label" x={xAt(i)} y={CHART_H - 8} textAnchor="middle">
+          {label.length > 10 ? `${label.slice(0, 9)}…` : label}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+function ChartLegend({ series }) {
+  if (series.length < 2 || !series.some((s) => s.name)) return null;
+  return (
+    <div className="hy-rc-chart-legend">
+      {series.map((s, i) => (
+        <span className="hy-rc-chart-legend-item" key={i}>
+          <span
+            className="hy-rc-chart-legend-swatch"
+            aria-hidden="true"
+            style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+          />
+          {s.name || `Series ${i + 1}`}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * <ChartBlock spec /> — spec is the validated object from parseChartSpec.
+ * The bounded, titled card every chart type sits in: reuses the same
+ * radius/hairline/elevated-surface language as .hy-rc-task and .hy-rc-linkcard
+ * rather than inventing a new card style.
+ */
+function ChartBlock({ spec }) {
+  return safe(
+    () => (
+      <figure className="hy-rc hy-rc-chart">
+        {spec.title ? <figcaption className="hy-rc-chart-title">{spec.title}</figcaption> : null}
+        {spec.type === "stat" ? (
+          <ChartStat spec={spec} />
+        ) : (
+          <>
+            {spec.type === "bar" ? <ChartBars spec={spec} /> : <ChartLine spec={spec} />}
+            <ChartLegend series={spec.series} />
+          </>
+        )}
+      </figure>
+    ),
+    null
+  );
+}
+
 /**
  * SVG source to a data: URI for <img>.
  *
@@ -737,6 +1010,15 @@ function MdBlock({ block, idx, caret }) {
         </figure>
       );
     }
+  }
+
+  // ```chart — draw it, don't print it. A malformed body (bad JSON, missing
+  // fields) falls through to the plain code-fence render below rather than a
+  // blank gap or a half-built figure — same degrade-honestly contract as the
+  // ```svg fence and Tex's KaTeX fallback above.
+  if (b.type === "code" && isChartFence(b.lang) && !caret) {
+    const { ok, spec } = safe(() => parseChartSpec(b.text), { ok: false });
+    if (ok) return <ChartBlock spec={spec} />;
   }
 
   if (b.type === "code") {

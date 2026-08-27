@@ -835,6 +835,12 @@ function createStore(opts = {}) {
   // Siblings of `file`, so the rename below stays on one filesystem.
   const tmpFile = `${file}.tmp`;
   const backupFile = `${file}.bak`;
+  // Second generation. One `.bak` only survives ONE bad write: the write that
+  // damages state.json also rotates the last good copy out of `.bak`, so two
+  // in a row (a crash loop on launch is exactly that) leaves nothing. `.bak2`
+  // costs a rename, not a copy, and an older build simply ignores the file.
+  const backup2File = `${file}.bak2`;
+  const backupTmpFile = `${file}.bak.tmp`;
   const uuid = opts.uuid || randomUUID;
   const now = opts.now || nowIso;
   const complete = opts.complete || defaultComplete;
@@ -895,7 +901,23 @@ function createStore(opts = {}) {
   function load() {
     const readIf = (p) => {
       try {
-        return normalizeState(JSON.parse(fs.readFileSync(p, "utf8")));
+        const raw = JSON.parse(fs.readFileSync(p, "utf8"));
+        // Structure gate, and the reason this is not just `JSON.parse`.
+        //
+        // Measured: a file holding `null`, `[]`, or `{"agents":{...}}` PARSES,
+        // so the old check passed it straight to `normalizeState`, which
+        // answers anything it does not recognise with a fresh empty seed —
+        // and `load` then saved that seed over the file. Same total wipe as
+        // the truncation bug, reached through valid JSON. It is also the
+        // downgrade case: a newer build that moves the roster elsewhere must
+        // not have its file emptied by an older build that cannot see it.
+        //
+        // A roster ARRAY is the one thing every version of this file has had.
+        // No array, no roster: treat the file as unreadable, reach for the
+        // backups, and preserve the bytes instead of overwriting them.
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+        if (!Array.isArray(raw.agents)) return null;
+        return normalizeState(raw);
       } catch {
         return null;
       }
@@ -906,9 +928,18 @@ function createStore(opts = {}) {
       return;
     }
     const hasPrimary = fs.existsSync(file);
-    const backup = readIf(backupFile);
+    const backup = readIf(backupFile) || readIf(backup2File);
     if (backup) {
       state = backup;
+      // The damaged primary is evidence: keep it before `save()` renames a
+      // good copy over the top of it.
+      if (hasPrimary) {
+        try {
+          fs.renameSync(file, `${file}.corrupt-${Date.now()}`);
+        } catch {
+          /* best effort — recovering the roster matters more */
+        }
+      }
       // Put the good copy back at the real path before anything else writes.
       save();
       return;
@@ -962,15 +993,56 @@ function createStore(opts = {}) {
       // roster over the top. rename(2) within one directory is atomic, so the
       // file at `file` is always a complete state — the previous one until the
       // new one is entirely on disk.
-      fs.writeFileSync(tmpFile, JSON.stringify(state));
-      // Keep the outgoing copy as the fallback the loader reaches for. Best
-      // effort: no state.json yet on the very first write.
+      // fsync before the rename. rename(2) is atomic with respect to other
+      // READERS, but it says nothing about power loss: without this the
+      // directory entry can reach the platter while the 470KB of data behind
+      // it has not, which comes back as a state.json full of zero bytes.
+      const fd = fs.openSync(tmpFile, "w");
       try {
-        fs.copyFileSync(file, backupFile);
+        fs.writeFileSync(fd, JSON.stringify(state));
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      // Backups are taken from the TMP file, not from `file`.
+      //
+      // Copying `file` meant the backup was one generation behind — recovering
+      // from a crash lost whichever teammate had just been created — and worse,
+      // if something outside this process had already damaged state.json, that
+      // copy wrote the damage over the last good copy. `tmpFile` is content
+      // this process just serialised and fsynced, so `.bak` is now always a
+      // COMPLETE state, and always the newest one.
+      //
+      // Order matters: at no point may every copy be missing or partial.
+      // bak -> bak2 (file still good), tmp -> bak via rename (file still
+      // good), then tmp -> file. A crash between any two steps leaves at
+      // least one complete copy for `load` to find.
+      try {
+        fs.renameSync(backupFile, backup2File);
       } catch {
-        /* first write, or the old one is already unreadable */
+        /* no previous backup: the very first write */
+      }
+      try {
+        fs.copyFileSync(tmpFile, backupTmpFile);
+        // Renamed in, never written in place: a copy interrupted halfway is a
+        // truncated backup, which is the one thing a backup may not be.
+        fs.renameSync(backupTmpFile, backupFile);
+      } catch {
+        /* backup is best effort; the real file below is not */
       }
       fs.renameSync(tmpFile, file);
+      // And fsync the DIRECTORY, so the rename itself is durable. Fails on
+      // some filesystems (and on Windows); the write above still stands.
+      try {
+        const dfd = fs.openSync(dir, "r");
+        try {
+          fs.fsyncSync(dfd);
+        } finally {
+          fs.closeSync(dfd);
+        }
+      } catch {
+        /* directory fsync unsupported here */
+      }
     } catch {
       /* disk full or permissions: the app keeps working from memory */
     }

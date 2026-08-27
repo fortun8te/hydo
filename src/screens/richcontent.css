@@ -1171,6 +1171,122 @@ button.hy-rc-image-tile {
 }
 
 
+/* -- chart card ------------------------------------------------------------
+   ```chart draws as a bounded, titled card — the same radius, hairline and
+   elevated-surface language as .hy-rc-task and .hy-rc-linkcard above, so a
+   chart doesn't read as a foreign widget dropped into the transcript. Series
+   colour comes from --sand-data-*-3, which is defined per data-theme in
+   kit/tokens.css, so a chart drawn dark stays legible flipped to light. */
+
+.hy-rc.hy-rc-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, 100%);
+  margin: 0;
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: var(--sand-bg-elevated, #181818);
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-rc .hy-rc-chart-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--sand-font-weight-semibold, 600);
+  line-height: 1.3;
+  color: var(--sand-text-primary, #fcfcfc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hy-rc .hy-rc-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.hy-rc .hy-rc-chart-axis {
+  stroke: var(--sand-border-weak, #fcfcfc1a);
+  stroke-width: 1;
+}
+
+.hy-rc .hy-rc-chart-bar {
+  transition: opacity var(--cursor-duration-fast, 120ms) var(--cursor-easing-out, ease-out);
+}
+
+.hy-rc .hy-rc-chart-line {
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.hy-rc .hy-rc-chart-dot {
+  stroke: var(--sand-bg-elevated, #181818);
+  stroke-width: 1;
+}
+
+.hy-rc .hy-rc-chart-label {
+  font-family: var(--cursor-font-family-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 9px;
+  fill: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-rc .hy-rc-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hy-rc .hy-rc-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-rc .hy-rc-chart-legend-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* -- stat / KPI figure: one number, big, with an optional label + delta -- */
+.hy-rc .hy-rc-chart-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hy-rc .hy-rc-chart-stat-label {
+  font-size: 11px;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-rc .hy-rc-chart-stat-value {
+  font-size: 28px;
+  font-weight: var(--sand-font-weight-semibold, 600);
+  line-height: 1.15;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-variant-numeric: tabular-nums;
+}
+
+.hy-rc .hy-rc-chart-stat-delta {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: var(--sand-font-weight-medium, 500);
+  background: var(--sand-fill-neutral-subtle, #77777717);
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
 /* -- task lists ---------------------------------------------------------- */
 /* Presentational: a record of what the bot said, not a control. No pointer
    cursor and no hover, so it never looks tickable. */

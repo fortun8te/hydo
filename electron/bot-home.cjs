@@ -147,6 +147,7 @@ This folder is your sandbox. Write files here.
 - Team: \`SHARED.md\`. Private: the **memory** tool.
 - Desktop: Hermes \`computer_use\` only. No cua, no vision_analyze for clicking.
 - Heavy coding: the harness under **Models** below (Grok Build, OpenCode, Cursor, or this shell).
+- Data: use a real markdown table. For a chart, a fenced \`\`\`chart block of JSON: \`{"type":"bar"|"line","title"?,"labels":[...],"series":[{"name"?,"values":[num|null,...]}]}\` or \`{"type":"stat","label"?,"value","delta"?}\`. Omit unknown values as \`null\` — never invent one.
 `;
 
 /**
