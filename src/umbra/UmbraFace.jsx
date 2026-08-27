@@ -315,41 +315,38 @@ function useReducedMotion() {
 
 // -------------------------------------------------------------- chrome
 //
-// Chrome is not a colour with shading on it. A polished metal ball is almost
-// entirely a MIRROR: what you read as "chrome" is the room reflected in it —
-// bright sky along the top, a hard dark band where the horizon wraps, a
-// lighter bounce off the floor below that, and a thin specular hit near the
-// top where the light source is.
+// WHAT WENT WRONG THE FIRST THREE TIMES
 //
-// A radial gradient cannot say that. It only knows distance from a point, so
-// it produces a shiny plastic ball. This is a VERTICAL ramp with deliberately
-// tight stops: the sharp transitions are what the eye reads as polish, and
-// softening them turns it back into plastic.
-// Tuned against the FULL body, top to bottom. Chrome on a dark app has to
-// stay bright overall or it reads as a hole in the page, so the darkest value
-// here is a mid-slate, not black — the contrast comes from the sharpness of
-// the horizon, not from how far down the ramp goes.
-const CHROME_RAMP = [
-  // Stops are NOT evenly spread. On a curved body the reflected environment
-  // compresses toward the poles: near the top and bottom you are seeing a
-  // huge solid angle squeezed into a few pixels, so the bands bunch up there
-  // and stretch out across the middle. Evenly spaced stops give you flat
-  // horizontal stripes, which is a decal, not a reflection.
-  [0.0, "#7C8798"],
-  [0.045, "#C9D5E4"],
-  [0.075, "#F2F7FD"], // sky, compressed hard against the top edge
-  [0.14, "#DCE6F2"],
-  [0.3, "#A9B6C6"],   // long stretch across the belly
-  [0.43, "#7C8896"],
-  [0.472, "#1A1F27"], // ── HARD: horizon
-  [0.518, "#141920"],
-  [0.545, "#4E5762"], // ── HARD: ground plane
-  [0.66, "#8B9099"],
-  [0.775, "#E9E4DA"], // warm floor bounce
-  [0.9, "#A09C97"],   // compressing again toward the bottom pole
-  [0.955, "#6A6E77"],
-  [1.0, "#8A9099"],
-];
+// I built an environment map: a vertical ramp with a horizon line, the way a
+// chrome ball reflects a room. Pasted onto this body it looked exactly like
+// what it was, a 2D photograph of a horizon stuck to a 3D shape. Every pixel
+// on a row was the same colour, so the band cut straight across the face and
+// read as a stripe. Tuning the stops could not fix it, because the problem was
+// never the stops.
+//
+// These are CHARACTERS, and the other eleven colours look right because they
+// are lit — one light, from above and to the left, falling off around a form.
+// Chrome is not a different lighting model. It is the same lighting model with
+// a metal's response curve:
+//
+//   * a diffuse term that is dark and slightly blue, because polished metal
+//     reflects almost no light diffusely
+//   * a specular term that is narrow, bright and travels, because it does
+//     reflect nearly all of it in one direction
+//   * a rim, because grazing angles on metal go bright, not dark
+//
+// So there is no texture here at all. It is a radial fall-off like every other
+// colour, with the contrast pushed and the highlight made small and hard.
+// Polish is CONTRAST, not lightness. A matte grey and a chrome ball can share
+// an average brightness; what separates them is how fast you get from the
+// highlight to the shadow. So the core goes near white, the shadow goes deep,
+// and the distance between them is short.
+const CHROME = {
+  core: "#F4F7FB", // key, almost blown
+  body: "#939CAA", // the broad mid, cool
+  deep: "#3A414B",
+  edge: "#12161C", // terminator
+};
 
 function isMetal(colorId) {
   return String(colorId || "") === "chrome";
@@ -804,87 +801,53 @@ export default function UmbraFace({
         <defs>
           {metal ? (
             <>
-              {/* Vertical, in the BODY's own space, so the reflection stays
-                  put while the head turns. A reflection that rotates with the
-                  object is the classic tell that it is painted on. */}
-              {/* Bounds are the BODY's extent, not `paint.r`.
-                  `paint.r` is `max(rx,ry) * 1.5 * lightSpread` — about 1.4x
-                  the real radius, because it was sized for a light falloff
-                  that is meant to spill past the silhouette. Using it here
-                  meant the body only ever saw the middle ~70% of the ramp:
-                  the blown-out sky and the terminator landed outside the
-                  shape and the visible part was a muddy grey band. */}
-              <linearGradient
+              {/* Same radial geometry the other colours use, offset toward the
+                  key light. Metal just has a much steeper falloff. */}
+              <radialGradient
                 id={gradId}
                 gradientUnits="userSpaceOnUse"
-                x1={0}
-                y1={-extent}
-                x2={0}
-                y2={extent}
+                cx={-extent * 0.3}
+                cy={-extent * 0.36}
+                r={extent * 1.55}
               >
-                {CHROME_RAMP.map(([off, col]) => (
-                  <stop key={off} offset={off} stopColor={col} />
-                ))}
-              </linearGradient>
-              {/* The specular hit: a small blown-out highlight up and to the
-                  left, where the light actually is (cfg.lightX/lightY). */}
-              {/* Broad key: the soft wrap of the light source. */}
-              <radialGradient
-                id={`${gradId}-spec`}
-                gradientUnits="userSpaceOnUse"
-                cx={-extent * 0.34}
-                cy={-extent * 0.44}
-                r={extent * 0.78}
-              >
-                <stop offset="0" stopColor="#ffffff" stopOpacity="0.55" />
-                <stop offset="0.5" stopColor="#ffffff" stopOpacity="0.16" />
-                <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+                {/* Tight: most of the range is spent in the first third, so
+                    the falloff is fast. A slow, even ramp is what plastic
+                    does. */}
+                <stop offset="0" stopColor={CHROME.core} />
+                <stop offset="0.11" stopColor="#DCE3EC" />
+                <stop offset="0.26" stopColor="#B4BCC8" />
+                <stop offset="0.44" stopColor={CHROME.body} />
+                <stop offset="0.66" stopColor="#5A626D" />
+                <stop offset="0.85" stopColor={CHROME.deep} />
+                <stop offset="1" stopColor={CHROME.edge} />
               </radialGradient>
-              {/* Hot core: small and nearly opaque. Polished metal returns the
-                  light source almost undiffused, so the highlight has a hard
-                  little centre. One broad glow alone reads as satin. */}
+              {/* The specular. Small, hard-edged and nearly white: this one
+                  highlight is doing most of the work of saying "metal". */}
               <radialGradient
                 id={`${gradId}-hot`}
                 gradientUnits="userSpaceOnUse"
-                cx={-extent * 0.36}
-                cy={-extent * 0.5}
-                r={extent * 0.2}
+                cx={-extent * 0.33}
+                cy={-extent * 0.46}
+                r={extent * 0.3}
               >
                 <stop offset="0" stopColor="#ffffff" stopOpacity="1" />
-                <stop offset="0.55" stopColor="#ffffff" stopOpacity="0.5" />
+                <stop offset="0.28" stopColor="#ffffff" stopOpacity="0.7" />
+                <stop offset="0.6" stopColor="#ffffff" stopOpacity="0.18" />
                 <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
               </radialGradient>
-              {/* Edge falloff, and the single most important layer here.
-                  A vertical ramp alone is flat by construction: every pixel on
-                  a row is the same colour, so the body reads as a striped
-                  card. On a real curved surface the edges are grazing angles
-                  that fall away into shadow. This darkens the rim and leaves
-                  the centre bright, which is what your eye reads as ROUND. */}
-              <radialGradient
-                id={`${gradId}-edge`}
-                gradientUnits="userSpaceOnUse"
-                cx={-extent * 0.06}
-                cy={-extent * 0.08}
-                r={extent * 1.02}
-              >
-                <stop offset="0.34" stopColor="#000000" stopOpacity="0" />
-                <stop offset="0.72" stopColor="#050810" stopOpacity="0.2" />
-                <stop offset="0.92" stopColor="#05070C" stopOpacity="0.56" />
-                <stop offset="1" stopColor="#04060A" stopOpacity="0.74" />
-              </radialGradient>
-              {/* Rim light along the lower edge: the floor bounce catching the
-                  silhouette. It is what stops the bottom dissolving into the
-                  dark background. */}
+              {/* Fresnel rim. On a dielectric the edge falls into shadow; on
+                  metal it lights UP, and that inversion is a large part of why
+                  something reads as metallic rather than as grey plastic. */}
               <radialGradient
                 id={`${gradId}-rim`}
                 gradientUnits="userSpaceOnUse"
-                cx={extent * 0.14}
-                cy={extent * 0.82}
-                r={extent * 0.68}
+                cx={0}
+                cy={0}
+                r={extent}
               >
-                <stop offset="0.55" stopColor="#ffffff" stopOpacity="0" />
-                <stop offset="0.9" stopColor="#E8EDF4" stopOpacity="0.42" />
-                <stop offset="1" stopColor="#E8EDF4" stopOpacity="0" />
+                <stop offset="0.74" stopColor="#B9C8DE" stopOpacity="0" />
+                <stop offset="0.92" stopColor="#C9D6E8" stopOpacity="0.4" />
+                <stop offset="1" stopColor="#F2F6FC" stopOpacity="0.8" />
               </radialGradient>
             </>
           ) : (
@@ -924,11 +887,7 @@ export default function UmbraFace({
                 the silhouette, and drawn after the fill so it sits on top. */}
             {metal && S.bodyD && !(dots && !morphing) ? (
               <g clipPath={`url(#${clipId})`}>
-                {/* Edge falloff first: it darkens the bands, then the
-                    highlights go on top of the result. */}
-                <path d={S.bodyD} fill={`url(#${gradId}-edge)`} />
                 <path d={S.bodyD} fill={`url(#${gradId}-rim)`} />
-                <path d={S.bodyD} fill={`url(#${gradId}-spec)`} />
                 <path d={S.bodyD} fill={`url(#${gradId}-hot)`} />
               </g>
             ) : null}

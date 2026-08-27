@@ -63,6 +63,12 @@ function createWindow() {
   return win;
 }
 
+// The store lives inside whenReady(), but the quit handlers below are at
+// module scope and fire before/after it. They need a reference that exists
+// either way, so the store publishes itself here on creation. Without this,
+// `store.flush()` in `will-quit` threw ReferenceError and took the app down.
+let liveStore = null;
+
 app.whenReady().then(() => {
   let push = () => {};
   let win;
@@ -90,6 +96,7 @@ app.whenReady().then(() => {
       n.show();
     },
   });
+  liveStore = store;
   win = createWindow();
   const mcpImport = require("./mcp-import.cjs");
   mcpImport.sync(gateway).catch((err) => {
@@ -484,17 +491,25 @@ app.whenReady().then(() => {
 // not tidiness: without it, quitting inside the 900ms window silently drops
 // whatever happened in it. Flush first, unconditionally, before anything that
 // can end the process.
+function flushStore() {
+  try {
+    liveStore?.flush();
+  } catch {
+    /* nothing persisted yet, or already gone */
+  }
+}
+
 app.on("will-quit", (e) => {
-  store.flush();
+  flushStore();
   if (!gateway.available()) return;
   e.preventDefault();
   gateway.shutdown().finally(() => app.exit(0));
 });
 
-app.on("before-quit", () => store.flush());
+app.on("before-quit", flushStore);
 
 app.on("window-all-closed", () => {
-  store.flush();
+  flushStore();
   if (process.platform !== "darwin") app.quit();
 });
 
@@ -502,7 +517,7 @@ app.on("window-all-closed", () => {
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(sig, () => {
     try {
-      store.flush();
+      flushStore();
     } finally {
       app.exit(0);
     }
