@@ -13,9 +13,12 @@
      instead of stretching the full width of a wide window. */
   width: min(100% - 32px, 860px);
   margin: 0 auto 16px;
-  padding: 8px;
-  min-height: 44px;
-  border-radius: 22px;
+  /* Roomier than it was. Measured against Grok Bot's: the pill sits taller,
+     the `+` is a bigger share of it, and the whole thing reads as a place to
+     write rather than as a search field. */
+  padding: 10px;
+  min-height: 52px;
+  border-radius: 26px;
   background: var(--hy-raised);
   border: 1px solid #fcfcfc12;
 }
@@ -27,10 +30,10 @@
   min-width: 0;
   border: 0;
   outline: 0;
-  /* One line has to come out 28px tall, the same as the `+` and the mic, so
-     the resting pill is 28 + 8 + 8 + 2 = 46px. At 10px this was 42px of
-     textarea and a 60px pill: half again as tall as the reference. */
-  padding: 3px 0;
+  /* One line has to come out the same height as the `+` beside it (32px), so
+     the resting pill is 32 + 10 + 10 + 2 = 54px. Get this wrong and the pill
+     grows a step the moment anything is typed. */
+  padding: 5px 0;
   margin: 0;
   background: transparent;
   color: var(--sand-text-primary, #fcfcfc);
@@ -52,8 +55,8 @@
 /* -- the buttons -------------------------------------------------------- */
 
 .sand-composer__plus {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   flex: none;
   border: 0;
   border-radius: 50%;
@@ -89,8 +92,8 @@
    bloom rising off the floor of the shape reads as something switched on.
    Everything around it stays quiet so this is the only thing glowing. */
 .sand-composer .send {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   flex: none;
   border: 0;
   border-radius: 50%;
@@ -575,3 +578,26 @@
 @media (prefers-reduced-motion: reduce) {
   .hy-plan__tick.is-live { animation: none; }
 }
+
+/* A tick once a step is finished. A dot that only changes colour asks you to
+   remember which colour meant done. */
+.hy-plan__tickmark {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  color: var(--sand-ok, #2bb673);
+}
+
+/* When it ran. Right-aligned in its own column so the times stack, and
+   tabular so they do not jitter as the minutes change. */
+.hy-plan__span {
+  flex: none;
+  margin-left: auto;
+  padding-left: 10px;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sand-text-tertiary, rgba(252, 252, 252, 0.42));
+  white-space: nowrap;
+}
+.hy-plan__step .hy-plan__text { flex: 1 1 auto; min-width: 0; }

@@ -369,3 +369,53 @@
     animation: none;
   }
 }
+
+/* About. Icon, name, version, one line, one action . in that order, centred,
+   because that is the shape everybody already recognises for this dialog. */
+.hy-about {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 4px;
+  text-align: center;
+}
+.hy-about__icon {
+  border-radius: 21px;
+  /* The icon already carries its own glow; this is just the lift off the
+     dialog so it does not look pasted on. */
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  margin-bottom: 10px;
+}
+.hy-about__name {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+.hy-about__version {
+  margin: 0;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+.hy-about__legal {
+  margin: 8px 0 16px;
+  font-size: 12.5px;
+  color: var(--sand-text-tertiary, #8d8d8d);
+}
+.hy-about__copy {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 16px;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  color: var(--sand-text-primary, #fcfcfc);
+  background: var(--hy-raised, #2e2e2e);
+}
+.hy-about__copy:hover { background: var(--hy-raised-hover, #3a3a3a); }
+.hy-about__copy:focus-visible {
+  outline: 2px solid var(--sand-accent, #2a92fe);
+  outline-offset: 2px;
+}

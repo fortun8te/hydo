@@ -10,3 +10,8 @@ dist
 .env
 .env.local
 *.log
+
+# Generated icon rasters. The SVG in src/kit/images is the source; run
+# `npm run icon` to rebuild these. Keeping a 1.6MB png in git for something
+# reproducible from one command is how repos get heavy.
+build/icon*.png

@@ -12,12 +12,22 @@
     "app": "npm run build && HYDO_DIST=1 electron .",
     "preview": "vite preview",
     "verify": "node scripts/verify.cjs",
+    "icon": "node scripts/make-app-icon.mjs && electron scripts/rasterize-icon.cjs",
     "relaunch": "node scripts/relaunch.cjs"
   },
   "dependencies": {
     "katex": "^0.18.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
+  },
+  "build": {
+    "appId": "com.hydo.app",
+    "productName": "Hydo",
+    "directories": { "buildResources": "build" },
+    "files": ["dist/**", "electron/**", "package.json"],
+    "mac": { "icon": "build/icon.png", "category": "public.app-category.productivity" },
+    "win": { "icon": "build/icon.png" },
+    "linux": { "icon": "build/icon.png", "category": "Utility" }
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",

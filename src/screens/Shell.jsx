@@ -8,6 +8,7 @@ import BotRail from "./BotRail.jsx";
 import ChannelRail from "./ChannelRail.jsx";
 import ChannelCreate from "./ChannelCreate.jsx";
 import BotCreate from "./BotCreate.jsx";
+import About from "./About.jsx";
 import Plugins from "./Plugins.jsx";
 import Sheet from "./Sheet.jsx";
 import Transcript from "./Transcript.jsx";
@@ -687,8 +688,7 @@ export default function Shell({ state }) {
       )}
       {sheet === "about" && (
         <Sheet title="About" onClose={() => setSheet(null)}>
-          <p>Hydo 0.1.0</p>
-          <p className="mute">Hydo Bot. Hermes Agent underneath.</p>
+          <About />
         </Sheet>
       )}
       {sheet === "help" && (

@@ -8,7 +8,7 @@ import PlanCard from "./PlanCard.jsx";
 // drawn inside a ring — the real composer's are bare. Draw those three here.
 function PlusGlyph() {
   return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
       <path
         fill="none"
         stroke="currentColor"

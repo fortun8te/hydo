@@ -20,6 +20,10 @@ function createWindow() {
     minWidth: 980,
     minHeight: 640,
     title: "Hydo",
+    // Windows and Linux take the window icon from here. macOS reads it from
+    // the .app bundle instead, so in `npm run app` the Dock still shows
+    // Electron's default . that is the packaged icon's job, not this one's.
+    icon: path.join(__dirname, "..", "build", "icon-512.png"),
     backgroundColor: "#070707",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 16 },

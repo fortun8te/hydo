@@ -28,6 +28,22 @@ function stateOf(t) {
   return "todo";
 }
 
+/** "9:04" for a step still running, "9:04 - 9:11" once it is finished. */
+function spanOf(t) {
+  const at = (v) => {
+    const d = new Date(v);
+    return Number.isFinite(d.getTime())
+      ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : "";
+  };
+  const from = at(t && t.startedAt);
+  if (!from) return "";
+  const to = at(t && t.doneAt);
+  // A step that started and finished inside the same minute reads as
+  // "9:04 - 9:04", which looks broken. One time is the honest answer.
+  return to && to !== from ? `${from} - ${to}` : from;
+}
+
 export default function PlanCard({ todos, name }) {
   const [open, setOpen] = useState(false);
   const list = (Array.isArray(todos) ? todos : []).filter((t) => t && t.text);
@@ -54,8 +70,24 @@ export default function PlanCard({ todos, name }) {
         <ol className="hy-plan__list">
           {list.map((t, i) => (
             <li key={t.id || i} className={`hy-plan__step is-${states[i]}`}>
-              <span className="hy-plan__dot" aria-hidden="true" />
+              {/* A tick, not a dot, once it is done. A dot that only changes
+                  colour asks you to remember which colour meant finished. */}
+              {states[i] === "done" ? (
+                <svg className="hy-plan__tickmark" viewBox="0 0 12 12" aria-hidden="true">
+                  <path
+                    d="M2.5 6.4 4.8 8.7 9.5 3.6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              ) : (
+                <span className="hy-plan__dot" aria-hidden="true" />
+              )}
               <span className="hy-plan__text">{t.text}</span>
+              {spanOf(t) ? <span className="hy-plan__span">{spanOf(t)}</span> : null}
             </li>
           ))}
         </ol>

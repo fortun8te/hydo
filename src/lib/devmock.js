@@ -31,13 +31,16 @@ function seed() {
       id: "b1", name: "Dev", label: "engineering", blob: "gray", shape: "hex",
       // A plan mid-execution, so PlanCard has something real to render. The
       // shape matches what `captureTodos` lifts off the Hermes todo tool.
-      todos: [
-        { id: "t1", text: "Read the invoice PDFs in the workspace", status: "completed" },
-        { id: "t2", text: "Pull every total into one sheet", status: "completed" },
-        { id: "t3", text: "Reconcile against the bank export", status: "in_progress" },
-        { id: "t4", text: "Flag the rows that do not match", status: "pending" },
-        { id: "t5", text: "Write the summary", status: "pending" },
-      ],
+      todos: (() => {
+        const t = (min) => new Date(Date.now() - min * 60000).toISOString();
+        return [
+          { id: "t1", text: "Read the invoice PDFs in the workspace", status: "completed", startedAt: t(22), doneAt: t(17) },
+          { id: "t2", text: "Pull every total into one sheet", status: "completed", startedAt: t(17), doneAt: t(9) },
+          { id: "t3", text: "Reconcile against the bank export", status: "in_progress", startedAt: t(9), doneAt: "" },
+          { id: "t4", text: "Flag the rows that do not match", status: "pending", startedAt: "", doneAt: "" },
+          { id: "t5", text: "Write the summary", status: "pending", startedAt: "", doneAt: "" },
+        ];
+      })(),
     },
     { id: "b2", name: "Sauce", label: "", blob: "white", shape: "pebble" },
     { id: "b3", name: "NanoX", label: "ads", blob: "blue", shape: "squircle" },

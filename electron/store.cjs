@@ -1245,6 +1245,25 @@ function createStore(opts = {}) {
         text: String(t.content || t.text || t.title).slice(0, 200),
         status: String(t.status || "pending"),
       }));
+    // When each step started and finished.
+    //
+    // Hermes' todo tool sends a whole new list every write and carries no
+    // timing at all, so the only place this can be observed is here, by
+    // diffing against the list we already had. Without it the plan can say
+    // what happened but never how long any of it took . which is the first
+    // thing you want to know about a job that ran while you were away.
+    const prev = new Map((agent.todos || []).map((t, i) => [t.id || `#${i}`, t]));
+    const stamp = now();
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const was = prev.get(it.id || `#${i}`);
+      const live = /^(in[_-]?progress|active|running|doing)$/i.test(it.status);
+      const done = /^(completed?|done|finished)$/i.test(it.status);
+      it.startedAt = was && was.startedAt ? was.startedAt : live || done ? stamp : "";
+      // Keep the first completion time: a model that rewrites its list without
+      // changing a finished step must not keep moving that step's clock.
+      it.doneAt = was && was.doneAt ? was.doneAt : done ? stamp : "";
+    }
     // An empty write is the model CLEARING its plan, which is meaningful:
     // it means the work is done. Keep it, do not treat it as "no data".
     agent.todos = items;
