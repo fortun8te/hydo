@@ -308,6 +308,19 @@ const MIRROR_KEYS = [
   "timezone",
   "web",
   "skills",
+  // Custom OpenAI-compatible endpoints — a local model on your own hardware,
+  // an LM Studio, an Ollama, an Unsloth server on the machine next to you.
+  //
+  // Hermes names them in a `providers:` block (`api`, `api_key`,
+  // default_model`, `transport`) and a session picks one BY NAME. So a profile
+  // without this block does not merely lose a default — it has never heard of
+  // the provider the session is asking for, and the turn dies at agent init.
+  //
+  // This is the same shape as the mcp_servers bug: the thing was configured in
+  // the launch home, every teammate ran somewhere else, and the feature did
+  // nothing for anybody while looking entirely set up.
+  "providers",
+  "fallback_providers",
   // Subagent routing. Hermes resolves a delegated child's model from
   // `delegation.model` AT EVERY DISPATCH, and empty means "inherit the
   // parent" (config_defaults.py, the delegation block). So a teammate pinned

@@ -2,8 +2,10 @@
 
 Everything here was checked against the installed CLI (`box 0.1.184-ascii-prod1`
 at `~/.ascii/bin/box`) and the live account on 2026-08-27, or against
-`docs.ascii.dev`. Nothing in this file is assumed. No box was created, started
-or resumed to write it — every call below is read-only.
+`docs.ascii.dev`. Nothing in this file is assumed. No box was ever created, forked or deleted to
+write it. Every call was read-only **except** the section "Minutes and starts",
+which resumed and stopped the existing box to measure it and says so, in full,
+including what it cost.
 
 ## The account, exactly
 
@@ -45,7 +47,12 @@ There is one box on this account already: `bx_843rh875`, `type: default`,
   invisible without `--all`.
 - `box list --json` already carries `desktopUrl`, `state`, `type`, `memoryGB`,
   `billingMultiplier` and `subdomain`, so nothing extra is needed to show status.
-- `box resume --ttl` is optional and "Omit to keep the Box's current setting".
+- `box resume --ttl` is optional and "Omit to keep the Box's current setting" —
+  which is why Hydo now always sends it. See "Minutes and starts" below: the
+  setting it would keep is unobservable and unbounded.
+- `box resume --type` can change the machine size on a resume, at no extra start.
+- `box stop` returns as soon as the API accepts it; the machine keeps billing
+  through its `stopping` tail.
 - `box exec <ID> [COMMAND]...` and `box ssh <ID> [COMMAND]...` take a
   **variadic trailing command**, so a global flag appended at the end is handed
   to the box as part of the command.
@@ -101,6 +108,131 @@ eight-second-old `missing` would be a SECOND machine on a two-machine account.
 be answered from the cooldown and never actually resume. Opening the Computer
 rail still only ever READS; waking is the button and nothing else.
 `scripts/box-thrift-test.cjs` pins all of it.
+
+## Minutes and starts: what a nap actually costs
+
+Everything above this line was read-only. **This section is not** — it was
+measured by resuming and stopping `bx_843rh875` on 2026-08-27. Exactly what was
+run, and what it cost: `box resume --ttl 1800`, `box stop`, `box resume`,
+`box stop`, plus `box exec` polls and `box info` reads. **Two starts** (the
+account went from 6 to 8 used of 75 for the day) and **under three minutes**
+of awake time. The box was left stopped, as it was found.
+
+| Measured | Value |
+|---|---|
+| `box stop` — the API call | **0.22s**. It returns `{"status":"stopping"}` and does **not** wait for the machine |
+| `stopping` → `stopped` | **~9s**, polled at 3s intervals. Those seconds are awake, so they bill |
+| `box resume` → `ready` frame | **0.28s** |
+| `box resume` → first `box exec` that succeeds | **5.9s** total. `ready` is not usable |
+| One sleep-and-wake cycle | **~15 billed seconds + 1 start** |
+| `box info --json` ttl / autoStop field | **There is none.** `archiveAfter` is the archive deadline (measured at lastSnapshot + 1h, moves with the snapshot, not with the TTL) |
+| `box resume --ttl 1800` | Accepted, returned `ready`. Costs no extra round-trip and no extra start |
+| The box's disk | 22.9 GB used of 70 GB (`/dev/vda1`), `/home` only 887 MB — the rest is the base image, desktop and Chrome |
+| The box's memory in use | 1.4 GB of 7.9 GB, 4.7 GB in cache |
+
+### The break-even, and why it does not set the idle window
+
+On a `default` (1x) box an idle second costs one billed second. A nap costs ~15.
+So **the seconds break-even is about fifteen seconds** — anything quieter than
+that is already cheaper asleep. `IDLE_STOP_MS` was **ten minutes**: 600 billed
+seconds burnt every time the desk goes quiet, to dodge a 15-second cycle. Forty
+times past break-even.
+
+Seconds are not the binding constraint. **Starts are.** The trial allows 25/hour
+and 75/day, and `START_WINDOWS` spends at most 24/hour and 70/day. A window of
+*T* minutes costs at most 60/*T* wakes an hour in the pathological
+alternate-work-and-idle case, so *T* ≥ 60/24 = **2.5 minutes** or the sweep alone
+can exhaust the budget a real job later needs.
+
+Hence **`IDLE_STOP_MS` is now 3 minutes**, and it **widens as the budget drains**
+(`idleStopMs()`): 3 min while under half the day's starts are spent, 10 min past
+half, **30 min past 80%**. A start refused at 6pm is a teammate that cannot work
+— sleeping is an optimisation, being unable to wake is an outage. Even the widest
+rung is 4x tighter than the trial's 2-hour auto-stop ceiling. The sweep in
+`main.cjs` ticks every **30s** rather than 60s, because a 60s tick against a
+3-minute window spends up to a third of the window billing past the decision.
+
+Against the old 10-minute window that is **420 billed seconds saved per idle
+stretch**, at a cost of one start and ~15 seconds — but only for gaps that fall
+between 3 and 10 minutes. Longer gaps were already being stopped and cost
+nothing extra.
+
+### The TTL was an unknown number, and now is not
+
+`box resume --ttl` is documented "Omit to keep the Box's current setting", and
+this code omitted it. That sounds thrifty and was the most expensive line in the
+file:
+
+- The setting it keeps is whatever the box was **created** with, and
+  `bx_843rh875` was created by hand, not by Hydo.
+- It is **not observable**: `box info --json` was read field by field and carries
+  no ttl and no autoStop.
+- It is the **only** backstop left when the Mac is force-quit, crashes, or loses
+  power, because nothing local runs then.
+
+So the server-side stop was an unknown number somewhere up to the trial's 2-hour
+ceiling. Every resume now asserts `--ttl 1800`, clamped through `ttlFor` to the
+trial ceiling without a `limits` round-trip (1800 is under both ceilings, so
+buying the right to send a bigger number is not worth a call on the hot path).
+It rides a resume that was happening anyway: **no extra round-trip, no extra
+start.**
+
+1800 is kept rather than shortened. TTL is wall-clock lifetime, not idle time,
+and the `AGENTS.md` block caps a command at `--timeout 120` — so 30 minutes is
+15x the longest job the teammates are told to run, and the app's own sweep stops
+the box long before it in the normal case.
+
+### `stopping` is not `stopped`
+
+Measured above: the box sits in `stopping` for ~9s. Folding that into "stopped"
+made the app offer Wake on a machine already on its way down, and `ensureRunning`
+would spend one of 75 daily starts resuming something about to finish stopping
+anyway — the start **and** the seconds. `status()` now reports `stopping` as its
+own state and `ensureRunning` waits it out (locally, no API polling) rather than
+racing it.
+
+### The single most expensive bug: quitting did not stop the machine
+
+The idle sweep only runs while Hydo is open. Two exit paths left the box awake:
+
+| Path | What it did | Cost |
+|---|---|---|
+| `before-quit` | `boxes.stop({ force: true }).catch(() => {})` — fired, **never awaited**, immediately followed by `app.exit(0)` down the `will-quit` path | Whether the request reached the wire was luck |
+| `SIGINT`/`SIGTERM`/`SIGHUP` | `app.exit(0)` with **no box stop at all** | `npm run relaunch` sends SIGTERM. Every dev restart left a machine billing, with nothing on this Mac that knew how to stop it |
+
+Both now go through one memoised `stopBoxOnExit()` in `main.cjs`, bounded by
+`QUIT_STOP_BUDGET_MS = 2000` — **9x the measured 0.22s call**, and a
+`Promise.race`, never a bare await. The signal path exits on a hard timer as
+well, because a signal is not a request that can be declined. A hung `box` binary
+must lose the app's quit, not win it; the existing 2.5s gateway-shutdown race is
+untouched and now runs alongside this one.
+
+A laptop closed on Friday with the box awake was previously billing until the
+box's own unknown TTL fired. Both halves of that — the missing stop and the
+unknown TTL — are fixed in this pass.
+
+### Machine size: `small` is a resume away, and it is the user's call
+
+Reported, not acted on. `box resume --type` exists (`--help`, verified): "Resume
+onto a different machine size: small, default or large. Omit to keep the box's
+current size. Shrinking is refused if the box's data does not fit." So switching
+rides a resume that was happening anyway — **zero extra starts, zero extra
+seconds** — and `small` is **0.5x**, which halves every billed second forever.
+That is a bigger multiplier than any timer in this file.
+
+Why it is not done automatically:
+
+- `small` is 2 vCPU / 4 GB against the current 4 vCPU / 8 GB. Measured on the box:
+  1.4 GB in use with 4.7 GB of cache. A shell would be fine; Chrome plus the lux
+  desktop on 4 GB is the thing that would break, and that is the box's main job.
+- The disk is 22.9 GB used. `--help` documents the vCPU and RAM of each size but
+  **not the disk**, and shrinking is refused if the data does not fit — which is
+  a failed resume that still spends a start.
+- It is a one-line change to `DEFAULT_TYPE`/the resume args if the user wants it,
+  and it is reversible on the next resume for the same zero cost.
+
+Note that `DEFAULT_TYPE` is already `small` — Hydo *creates* small. The `default`
+box on this account is the one the user made by hand, which Hydo adopted.
 
 ## Standing bans, and why each one is a ban
 
@@ -213,8 +345,9 @@ under `/home`, so the snapshot takes the whole disk — a Chrome profile, and th
 cookies and sessions in it, is just more of that disk. A teammate that signs
 into something once leaves it signed in for the next one, across sleeps.
 
-Resume measured at ~1s to return, but the machine is NOT usable that fast: the
-first `box exec` afterwards can come back empty while it finishes booting. Poll
+Resume returns in ~0.3s, but the machine is NOT usable that fast: the first
+`box exec` afterwards can come back empty while it finishes booting. Timed on
+2026-08-27, cold: `ready` at 0.28s, first successful `box exec` at **5.9s**. Poll
 for real output rather than trusting the resume call's own timing.
 
 ---

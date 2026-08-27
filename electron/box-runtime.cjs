@@ -54,7 +54,59 @@ const TRIAL_MAX_TTL = 7200;
  * been tried. A cap that only works because the path is dead is not a cap.
  */
 const MAX_TTL = 2_592_000;
-const IDLE_STOP_MS = 10 * 60 * 1000;
+
+/**
+ * What a stop/resume cycle actually costs, MEASURED against bx_843rh875 on
+ * 2026-08-27 with the CLI, not reasoned about:
+ *
+ *   `box stop`   returned in 0.22s, but the machine sat in `stopping` and only
+ *                reached `stopped` 9s later. Those 9s are awake, so they bill.
+ *   `box resume` returned `ready` in 0.28s . and the box was NOT usable then.
+ *                The first `box exec` that actually succeeded came 5.6s after,
+ *                so 5.9s cold-to-usable.
+ *
+ * So one sleep-and-wake round trip is ~15 billed seconds plus ONE start. That
+ * is the whole break-even: on a 1x box an idle second costs one billed second,
+ * so anything quieter than ~15 seconds is already cheaper asleep.
+ *
+ * Which means seconds are NOT what sets the idle window . starts are. The
+ * trial allows 25/hour, and this file spends at most 24 (START_WINDOWS). A
+ * window of T minutes can, in the pathological alternate-work-and-idle case,
+ * cost 60/T wakes an hour, so T must be at least 60/24 = 2.5 minutes for the
+ * sweep alone never to exhaust the budget a real job needs.
+ */
+const RESUME_TO_USABLE_MS = 5900;
+const STOP_TAIL_MS = 9000;
+const CYCLE_COST_MS = RESUME_TO_USABLE_MS + STOP_TAIL_MS;
+
+/**
+ * The idle window, and why it is no longer a flat ten minutes.
+ *
+ * It was 10 minutes. On a `default` (1x) box that is 600 billed seconds burnt
+ * every time the desk goes quiet, to dodge a cycle measured at ~15. Forty
+ * times the break-even.
+ *
+ * Three minutes is the floor: just over the 2.5 the hourly start budget
+ * implies, and it saves 420 seconds per idle stretch against the old value.
+ *
+ * But the floor is only right while starts are cheap. The day's budget is 75
+ * and a start refused at 6pm is a teammate that cannot work, so as the budget
+ * drains the window WIDENS . the machine is left awake rather than spending one
+ * of the last starts on a nap. Sleeping is an optimisation; being unable to
+ * wake is an outage.
+ */
+const IDLE_STOP_MS = 3 * 60 * 1000;
+const IDLE_STOP_MAX_MS = 30 * 60 * 1000;
+
+/**
+ * How long the app may hold the quit while it puts the machine to sleep.
+ *
+ * Measured: `box stop` is an API call that returns in 0.22s . it does not wait
+ * for the machine to finish stopping. So two seconds is ~9x the observed time
+ * and still invisible to a person hitting Cmd-Q. It is a RACE, never a bare
+ * await: a hung CLI must lose the app's quit, not win it.
+ */
+const QUIT_STOP_BUDGET_MS = 2000;
 
 /**
  * How long a `status()` answer is worth reusing.
@@ -195,6 +247,9 @@ async function runJson(args, opts) {
   return { ok: true, json: frames[frames.length - 1], frames };
 }
 
+/** Local waiting. Costs nothing; an API poll in its place would not. */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 const installed = () => {
   try {
     return fs.existsSync(CLI);
@@ -205,6 +260,15 @@ const installed = () => {
 
 /** States the API reports for a machine that is up and billing. */
 const LIVE = new Set(["provisioned", "cloning", "ready", "idle", "running"]);
+/**
+ * On its way down, and NOT a machine to resume.
+ *
+ * `stopping` is a real state this API reports: measured on bx_843rh875, `box
+ * stop` returned `{"status":"stopping"}` in 0.22s and the box stayed there for
+ * 9 more seconds. It is not live (it does not accept work) and it is not
+ * stopped (resuming it spends a start on a race).
+ */
+const STOPPING = new Set(["stopping", "snapshotting", "suspending"]);
 const isLive = (b) => !!b && LIVE.has(String(b.state || "").toLowerCase());
 
 /**
@@ -220,6 +284,9 @@ function createBoxRuntime(opts = {}) {
   const setBoxId = opts.setBoxId || (() => {});
   const isInstalled = opts.installed || installed;
   const now = opts.now || (() => Date.now());
+  // Injectable so a test can walk the `stopping` wait without spending 9
+  // real seconds per case.
+  const wait = opts.sleep || sleep;
 
   /**
    * In-flight jobs, by token.
@@ -362,7 +429,23 @@ function createBoxRuntime(opts = {}) {
       // A remembered id whose machine is gone is `missing`, not `stopped`.
       // Saying "stopped" would make Resume the obvious action and Resume would
       // fail forever.
-      state: !id ? "none" : !box ? "missing" : isLive(box) ? "running" : "stopped",
+      // `stopping` is its own answer, not a flavour of `stopped`.
+      //
+      // Measured on 2026-08-27: `box stop` returns in 0.22s and the machine
+      // then sits in `stopping` for another 9s. Folding that into "stopped"
+      // made the app offer Wake on a machine already on its way down, and
+      // `ensureRunning` would spend one of 75 daily starts resuming something
+      // that was about to finish stopping anyway — the worst of both, a start
+      // AND the seconds.
+      state: !id
+        ? "none"
+        : !box
+        ? "missing"
+        : isLive(box)
+        ? "running"
+        : STOPPING.has(String(box.state || "").toLowerCase())
+        ? "stopping"
+        : "stopped",
       type: box ? box.type : null,
       ip: box ? box.ip : null,
       desktopUrl: box ? box.desktopUrl : null,
@@ -395,6 +478,35 @@ function createBoxRuntime(opts = {}) {
     const want = Number(requested) || DEFAULT_TTL;
     const cap = trial ? TRIAL_MAX_TTL : MAX_TTL;
     return Math.max(60, Math.min(want, cap));
+  }
+
+  /**
+   * The TTL to assert on a RESUME, and why a resume asserts one at all.
+   *
+   * `box resume --ttl` is documented "Omit to keep the Box's current setting",
+   * and this code omitted it . which sounds thrifty and is the most expensive
+   * line in the file. The setting it keeps is whatever the box was CREATED
+   * with, and the box on this account (`bx_843rh875`) was created by hand, not
+   * by Hydo. Worse, it is not observable: `box info --json` was read field by
+   * field on 2026-08-27 and carries no ttl or autoStop at all (`archiveAfter`
+   * is the ARCHIVE deadline . measured at lastSnapshot + 1h, which moves with
+   * the snapshot and not with the TTL, so it is not a stand-in for it).
+   *
+   * So the server-side backstop . the only thing left when the Mac is
+   * force-quit, crashes, or loses power, because nothing local runs then . was
+   * an unknown number somewhere up to the trial's 2h ceiling, and Hydo had no
+   * way to find out or to shorten it.
+   *
+   * Sending it costs NOTHING: no extra round-trip, no extra start, it rides the
+   * resume that was happening anyway. Verified accepted by the live CLI on
+   * 2026-08-27 (`box resume bx_843rh875 --ttl 1800 --json` returned `ready`).
+   *
+   * Clamped to the TRIAL ceiling unconditionally rather than calling `limits`
+   * to find out which tier this is: 1800 is under both ceilings, and buying the
+   * right to send a bigger number on the hot path is not worth a round-trip.
+   */
+  function resumeTtl(reason = {}) {
+    return ttlFor(reason.ttlSeconds, true);
   }
 
   /**
@@ -431,23 +543,42 @@ function createBoxRuntime(opts = {}) {
       const knewItAlready = !!getBoxId();
       // Fresh, never cached: deciding "create" from a stale "missing" is a
       // second machine against a two-machine limit.
-      const st = await status({ fresh: true });
+      let st = await status({ fresh: true });
       const freshlyAdopted = !knewItAlready && !!st.id;
       if (!st.signedIn) return { ok: false, reason: "signed-out" };
+
+      // A machine mid-stop is worth WAITING for, never worth resuming.
+      //
+      // Resuming a `stopping` box spends one of 75 daily starts on a race with
+      // the shutdown that is already in flight. Waiting spends nothing but
+      // local time, and the measured tail is 9s, so the ceiling here is a
+      // little over double that. If it is still not settled we fall through and
+      // treat it as stopped — a start we can account for beats a hang.
+      const settleBy = now() + Math.round(CYCLE_COST_MS * 1.5);
+      while (st.state === "stopping" && now() < settleBy) {
+        await wait(1500);
+        st = await status({ fresh: true });
+      }
+      // Still stopping after twice the measured tail means something is wedged
+      // on the far side. Fall through and resume it: a start we can account for
+      // beats a machine nobody will wake, and `box resume` on an already-stopped
+      // box is exactly what this path does anyway.
+      if (st.state === "stopping") st = { ...st, state: "stopped" };
+
       if (st.state === "running") {
         lastUsedAt = now();
         return { ok: true, id: st.id, reused: true, adopted: freshlyAdopted || undefined };
       }
 
       if (st.state === "stopped") {
-        // No `limits` call on this path. Resume keeps the box's own TTL
-        // (`box resume --help`: "Omit to keep the Box's current setting"), so
-        // the trial ceiling is not a question here . and this is the common
-        // path, walked every time the desk wakes up. It was paying for an API
-        // round-trip whose answer it then threw away.
+        // No `limits` call on this path: this is the common one, walked every
+        // time the desk wakes up, and it was paying for an API round-trip whose
+        // answer it then threw away.
         const over = overBudget(now());
         if (over) return { ok: false, reason: "start-budget", window: over };
-        const res = await exec(["resume", st.id], { timeout: 180_000 });
+        const res = await exec(["resume", st.id, "--ttl", String(resumeTtl(reason))], {
+          timeout: 180_000,
+        });
         if (!res.ok) return res;
         spentStart(now());
         invalidate();
@@ -493,7 +624,9 @@ function createBoxRuntime(opts = {}) {
           if (!isLive(rows[0])) {
             const over = overBudget(now());
             if (over) return { ok: false, reason: "start-budget", window: over };
-            const back = await exec(["resume", rows[0].id], { timeout: 180_000 });
+            const back = await exec(["resume", rows[0].id, "--ttl", String(resumeTtl(reason))], {
+              timeout: 180_000,
+            });
             if (!back.ok) return back;
             spentStart(now());
             invalidate();
@@ -564,7 +697,7 @@ function createBoxRuntime(opts = {}) {
    * the refcount is that one teammate finishing does not pull the machine out
    * from under another.
    */
-  async function stop({ force = false } = {}) {
+  async function stop({ force = false, budgetMs = 0 } = {}) {
     const id = getBoxId();
     if (!id) return { ok: true, reason: "no-box" };
     if (inFlight.size && !force) return { ok: false, reason: "busy", busy: inFlight.size };
@@ -574,7 +707,19 @@ function createBoxRuntime(opts = {}) {
     // from `lastStartResult` and never actually resume.
     invalidate();
     lastStartResult = null;
-    return plainExec(["stop", String(id)], { timeout: 120_000 });
+    const call = plainExec(["stop", String(id)], { timeout: budgetMs || 120_000 });
+    if (!budgetMs) return call;
+    // Bounded, for the quit path only.
+    //
+    // `box stop` is an API call, not a wait for the machine: measured at 0.22s
+    // on 2026-08-27. So a two-second budget is ~9x the observed cost. But it is
+    // a RACE and not a bare await, because the one thing worse than a box left
+    // running is an app that will not close — and the request, once it is on
+    // the wire, lands whether or not this promise is still listening.
+    return Promise.race([
+      call,
+      new Promise((resolve) => setTimeout(() => resolve({ ok: false, reason: "stop-timeout" }), budgetMs)),
+    ]);
   }
 
   /**
@@ -607,9 +752,33 @@ function createBoxRuntime(opts = {}) {
     return { ok: true, url, mode: (res.json && res.json.mode) || (vnc ? "vnc" : "stream") };
   }
 
+  /**
+   * How long the machine may sit idle before it is worth the wake.
+   *
+   * Widens as the day's starts run out. The ladder is the local budget
+   * (START_WINDOWS), not the server's, because the local one is what actually
+   * refuses a teammate: once `overBudget` says "day", `ensureRunning` returns
+   * `start-budget` and the work does not happen at all. Trading 27 more
+   * minutes of billed idle for one start held in reserve is the right trade at
+   * that end of the budget and the wrong one at the start of it.
+   */
+  function idleStopMs(at = now()) {
+    const dayCap = START_WINDOWS.find((w) => w.name === "day");
+    const hourCap = START_WINDOWS.find((w) => w.name === "hour");
+    const spentDay = startsSpent.filter((t) => at - t < dayCap.ms).length;
+    const spentHour = startsSpent.filter((t) => at - t < hourCap.ms).length;
+    const usedFrac = Math.max(spentDay / dayCap.max, spentHour / hourCap.max);
+    // Half the budget gone is still comfortable; past 80% the window goes to
+    // its widest, which is still 4x tighter than the trial's 2h auto-stop.
+    if (usedFrac >= 0.8) return IDLE_STOP_MAX_MS;
+    if (usedFrac >= 0.5) return 10 * 60 * 1000;
+    return IDLE_STOP_MS;
+  }
+
   /** True when nothing is running and nothing has used it for a while. */
-  function idleFor(ms = IDLE_STOP_MS) {
-    return inFlight.size === 0 && lastUsedAt > 0 && now() - lastUsedAt >= ms;
+  function idleFor(ms) {
+    const window = Number.isFinite(ms) ? ms : idleStopMs();
+    return inFlight.size === 0 && lastUsedAt > 0 && now() - lastUsedAt >= window;
   }
 
   return {
@@ -620,6 +789,7 @@ function createBoxRuntime(opts = {}) {
     hold,
     stop,
     idleFor,
+    idleStopMs,
     ttlFor,
     info,
     get busy() {
@@ -637,6 +807,11 @@ module.exports = {
   TRIAL_MAX_TTL,
   MAX_TTL,
   IDLE_STOP_MS,
+  IDLE_STOP_MAX_MS,
+  RESUME_TO_USABLE_MS,
+  STOP_TAIL_MS,
+  CYCLE_COST_MS,
+  QUIT_STOP_BUDGET_MS,
   STATUS_TTL_MS,
   START_COOLDOWN_MS,
   START_WINDOWS,

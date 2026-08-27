@@ -202,6 +202,13 @@ function createWindow() {
 // either way, so the store publishes itself here on creation. Without this,
 // `store.flush()` in `will-quit` threw ReferenceError and took the app down.
 let liveStore = null;
+/**
+ * The box runtime, published out of whenReady() for the same reason liveStore
+ * is: the quit and signal handlers below are at module scope and fire outside
+ * it. Without a reference here, the only code that knows how to stop the
+ * machine is unreachable from the only place that knows the app is ending.
+ */
+let liveBoxes = null;
 
 /**
  * One Hydo, however many times you launch it.
@@ -652,6 +659,7 @@ app.whenReady().then(() => {
   // The store never imports the runtime . it is handed one, so a test store
   // cannot spend money.
   if (typeof store.attachBox === "function") store.attachBox(boxes);
+  liveBoxes = boxes;
 
   // Background processes a teammate left running. Session scoped: one bot
   // cannot see or reap another's.
@@ -728,14 +736,20 @@ app.whenReady().then(() => {
   // Idle sweep, in Electron main rather than inside the VM . a machine cannot
   // be trusted to switch itself off. Stopping early costs a few seconds of
   // resume; not stopping costs the month's hours.
+  //
+  // Ticking every 30s rather than 60s because the idle window is now 3 minutes
+  // (box-runtime.cjs), and a 60s tick against a 3-minute window is up to a
+  // third of the window spent billing past the decision. At 30s the overshoot
+  // is capped at 30 billed seconds. The tick itself is a local comparison of
+  // two numbers — it makes no API call, so its only cost is this arithmetic.
   const idleTimer = setInterval(() => {
     if (boxes.idleFor()) boxes.stop().catch(() => {});
-  }, 60_000);
+  }, 30_000);
   app.on("before-quit", () => {
     clearInterval(idleTimer);
-    // Force, because quitting must not leave a machine running just because a
-    // job was in flight when the window closed.
-    boxes.stop({ force: true }).catch(() => {});
+    // The stop itself is issued from `stopBoxOnExit` in will-quit, where it can
+    // actually be awaited. Firing it here as well would be two `box stop` calls
+    // for one quit.
   });
 
   ipcMain.handle("hydo:dismissClarify", async (_e, id) => {
@@ -819,11 +833,53 @@ function flushStore() {
   }
 }
 
+/**
+ * Put the shared machine to sleep on the way out — and actually wait for it.
+ *
+ * This is the single most expensive bug available in this app. The box is
+ * billed PER SECOND while awake, and the idle sweep above only runs while Hydo
+ * is open. Quit the app with the machine up and nothing on this Mac is left
+ * that will ever stop it; the only backstop is the box's own TTL, which is 30
+ * minutes at best and was, until this pass, an unknown number the app never set
+ * (see `resumeTtl` in box-runtime.cjs). A laptop closed on Friday was a machine
+ * billing into Monday.
+ *
+ * It used to be `boxes.stop({ force: true }).catch(() => {})` in `before-quit`
+ * — fired, never awaited, and immediately followed by `app.exit(0)` down the
+ * `will-quit` path. Whether the request reached the wire was luck.
+ *
+ * `force`, because quitting must not leave a machine running just because a job
+ * was in flight when the window closed. Bounded, because a hung CLI must lose
+ * the app's quit rather than win it: `box stop` was measured at 0.22s on
+ * 2026-08-27, so the 2s budget in box-runtime.cjs is ~9x the observed cost and
+ * invisible to a person hitting Cmd-Q.
+ *
+ * Memoised: `will-quit` and the signal handlers can both reach it, and two
+ * `box stop` calls for one quit is a wasted round-trip.
+ */
+let exitStop = null;
+function stopBoxOnExit() {
+  if (exitStop) return exitStop;
+  if (!liveBoxes) return null;
+  try {
+    exitStop = liveBoxes
+      .stop({ force: true, budgetMs: boxRuntime.QUIT_STOP_BUDGET_MS })
+      .catch(() => ({ ok: false }));
+  } catch {
+    return null;
+  }
+  return exitStop;
+}
+
 app.on("will-quit", (e) => {
   flushStore();
-  if (!gateway.available()) return;
+  const stopping = stopBoxOnExit();
+  if (!stopping && !gateway.available()) return;
   e.preventDefault();
-  gateway.shutdown().finally(() => app.exit(0));
+  Promise.all([
+    stopping || Promise.resolve(),
+    gateway.available() ? gateway.shutdown() : Promise.resolve(),
+  ]).finally(() => app.exit(0));
 });
 
 app.on("before-quit", flushStore);
@@ -834,12 +890,32 @@ app.on("window-all-closed", () => {
 });
 
 // A crash or a SIGTERM from `npm run relaunch` skips the app events entirely.
+//
+// Which is why the box stop is here too, and not only in `will-quit`. These
+// handlers called `app.exit(0)` outright, so every `npm run relaunch` — the
+// most-used way to restart this app during development — left the shared
+// machine awake and billing with nothing left that knew how to stop it. The
+// idle sweep had died with the process.
+//
+// Same shape as the quit path: issue it, give it the measured budget, exit
+// regardless. A signal is not a request that can be declined, so the exit is on
+// a hard timer rather than on the stop resolving.
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(sig, () => {
     try {
       flushStore();
-    } finally {
-      app.exit(0);
+    } catch {
+      /* nothing persisted yet */
     }
+    const stopping = stopBoxOnExit();
+    if (!stopping) {
+      app.exit(0);
+      return;
+    }
+    const bail = setTimeout(() => app.exit(0), boxRuntime.QUIT_STOP_BUDGET_MS + 250);
+    stopping.finally(() => {
+      clearTimeout(bail);
+      app.exit(0);
+    });
   });
 }
