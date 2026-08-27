@@ -159,6 +159,18 @@ async function probe(provider, opts = {}) {
       signal: ctl ? ctl.signal : undefined,
     });
     if (res.status === 401 || res.status === 403) {
+      // "Rejected the key" is only true if a key was SENT.
+      //
+      // The key arrives via opts, and a caller that forgets it gets a 401 —
+      // which this used to report as the server rejecting a key it never
+      // received. That is a confident lie about someone else's server, and it
+      // sent a real debugging session chasing an endpoint that was fine.
+      if (!key) {
+        return {
+          state: "unknown",
+          detail: `${provider.host} needs a key and none was sent — call status(), or pass opts.key.`,
+        };
+      }
       return { state: "unauthorized", detail: `${provider.host} answered but rejected the key.` };
     }
     if (!res.ok) return { state: "http", detail: `${provider.host} answered ${res.status}.` };

@@ -204,6 +204,11 @@ function normalizeAgent(agent) {
   if (!agent || typeof agent !== "object") return agent;
   const blob = isBlobTint(agent.blob) ? agent.blob : "gray";
   const shape = SHAPES.includes(agent.shape) ? agent.shape : "hex";
+  // The "Role" preset picker (BotRail) is gone. It never wrote a stored
+  // `role` field itself, but an older build's state.json may still carry one
+  // from before this — drop it on read rather than resurrecting a dead
+  // concept a future reader would half-honour.
+  const { role, ...rest } = agent;
   return {
     label: "",
     description: "",
@@ -230,7 +235,7 @@ function normalizeAgent(agent) {
     sectionId: null,
     blob,
     shape,
-    ...agent,
+    ...rest,
     blob: isBlobTint(agent.blob) ? agent.blob : blob,
     shape: SHAPES.includes(agent.shape) ? agent.shape : shape,
     status: agent.status === "working" ? "working" : "idle",

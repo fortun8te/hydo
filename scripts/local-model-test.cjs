@@ -93,7 +93,21 @@ assert.equal(lp.probeUrl("http://host:1/v1/"), "http://host:1/v1/models");
   assert.ok(!/sk-/.test(up.detail), "the rendered detail never carries the key");
 
   // Rejected key vs. a dead server vs. an odd reply — three different fixes.
-  assert.equal((await lp.probe(ollama, { fetch: async () => ({ ok: false, status: 401 }) })).state, "unauthorized");
+  //
+  // "Rejected the key" is only true if a key was SENT. This case used to assert
+  // `unauthorized` while passing NO key, which is the exact confusion the
+  // product hit: a caller that forgets opts.key gets a 401, and reporting that
+  // as the server rejecting a key it never received sent a real debugging
+  // session chasing an endpoint that was fine.
+  assert.equal(
+    (await lp.probe(ollama, { key: "sk-x", fetch: async () => ({ ok: false, status: 401 }) })).state,
+    "unauthorized"
+  );
+  assert.equal(
+    (await lp.probe(ollama, { fetch: async () => ({ ok: false, status: 401 }) })).state,
+    "unknown",
+    "a 401 with no key sent is a CALLER bug, and must not be blamed on the server"
+  );
   assert.equal((await lp.probe(ollama, { fetch: async () => ({ ok: false, status: 500 }) })).state, "http");
   const down = await lp.probe(ollama, {
     fetch: async () => {
