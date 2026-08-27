@@ -351,22 +351,20 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           size={72}
           glow={!!agent?.glow}
           morph
-          live
-          /* Spins whenever a turn of theirs is running, not only when it is
-             running in their own thread. The pip right next to it already
-             reads `workingIn`; the face reading a narrower question meant the
-             two could disagree on the same teammate at the same moment, with
-             the dot lit and the face idling. */
-          mood={botBusy(agent) ? "spin" : "fidget"}
+          /* A PREVIEW, not a status readout.
+             
+             This panel is where you pick a colour and a shape, and it was
+             spinning, wearing a live pip and captioning itself with whatever
+             the teammate happened to be doing. You cannot judge a colour on a
+             face that is turning, and none of that state is what you came to
+             this panel to look at — it is all already on the row and in the
+             thread. The one motion that belongs here is the morph between
+             shapes, which is the change you are actually making: `morph` stays,
+             and `still` yields to it, so switching shape animates and nothing
+             else does. `poke` stays too, because that is you asking for it. */
+          mood="idle"
           poke
         />
-        {pip ? (
-          <span
-            className={`sand-row__dot bot-rail__online is-${pip}`}
-            title={pipLabel}
-            aria-label={pipLabel}
-          />
-        ) : null}
       </span>
       {/* What it is doing RIGHT NOW, under the face that is spinning about it.
           The pip next to the face already says a turn is running; this says
@@ -375,12 +373,6 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           `botBusy` is the same source the pip reads, so the two can never
           disagree — and disappears the moment one ends rather than leaving a
           stale claim on screen. */}
-      {botBusy(agent) && activityNow ? (
-        <div className="bot-rail__now hy-act">
-          <ActivityMark plugin={agent?.activityIcon} size={15} />
-          <span className="hy-act__text">{activityNow}</span>
-        </div>
-      ) : null}
       <label className="bot-rail__field">
         <span className="bot-rail__field-label">Name</span>
         <input value={name} onChange={(e) => onChange({ name: e.target.value })} />

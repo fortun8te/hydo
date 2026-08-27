@@ -96,8 +96,29 @@ assert.ok(presence.includes("Working in another conversation"), "busy elsewhere 
   assert.ok(!/Online/.test(label), "the label never says Online");
 }
 assert.ok(!/\? "Online"|: "Online"/.test(botRail), "and the rail no longer has that branch");
-// The face and the dot read the same fact, so they cannot disagree on screen.
-assert.ok(botRail.includes("botBusy(agent) ? \"spin\" : \"fidget\""), "the face follows the same fact as the pip");
+// The face and the dot used to read DIFFERENT facts, so one could be lit while
+// the other idled on the same teammate. That was fixed by making them share a
+// source — and then fixed properly by removing both from this panel.
+//
+// This rail is where you pick a colour and a shape. A face that spins cannot be
+// judged for colour, and a live pip and an activity caption are answers to
+// questions nobody asks while choosing one; the row and the thread already
+// carry them. So the invariant is now stronger than "they agree": there is
+// nothing here to disagree.
+assert.ok(
+  !/mood=\{botBusy\(agent\)/.test(botRail),
+  "the customisation preview must not spin — you cannot judge a colour on a moving face"
+);
+assert.ok(
+  !/bot-rail__online/.test(botRail),
+  "and must not wear a live pip"
+);
+assert.ok(
+  !/bot-rail__now/.test(botRail),
+  "and must not caption itself with what the teammate is doing"
+);
+// The one motion that IS the change you are making stays.
+assert.ok(/\bmorph\b/.test(botRail), "switching shape must still animate; that is the edit itself");
 
 // ---- the channel rail says who is working ---------------------------------
 assert.ok(chanRail.includes("botWorks(a, channel?.id)"), "scoped to THIS channel");
