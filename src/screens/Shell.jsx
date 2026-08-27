@@ -308,6 +308,7 @@ export default function Shell({ state }) {
         onPlugins={() => setPluginsOpen(true)}
         userName={state.settings.userName}
         userAvatar={state.settings.userAvatar}
+        userAvatar={state.settings.userAvatar}
         accountOpen={accountOpen}
         onAccountToggle={setAccountOpen}
         onSettings={() => setSettingsOpen(true)}

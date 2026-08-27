@@ -167,3 +167,40 @@
   background: var(--sand-fill-primary, #fafafa);
   border-radius: 999px;
 }
+
+/* The avatar doubles as the control for changing it: a separate "Change
+   picture" row would be a second thing to find for something everyone already
+   knows how to do. The camera badge is the only affordance it needs. */
+.settings__avatar--edit {
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 999px;
+}
+.settings__avatar--edit .settings__avatar-hint {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+  border-radius: 999px;
+  color: var(--cursor-text-primary);
+  background: var(--cursor-bg-secondary);
+  /* Reads as a badge ON the avatar rather than a dot beside it. */
+  box-shadow: 0 0 0 2px var(--cursor-bg-primary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.settings__avatar--edit:hover .settings__avatar-hint,
+.settings__avatar--edit:focus-visible .settings__avatar-hint {
+  opacity: 1;
+}
+.settings__avatar--edit:focus-visible {
+  outline: 2px solid var(--cursor-accent, #2f81f7);
+  outline-offset: 2px;
+}

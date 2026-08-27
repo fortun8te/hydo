@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { initialOf } from "../lib/marks.js";
+import { fileToAvatar } from "../lib/avatar.js";
 import {
   Dialog,
   DialogNav,
@@ -111,8 +112,10 @@ function UsageMeter({ usage }) {
   );
 }
 
-function AccountRow({ name, email, avatarUrl, onSignOut }) {
+function AccountRow({ name, email, avatarUrl, onSignOut, onAvatar }) {
   const [copied, setCopied] = useState(false);
+  const [avatarErr, setAvatarErr] = useState("");
+  const fileRef = useRef(null);
 
   function copy() {
     if (!email) return;
@@ -121,14 +124,49 @@ function AccountRow({ name, email, avatarUrl, onSignOut }) {
     window.setTimeout(() => setCopied(false), 1200);
   }
 
+  async function choose(file) {
+    if (!file) return;
+    setAvatarErr("");
+    try {
+      onAvatar(await fileToAvatar(file));
+    } catch (err) {
+      // Say which picture and why. "Something went wrong" sends someone back
+      // to try the same file again.
+      setAvatarErr(err.message || "could not read that image");
+    }
+  }
+
+  // The avatar IS the control. A separate "Change picture" row would be a
+  // second thing to find for something everyone already knows how to do.
   const avatar = (
-    <span className="settings__avatar">
-      {avatarUrl ? (
-        <img src={avatarUrl} alt="" className="settings__avatar-img" />
-      ) : (
-        <span className="settings__avatar-initial">{initialOf(name)}</span>
-      )}
-    </span>
+    <>
+      <button
+        type="button"
+        className="settings__avatar settings__avatar--edit"
+        title={avatarUrl ? "Change picture" : "Add a picture"}
+        aria-label={avatarUrl ? "Change picture" : "Add a picture"}
+        onClick={() => fileRef.current?.click()}
+      >
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" className="settings__avatar-img" />
+        ) : (
+          <span className="settings__avatar-initial">{initialOf(name)}</span>
+        )}
+        <span className="settings__avatar-hint" aria-hidden="true">
+          <i className="gb-icon gb-icon-camera" />
+        </span>
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+        hidden
+        onChange={(e) => {
+          choose(e.target.files && e.target.files[0]);
+          e.target.value = "";
+        }}
+      />
+    </>
   );
 
   return (
@@ -136,7 +174,7 @@ function AccountRow({ name, email, avatarUrl, onSignOut }) {
       strong
       leading={avatar}
       label={name || "Michael"}
-      description={email || "Local Hydo sign-in (not a hosted account)"}
+      description={avatarErr || email || "Local Hydo sign-in (not a hosted account)"}
       descriptionAction={
         email ? (
           <button
@@ -279,8 +317,9 @@ export default function Settings({ settings, selectedId, selectedKind, members, 
                     <AccountRow
                       name={settings.userName}
                       email={settings.userEmail}
-                      avatarUrl={settings.avatarUrl}
+                      avatarUrl={settings.userAvatar}
                       onSignOut={onSignOut}
+                      onAvatar={(userAvatar) => onChange({ userAvatar })}
                     />
                   </RowGroup>
                 </section>

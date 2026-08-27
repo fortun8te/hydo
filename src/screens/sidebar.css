@@ -853,3 +853,12 @@
   .sand-row.is-born,
   .sand-row.is-born .umbra-face { animation: none; }
 }
+
+/* The account mark, once it is a real picture rather than a letter. */
+.sand-foot__avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  display: block;
+}

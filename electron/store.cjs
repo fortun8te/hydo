@@ -34,6 +34,10 @@ const SHAPES = [
 const PICK_SHAPES = SHAPES;
 const COLOR_IDS = BLOBS;
 const SHAPE_IDS = SHAPES;
+// ~350KB of base64, which is a generous 256px square. The avatar lives inside
+// state.json, and that file is re-serialised on every save, so this is a cap
+// on how much work every future write does . not just on the picture.
+const MAX_AVATAR = 350_000;
 
 // Toolsets a teammate may hand ITSELF, on top of whatever profile it is on.
 //
@@ -118,6 +122,7 @@ function seedState() {
     settings: {
       appearance: "dark",
       userName: "Michael",
+      userAvatar: "",
       model: "grok-4.6",
       provider: "xai-oauth",
       codingModel: "",
@@ -226,6 +231,11 @@ function normalizeState(raw) {
   const settings = {
     appearance: "dark",
     userName: "Michael",
+    // A square image as a data URI, or "" for the letter mark. Stored inline
+    // rather than as a path: state.json is the only thing that survives a
+    // reinstall, and an avatar that points at a file the user later moves is
+    // a broken picture with no way to tell them why.
+    userAvatar: "",
     model: "grok-4.6",
     provider: "xai-oauth",
     codingModel: "",
@@ -2588,6 +2598,15 @@ function createStore(opts = {}) {
       }
       if (Object.prototype.hasOwnProperty.call(patch, "codingHarness")) {
         state.settings.codingHarness = modelPick.normalizeHarness(state.settings.codingHarness);
+      }
+      // The avatar rides in state.json, which is read back and rendered into
+      // an <img>. Validate the shape rather than trusting the caller: only a
+      // real raster data URI, and capped, because everything in this file is
+      // parsed and re-serialised on every single save.
+      if (Object.prototype.hasOwnProperty.call(patch, "userAvatar")) {
+        const v = String(patch.userAvatar || "");
+        const okShape = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v);
+        state.settings.userAvatar = v && okShape && v.length <= MAX_AVATAR ? v : "";
       }
       save();
       return publicState();

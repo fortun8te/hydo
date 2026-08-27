@@ -816,7 +816,13 @@ export default function Sidebar({
             data-tip={name}
             onClick={() => onAccountToggle(!accountOpen)}
           >
-            <span className="sand-foot__mark sand-initial">{initialOf(name)}</span>
+            <span className="sand-foot__mark sand-initial">
+              {userAvatar ? (
+                <img src={userAvatar} alt="" className="sand-foot__avatar" />
+              ) : (
+                initialOf(name)
+              )}
+            </span>
             <span className="sand-foot__label">{name}</span>
           </button>
         </div>
