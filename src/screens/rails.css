@@ -1142,3 +1142,45 @@ aside.routine-rail .routine-rail__toolbar {
   line-height: 15px;
   color: var(--sand-text-tertiary, #8d8d8d);
 }
+
+
+/* -- mode presets --------------------------------------------------------- */
+/* Tools and Reason are two controls with a real recurring cost and no obvious
+   right answer, so almost every bot stayed on whatever it was created with.
+   Four named modes with the number on them make the cheap one a single click. */
+
+.bot-rail .bot-rail__presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.bot-rail .bot-rail__preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 2px 6px;
+  border: 1px solid rgba(252, 252, 252, 0.1);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.bot-rail .bot-rail__preset:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.bot-rail .bot-rail__preset.is-on {
+  background: #2e2e2e;
+  border-color: rgba(252, 252, 252, 0.26);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.bot-rail .bot-rail__preset-cost {
+  font-size: 10.5px;
+  color: var(--sand-text-tertiary, #8d8d8d);
+}

@@ -1445,10 +1445,20 @@ function createStore(opts = {}) {
     // Hermes context engine owns history. AGENTS.md is workspace rules + soul
     // only — dumping MEMORY.md here every turn pays for it forever.
     // Hermes loads identity from profile SOUL.md. AGENTS.md is workspace law only.
-    fs.writeFileSync(
-      path.join(cwd, "AGENTS.md"),
-      `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n`
-    );
+    // Rewritten only when it CHANGES. This ran on every turn with byte-
+    // identical content: a pointless write, and worse, it bumped the mtime of
+    // a file that sits at the front of the prompt. xAI caches on a reused
+    // prefix, so anything that makes the prefix look new costs the 75%
+    // cached-input discount on everything behind it.
+    const agentsPath = path.join(cwd, "AGENTS.md");
+    const agentsWant = `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n`;
+    try {
+      if (fs.readFileSync(agentsPath, "utf8") !== agentsWant) {
+        fs.writeFileSync(agentsPath, agentsWant);
+      }
+    } catch {
+      fs.writeFileSync(agentsPath, agentsWant);
+    }
 
     const sessionOpts = {
       cwd,

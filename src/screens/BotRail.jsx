@@ -14,6 +14,23 @@ const FALLBACK_PROFILES = [
   { name: "full", tokens: 24700 },
 ];
 
+// One action instead of two dropdowns and the knowledge of what they cost.
+// The numbers are the profile cost; reasoning is on top of it either way.
+const PRESETS = [
+  { id: "cheap", label: "Cheap", profile: "chat", effort: "minimal",
+    hint: "Talks, remembers, keeps a todo. No files, no shell, no web." },
+  { id: "lean", label: "Lean", profile: "writer", effort: "low",
+    hint: "Adds its workspace and skills. Good default for a bot that writes." },
+  { id: "work", label: "Work", profile: "builder", effort: "low",
+    hint: "Shell, delegation, web, artifacts. What real jobs need." },
+  { id: "deep", label: "Deep", profile: "builder", effort: "high",
+    hint: "Same tools, thinks harder. Costs the most per turn." },
+];
+
+function presetOf(profile, effort) {
+  return PRESETS.find((p) => p.profile === profile && p.effort === effort)?.id || null;
+}
+
 function tokenLabel(n) {
   if (!n) return "";
   return n >= 1000 ? `${Math.round(n / 100) / 10}k` : String(n);
@@ -78,9 +95,13 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   const customOn = isCustomHex(agent?.blob);
   const pip = botWorks(agent, agent?.id) ? "work" : pipOf(agent);
   const todos = Array.isArray(agent?.todos) ? agent.todos : [];
-  const profileTokens = profiles.find((p) => p.name === toolProfile)?.tokens || 0;
   const toolProfile = agent?.toolProfile || "builder";
   const reasoningEffort = agent?.reasoningEffort || "low";
+  // After the two above, not before: reading them earlier is a temporal dead
+  // zone that throws at render and blanks the whole app. `vite build` cannot
+  // see it, and no test renders this component, so it reached the browser.
+  const profileTokens = profiles.find((p) => p.name === toolProfile)?.tokens || 0;
+  const activePreset = presetOf(toolProfile, reasoningEffort);
   const pinnedMcp = useMemo(
     () => (Array.isArray(agent?.mcp) ? agent.mcp.map(String) : []),
     [agent?.mcp]
@@ -247,6 +268,33 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           onChange={(e) => onChange({ description: e.target.value })}
         />
       </label>
+      <div className="bot-rail__field">
+        <span className="bot-rail__field-label">Mode</span>
+        <div className="bot-rail__presets" role="group" aria-label="Mode">
+          {PRESETS.map((p) => {
+            const on = activePreset === p.id;
+            const cost = profiles.find((x) => x.name === p.profile)?.tokens;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={on ? "bot-rail__preset is-on" : "bot-rail__preset"}
+                aria-pressed={on}
+                title={p.hint}
+                onClick={() => onChange({ toolProfile: p.profile, reasoningEffort: p.effort })}
+              >
+                <span>{p.label}</span>
+                <span className="bot-rail__preset-cost">{tokenLabel(cost)}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="bot-rail__cost">
+          {activePreset
+            ? PRESETS.find((p) => p.id === activePreset).hint
+            : "Custom. Tools and Reason are set individually below."}
+        </p>
+      </div>
       <label className="bot-rail__field">
         <span className="bot-rail__field-label">Tools</span>
         <select
