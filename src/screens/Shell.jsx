@@ -149,6 +149,20 @@ export default function Shell({ state }) {
     return () => clearInterval(id);
   }, [draft, sending, workingHere, linger]);
 
+  // Whose plan the composer shows. In a channel it is whoever is actually
+  // working, because two open plans is two things to read and the one that
+  // matters is the one being executed.
+  const planOwner = (() => {
+    if (!selected) return null;
+    if (!isChannel) return (selected.todos || []).length ? selected : null;
+    const members = agents.filter((a) => (selected.members || []).map(String).includes(String(a.id)));
+    return (
+      members.find((a) => botWorks(a, selected.id) && (a.todos || []).length) ||
+      members.find((a) => (a.todos || []).length) ||
+      null
+    );
+  })();
+
   /**
    * Hand files to the selected teammate through the native picker.
    *
@@ -558,6 +572,8 @@ export default function Shell({ state }) {
               setChannelCreate(true);
             }}
             onAttach={attachFiles}
+            todos={planOwner?.todos}
+            planOwner={planOwner?.name}
             onSlashAction={(id) => runCommand(id)}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}

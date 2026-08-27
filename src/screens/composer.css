@@ -395,3 +395,132 @@
   object-fit: cover;
   display: block;
 }
+
+/* ── PlanCard ─────────────────────────────────────────────────────────────
+   The teammate's plan, hanging off the top of the prompt box.
+
+   Same surface as the slash menu above (`--hy-menu`, same border, same
+   shadow) because it is the same kind of object: a panel attached to the
+   composer, not a message. Anchored the same way too, so it appears in one
+   fixed place instead of wherever the thread happens to end.
+
+   Deliberately small. Collapsed it is a single 26px strip — the step in
+   progress and how far along — and it extends UPWARD, away from the pill, so
+   opening it never moves the thing you are typing into. */
+
+.hy-plan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  /* Bottom-anchored: the list grows up off the top edge while the strip stays
+     welded to the composer. */
+  justify-content: flex-end;
+  border-radius: 13px;
+  background: var(--hy-menu);
+  border: 1px solid var(--hy-menu-border, rgba(252, 252, 252, 0.1));
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.72);
+  overflow: hidden;
+}
+
+.hy-plan__bar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 5px 10px;
+  min-height: 26px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hy-plan__bar:hover { background: var(--hy-menu-hover, rgba(252, 252, 252, 0.06)); }
+.hy-plan__bar:focus-visible { outline: 2px solid var(--sand-accent, #2a92fe); outline-offset: -2px; }
+
+/* One tick per step. A progress bar would say how far along without saying how
+   many things there are; ticks say both, and a plan that grows mid-job is
+   visible as it grows. */
+.hy-plan__meter { display: inline-flex; gap: 2px; flex: none; }
+.hy-plan__tick {
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--sand-line, rgba(252, 252, 252, 0.18));
+  display: block;
+}
+.hy-plan__tick.is-done { background: var(--sand-ok, #2bb673); }
+.hy-plan__tick.is-live {
+  background: var(--sand-accent, #2a92fe);
+  animation: hy-plan-pulse 1.6s ease-in-out infinite;
+}
+@keyframes hy-plan-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.hy-plan__now {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--sand-text-primary, #fcfcfc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hy-plan__count {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sand-text-secondary, rgba(252, 252, 252, 0.6));
+}
+.hy-plan__chev { flex: none; font-size: 10px; color: var(--sand-text-secondary, rgba(252, 252, 252, 0.6)); }
+
+.hy-plan__list {
+  list-style: none;
+  margin: 0;
+  /* Order matters: the list is written FIRST in the DOM so it stacks above the
+     strip, which keeps the strip flush against the composer. */
+  padding: 6px 10px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--hy-menu-border, rgba(252, 252, 252, 0.1));
+}
+
+.hy-plan__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--sand-text-secondary, rgba(252, 252, 252, 0.6));
+}
+
+.hy-plan__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--sand-line, rgba(252, 252, 252, 0.22));
+}
+.hy-plan__step.is-done .hy-plan__dot { background: var(--sand-ok, #2bb673); }
+.hy-plan__step.is-live .hy-plan__dot { background: var(--sand-accent, #2a92fe); }
+.hy-plan__step.is-live { color: var(--sand-text-primary, #fcfcfc); }
+/* Struck through, not hidden: what it already did is context for what it is
+   doing now. */
+.hy-plan__step.is-done .hy-plan__text { text-decoration: line-through; opacity: 0.6; }
+
+.hy-plan--done .hy-plan__now { color: var(--sand-text-secondary, rgba(252, 252, 252, 0.6)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hy-plan__tick.is-live { animation: none; }
+}

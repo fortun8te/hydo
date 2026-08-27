@@ -27,7 +27,18 @@ const iso = (minsAgo) => new Date(Date.now() - minsAgo * 60000).toISOString();
 
 function seed() {
   const bots = [
-    { id: "b1", name: "Dev", label: "engineering", blob: "gray", shape: "hex" },
+    {
+      id: "b1", name: "Dev", label: "engineering", blob: "gray", shape: "hex",
+      // A plan mid-execution, so PlanCard has something real to render. The
+      // shape matches what `captureTodos` lifts off the Hermes todo tool.
+      todos: [
+        { id: "t1", text: "Read the invoice PDFs in the workspace", status: "completed" },
+        { id: "t2", text: "Pull every total into one sheet", status: "completed" },
+        { id: "t3", text: "Reconcile against the bank export", status: "in_progress" },
+        { id: "t4", text: "Flag the rows that do not match", status: "pending" },
+        { id: "t5", text: "Write the summary", status: "pending" },
+      ],
+    },
     { id: "b2", name: "Sauce", label: "", blob: "white", shape: "pebble" },
     { id: "b3", name: "NanoX", label: "ads", blob: "blue", shape: "squircle" },
     { id: "b4", name: "Finance Guy", label: "", blob: "orange", shape: "blob" },

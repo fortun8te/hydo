@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MediaViewer } from "./RichContent.jsx";
 import { pluginIconUrl, pluginPrettyName } from "../lib/plugin-icons.js";
 import UmbraFace from "../umbra/UmbraFace.jsx";
+import PlanCard from "./PlanCard.jsx";
 
 // The kit's icon font has no microphone, and its `plus` / `arrow-up` glyphs are
 // drawn inside a ring — the real composer's are bare. Draw those three here.
@@ -108,6 +109,8 @@ export default function Composer({
   onNewBot,
   onNewChannel,
   onAttach,
+  todos,
+  planOwner,
   onSlashAction,
   busy,
   onStop,
@@ -462,6 +465,13 @@ export default function Composer({
           </button>
         </div>
       )}
+
+      {/* The teammate's plan, hanging off the top of the pill like the slash
+          menu does. It belongs here rather than in the transcript: it is
+          current state, not history, so it must not scroll away with the turn
+          that produced it, and anchoring it to the composer means it is in the
+          same place every time instead of wherever the thread happens to end. */}
+      <PlanCard todos={todos} name={planOwner} />
 
       <button
         type="button"
