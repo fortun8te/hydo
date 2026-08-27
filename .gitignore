@@ -19,3 +19,6 @@ build/icon*.png
 # Agent scratch benchmarks. Throwaway by nature.
 _bench*.mjs
 _cr.mjs
+
+# electron-builder output
+dist/mac-arm64/
