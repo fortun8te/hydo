@@ -1246,3 +1246,16 @@ aside.routine-rail .routine-rail__toolbar {
   outline: 2px solid var(--sand-accent, #2a92fe);
   outline-offset: 2px;
 }
+
+/* Drift between what Hydo asked for and what the session actually has.
+   Amber: it is information, and it resolves itself on the next session. */
+.bot-rail .bot-rail__drift {
+  margin: 6px 0 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--sand-text-primary, #fcfcfc);
+  background: rgba(228, 161, 27, 0.1);
+  border: 1px solid rgba(228, 161, 27, 0.24);
+}

@@ -99,6 +99,7 @@ contextBridge.exposeInMainWorld("hydo", {
   // What this teammate left running in the background, and stopping one.
   // Rewind the last exchange: the model forgets it and so does the thread.
   // Not the file rollback . this one touches nothing on disk.
+  sessionToolsets: (agentId) => ipcRenderer.invoke("hydo:sessionToolsets", agentId),
   undoLast: (agentId) => ipcRenderer.invoke("hydo:undoLast", agentId),
   processes: (agentId) => ipcRenderer.invoke("hydo:processes", agentId),
   killProcess: (agentId, processId) => ipcRenderer.invoke("hydo:killProcess", agentId, processId),

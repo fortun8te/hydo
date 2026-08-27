@@ -1298,6 +1298,29 @@ function undoTurn(botId) {
   });
 }
 
+/**
+ * What this teammate can ACTUALLY reach, according to its own live session.
+ *
+ * Not the same question as "what did Hydo configure". Hydo sets a pin and
+ * Hermes resolves it, and today has been a long list of places where those two
+ * quietly disagreed . an MCP server named in a pin but absent from the
+ * profile's config was silently filtered out, and nothing anywhere said so.
+ *
+ * `tools.list` answers from the session's own `enabled_toolsets`, so a
+ * mismatch between what Hydo asked for and what the teammate got becomes
+ * visible instead of being a bug someone finds months later.
+ */
+function sessionToolsets(botId) {
+  return Promise.resolve()
+    .then(() => {
+      const bot = requireBot(botId);
+      return requestFor(botId, 'tools.list', { session_id: bot.sessionId });
+    })
+    .then((res) => (res && Array.isArray(res.toolsets) ? res.toolsets : []))
+    // No session yet is not an error: the teammate has simply never run.
+    .catch(() => []);
+}
+
 function steerSubagent(botId, subagentId, text) {
   return Promise.resolve().then(() => {
     const bot = requireBot(botId);
@@ -2021,6 +2044,7 @@ module.exports = {
   interruptSubagent,
   steerSubagent,
   steer,
+  sessionToolsets,
   undoTurn,
   listProcesses,
   killProcess,

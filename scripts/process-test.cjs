@@ -53,3 +53,30 @@ assert.ok(/clearInterval\(t\)/.test(rail), "and cleaned up when the rail closes"
 assert.ok(/\{procs\.length \? \(/.test(rail), "no 'nothing running' row to learn to skip");
 
 console.log("process-test ok");
+
+// ---- what the session actually has, vs what Hydo asked for ---------------
+// Hydo sends a pin and Hermes resolves it, and those two disagreed silently in
+// several places today: a server named in a pin but missing from the profile's
+// config is filtered out with no word to anyone. `tools.list` answers from the
+// session's own enabled_toolsets, so the drift becomes visible instead of
+// being a bug found months later.
+{
+  const gw2 = R("electron/hermes-gateway.cjs");
+  const rail2 = R("src/screens/BotRail.jsx");
+
+  assert.ok(/'tools\.list', \{ session_id: bot\.sessionId \}/.test(gw2), "asked of the live session");
+  assert.ok(/\.catch\(\(\) => \[\]\)/.test(gw2), "a teammate that never ran is empty, not an error");
+
+  // The comparison must not fire before the session has answered. `live` null
+  // means "not asked yet", which is different from "nothing missing" — and
+  // getting that backwards would warn about drift on every fresh rail.
+  assert.ok(
+    /live && live\.length\s*\n?\s*\? extraToolsets\.filter/.test(rail2),
+    "drift is only computed once the session has actually answered"
+  );
+  assert.ok(/liveMissing\.length \?/.test(rail2), "and the warning hides when there is none");
+  // Read only while the panel is open: this is an RPC.
+  assert.ok(/!agent\?\.id \|\| !abilitiesOpen/.test(rail2), "only fetched while Advanced is open");
+}
+
+console.log("process-test (session toolsets) ok");

@@ -566,6 +566,11 @@ app.whenReady().then(() => {
 
   // Background processes a teammate left running. Session scoped: one bot
   // cannot see or reap another's.
+  // What the teammate's live session actually has enabled, which is not
+  // necessarily what Hydo asked for.
+  ipcMain.handle("hydo:sessionToolsets", (_e, agentId) =>
+    gateway.sessionToolsets(agentId).then((toolsets) => ok({ toolsets }))
+  );
   ipcMain.handle("hydo:undoLast", async (_e, agentId) => {
     const next = await store.undoLast(agentId);
     push();

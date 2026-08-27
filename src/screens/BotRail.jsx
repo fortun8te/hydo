@@ -104,6 +104,9 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   // background process is a rare thing and this is an RPC, so a permanent
   // timer would cost far more than the answer is worth.
   const [procs, setProcs] = useState([]);
+  // What the LIVE session reports as enabled, which is a different question
+  // from what Hydo configured. Read only while Advanced is open.
+  const [live, setLive] = useState(null);
   const customOn = isCustomHex(agent?.blob);
   const pip = botWorks(agent, agent?.id) ? "work" : pipOf(agent);
   const todos = Array.isArray(agent?.todos) ? agent.todos : [];
@@ -157,6 +160,14 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   // What is folded away, said in the header so opening it is a choice rather
   // than a search. Hand-picking anything in there desyncs it from the preset
   // row, and the row says "Custom" . that is the honest state, not a bug.
+  // Named in Hydo, absent from the live session. Only meaningful once the
+  // session has actually answered . before that `live` is null and there is
+  // nothing to compare, which is different from "nothing missing".
+  const liveMissing =
+    live && live.length
+      ? extraToolsets.filter((t) => !live.some((x) => x.name === t && x.enabled))
+      : [];
+
   const advancedMeta = [
     profileLabel(toolProfile),
     reasoningEffort !== "low" ? reasoningEffort : "",
@@ -182,6 +193,19 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
       clearInterval(t);
     };
   }, [agent?.id]);
+
+  useEffect(() => {
+    if (!agent?.id || !abilitiesOpen) return undefined;
+    let gone = false;
+    Promise.resolve(window.hydo?.sessionToolsets?.(agent.id))
+      .then((res) => {
+        if (!gone && res && res.ok) setLive(res.toolsets || []);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [agent?.id, abilitiesOpen]);
 
   function toggleToolset(name, on) {
     const next = on
@@ -477,6 +501,18 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
                 Extra Hermes toolsets on top of {profileLabel(toolProfile)}. Each one costs
                 context on every turn.
               </p>
+              {/* What the teammate ACTUALLY has, asked of its own session
+                  rather than inferred from what we set. Hydo sends a pin and
+                  Hermes resolves it, and the two can disagree silently . a
+                  server named in a pin but missing from the profile's config
+                  is dropped without a word. Naming the drift is the only way
+                  that stops being a bug found months later. */}
+              {liveMissing.length ? (
+                <p className="bot-rail__drift">
+                  Asked for but not active in its session: {liveMissing.join(", ")}. It will pick
+                  them up on its next session.
+                </p>
+              ) : null}
               <div className="bot-rail__checks" role="group" aria-label="Abilities">
                 {toolsets.map((t) => {
                   const covered = inProfile.has(t.name);
