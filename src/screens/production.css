@@ -1031,33 +1031,62 @@
   .hy-home__grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
-  .hy-card {
-    min-height: 116px;
-    padding: 12px;
-  }
 }
 
+/* A teammate card.
+ *
+ * Shorter and darker than it was: at 148px the roster pushed Routines below the
+ * fold on a laptop, and a card is a way in, not a panel. The height it lost was
+ * empty — the face, the name and one line of description all sit in 116px.
+ *
+ * The background is a gradient rather than a flat fill so the card has a top
+ * and a bottom. It runs from near-black to the blue-black the glow lives in
+ * (#0A0909 -> #09101F, the MetalForge ground), which is what keeps a grid of
+ * these from reading as grey rectangles on a dark page.
+ */
 .hy-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
-  padding: 16px;
-  min-height: 148px;
+  padding: 13px 14px;
+  min-height: 116px;
   border: 1px solid var(--sand-line, #ffffff12);
-  border-radius: 16px;
-  background: var(--hy-menu, #1c1c1c);
+  border-radius: 14px;
+  background: linear-gradient(168deg, #121216 0%, #0d0d11 58%, #0a0909 100%);
   cursor: pointer;
   font: inherit;
   text-align: left;
   color: inherit;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease,
-    box-shadow 120ms ease;
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
-.hy-card:hover { background: var(--hy-raised, #2e2e2e); border-color: #ffffff1f; }
+/* Hover lights the card from underneath rather than lifting its fill.
+ *
+ * The glow is the app's one piece of character and this is the cheapest place
+ * to spend it: an inset spread along the bottom edge in the MetalForge mid
+ * blue, so the card looks lit from the same source as the ambient glow behind
+ * Home instead of just turning a lighter grey. `-26px` keeps it a rim; larger
+ * and it washes the whole card and the text loses contrast.
+ */
+.hy-card:hover {
+  border-color: #6994ff3d;
+  transform: translateY(-1px);
+  box-shadow: inset 0 -22px 34px -26px #6994ff59, 0 6px 20px -14px #144ccd66;
+}
 .hy-card:focus-visible { outline: 2px solid var(--sand-accent, #2a92fe); outline-offset: 2px; }
 
-.hy-card__face { position: relative; display: inline-flex; margin-bottom: 8px; }
+/* The narrow-card override lives HERE, after the base rule, not up with the
+ * rest of the 720px block. It was declared before `.hy-card` and lost every
+ * cascade it entered — same specificity, later wins — so the cards never
+ * actually shrank on a narrow window. Order is the whole fix. */
+@media (max-width: 720px) {
+  .hy-card {
+    min-height: 104px;
+    padding: 11px 12px;
+  }
+}
+
+.hy-card__face { position: relative; display: inline-flex; margin-bottom: 7px; }
 
 .hy-card__name {
   font-size: 14px;
@@ -1065,7 +1094,27 @@
   color: var(--sand-text-primary, #fcfcfc);
 }
 
+/* The name row. `min-width: 0` on the name so a long name ellipsises instead
+ * of shoving the role chip out of the card. */
+.hy-card__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.hy-card__top .hy-card__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .hy-card__label {
+  flex: 0 0 auto;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10.5px;
   padding: 1px 6px;
   border-radius: 5px;
@@ -1077,9 +1126,12 @@
   font-size: 12px;
   line-height: 16px;
   color: var(--sand-text-tertiary, #8d8d8d);
-  /* Two lines, then stop. A description the bot wrote can be a paragraph. */
+  /* ONE line, then stop. A description the bot wrote can be a paragraph, and
+   * two lines of it was what actually set the card's height — the min-height
+   * was never the binding constraint. A card is a way in, not the place to
+   * read a bio. */
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

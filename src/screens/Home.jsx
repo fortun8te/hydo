@@ -199,15 +199,21 @@ export default function Home({
                     <UmbraFace
                       tint={a.blob}
                       shape={a.shape}
-                      size={48}
+                      size={40}
                       live
                       mood={pip === "work" ? "spin" : "fidget"}
                       poke={false}
                     />
                     {pip ? <span className={`sand-row__dot is-${pip}`} aria-hidden="true" /> : null}
                   </span>
-                  <span className="hy-card__name">{a.name}</span>
-                  {a.label ? <span className="hy-card__label">{a.label}</span> : null}
+                  {/* Name and role on ONE row. The role used to take a row of
+                      its own, which was the last thing making the card tall
+                      for a word that is usually shorter than the name it sits
+                      under. */}
+                  <span className="hy-card__top">
+                    <span className="hy-card__name">{a.name}</span>
+                    {a.label ? <span className="hy-card__label">{a.label}</span> : null}
+                  </span>
                   {/* The description if it has written one, else the last thing
                       said. A card with only a name tells you nothing about
                       which teammate this is. */}
