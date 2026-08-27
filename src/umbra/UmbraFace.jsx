@@ -11,6 +11,7 @@ import {
 } from "./character-runtime.js";
 import { BOX_EXTENT, FACE, shapeIdOf, specFor } from "./rims.js";
 import { colorOf } from "../lib/marks.js";
+import matcapChrome from "../kit/images/matcap-chrome.png";
 import { SPIN_MS, spinCycle, spinStage, makeSpinState, easeYawToRest, easeInOutQuint, hash01 } from "./spin-turn.js";
 import { POKE_MS, MAX_HOPS, pokeDuration, pokeFrame } from "./poke.js";
 import { makeIdleState, idleStep } from "./idle.js";
@@ -260,11 +261,22 @@ const DETAIL = 4;
 const NO_DRAG = { x: 0, y: 0, active: false, vx: 0, vy: 0, lastX: 0, lastY: 0 };
 
 const configCache = new Map();
-function configFor(bodyColor, eyeColor, motionId) {
-  const key = bodyColor + "|" + eyeColor + "|" + motionId;
+function configFor(bodyColor, eyeColor, motionId, metal) {
+  const key = bodyColor + "|" + eyeColor + "|" + motionId + (metal ? "|m" : "");
   let cfg = configCache.get(key);
   if (!cfg) {
     cfg = { ...BASE_CONFIG, bodyColor, eyeColor, motionId };
+    if (metal) {
+      // The matcap already contains every light in the scene. The engine's
+      // own shine/shadow/gloss/rim render as extra <path> overlays AFTER the
+      // body, so leaving them on painted a flat clay wash straight over the
+      // material — which is why the metal looked like grey plastic even
+      // though the texture was loading correctly.
+      cfg.shine = 0;
+      cfg.shadow = 0;
+      cfg.gloss = 0;
+      cfg.rim = 0;
+    }
     configCache.set(key, cfg);
   }
   return cfg;
@@ -354,68 +366,30 @@ function useReducedMotion() {
 
 // -------------------------------------------------------------- chrome
 //
-// WHAT WENT WRONG THE FIRST THREE TIMES
+// A MATCAP, not a hand-tuned gradient.
 //
-// I built an environment map: a vertical ramp with a horizon line, the way a
-// chrome ball reflects a room. Pasted onto this body it looked exactly like
-// what it was, a 2D photograph of a horizon stuck to a 3D shape. Every pixel
-// on a row was the same colour, so the band cut straight across the face and
-// read as a stripe. Tuning the stops could not fix it, because the problem was
-// never the stops.
+// Five previous attempts built the reflection out of stops by hand and every
+// one of them read as a decal, for the same reason each time: a gradient is a
+// function of POSITION, and a reflection is a function of the surface NORMAL.
+// No amount of moving stops closes that gap.
 //
-// These are CHARACTERS, and the other eleven colours look right because they
-// are lit — one light, from above and to the left, falling off around a form.
-// Chrome is not a different lighting model. It is the same lighting model with
-// a metal's response curve:
+// `matcap-chrome.png` is a rendered sphere (scripts/make-matcap.cjs): for each
+// pixel, take the sphere normal, reflect the view vector off it, look up what
+// that ray sees in a studio environment, and apply Schlick Fresnel. Because
+// it is indexed by normal, projecting it onto a convex body is not an
+// approximation of a reflection, it IS one. The horizon curves with the form,
+// the rim goes bright at grazing angles, the highlight sits where the light
+// actually is, and all of it comes free.
 //
-//   * a diffuse term that is dark and slightly blue, because polished metal
-//     reflects almost no light diffusely
-//   * a specular term that is narrow, bright and travels, because it does
-//     reflect nearly all of it in one direction
-//   * a rim, because grazing angles on metal go bright, not dark
+// Generated rather than downloaded: the public matcap libraries state that
+// their textures "were obtained from various websites", which is not a
+// licence.
 //
-// So there is no texture here at all. It is a radial fall-off like every other
-// colour, with the contrast pushed and the highlight made small and hard.
-// Polish is CONTRAST, not lightness. A matte grey and a chrome ball can share
-// an average brightness; what separates them is how fast you get from the
-// highlight to the shadow. So the core goes near white, the shadow goes deep,
-// and the distance between them is short.
-// Chrome needs BANDS, and the bands have to wrap the form.
-//
-// A smooth falloff gives you light grey plastic, which is what the last pass
-// was. What makes something read as a mirror is high-frequency contrast: hard
-// jumps from bright to dark, because a mirror shows you a room with edges in
-// it, not a soft gradient.
-//
-// Banded RADIALLY, not vertically. A vertical band is a straight line across
-// the face (a decal). A radial band is a ring that compresses toward the
-// silhouette exactly the way a reflection does on a curved surface, and it is
-// centred on the light, so it moves with the form instead of sitting on top
-// of it. This is a studio reflection: a bright source, a dark surround, floor
-// bounce coming back at the rim.
-const CHROME_BANDS = [
-  // Vertical after all, but with the horizon LOW.
-  //
-  // The mistake in the first attempt was not that the environment was
-  // vertical, it was that the dark band sat across the middle of the face, on
-  // the eyes, where it reads as a stripe painted on a head. Dropping it to
-  // roughly two thirds down keeps the whole face in the bright sky, puts the
-  // mirror detail in the lower third where a real reflection is busiest, and
-  // leaves the eyes sitting on clean metal.
-  //
-  // Curvature is not this gradient's job. The elliptical rim and the edge
-  // shading below wrap it to the form; this only supplies the environment.
-  [0.0, "#E9EFF7"],
-  [0.14, "#FBFDFF"], // sky
-  [0.44, "#D2DAE5"],
-  [0.6, "#A8B2C0"], // falling toward the horizon
-  [0.655, "#2B313A"], // ── hard: horizon, low and out of the face
-  [0.7, "#242A33"],
-  [0.735, "#8B96A5"], // ── hard: ground
-  [0.83, "#E4E7EC"], // floor bounce, bright
-  [0.9, "#9AA0AA"],
-  [1.0, "#5C636E"],
-];
+// The mapping below is the honest limitation. A true matcap needs a real
+// normal per pixel; the engine hands the paint layer a flat 2D silhouette, so
+// the sphere is fitted to the body's own extent and clipped to its outline.
+// For these rounded bodies that is very close. On a sharply concave shape it
+// would not be.
 
 function isMetal(colorId) {
   return String(colorId || "") === "chrome";
@@ -802,9 +776,10 @@ export default function UmbraFace({
     }, Math.max(0, p.t0 + pokeDuration(p.hops) - now) + 60);
   }
 
+  const isChrome = isMetal(tint);
   const cfg = useMemo(
-    () => configFor(color.value, color.ink, motionId),
-    [color.value, color.ink, motionId]
+    () => configFor(color.value, color.ink, motionId, isChrome),
+    [color.value, color.ink, motionId, isChrome]
   );
 
   // `stagger` is a low-discrepancy sequence on purpose: it spreads SPIN phase
@@ -854,7 +829,7 @@ export default function UmbraFace({
     const clipId = `uf-clip-${gid}`;
     const gradId = `uf-grad-${gid}`;
     const scaled = paint.scaleX !== 1 || paint.scaleY !== 1;
-    const metal = isMetal(tint);
+    const metal = isChrome;
     // The body's OWN radii, not a single extent. `spec.er` is what the engine
     // uses to size this silhouette, so a wedge and a teardrop get reflections
     // shaped like themselves rather than one circle stretched over both.
@@ -882,62 +857,13 @@ export default function UmbraFace({
         <defs>
           {metal ? (
             <>
-              {/* The environment: vertical, spanning the body's real height. */}
-              <linearGradient
-                id={gradId}
-                gradientUnits="userSpaceOnUse"
-                x1={0}
-                y1={-extent}
-                x2={0}
-                y2={extent}
-              >
-                {CHROME_BANDS.map(([off, col]) => (
-                  <stop key={off} offset={off} stopColor={col} />
-                ))}
+              {/* Nothing to define: the material is an image. A flat fill is
+                  kept only so `bodyD` has something to paint when the frame
+                  has no image yet. */}
+              <linearGradient id={gradId} gradientUnits="userSpaceOnUse" x1={0} y1={-extent} x2={0} y2={extent}>
+                <stop offset="0" stopColor="#C8CFD8" />
+                <stop offset="1" stopColor="#6E7681" />
               </linearGradient>
-              {/* The FORM. This is what stops the environment reading as a
-                  decal: an elliptical falloff scaled to THIS shape's own
-                  radii, darkening the sides so the body turns away from you.
-                  A teardrop and a hex get their own proportions, not one
-                  circle stretched over both. */}
-              <radialGradient
-                id={`${gradId}-form`}
-                gradientUnits="userSpaceOnUse"
-                cx={0}
-                cy={0}
-                r={metalR}
-                gradientTransform={`translate(${-metalR * 0.16} ${-metalR * 0.2}) scale(${metalSX} ${metalSY})`}
-              >
-                <stop offset="0.3" stopColor="#0A0E14" stopOpacity="0" />
-                <stop offset="0.72" stopColor="#0A0E14" stopOpacity="0.24" />
-                <stop offset="1" stopColor="#070A0F" stopOpacity="0.62" />
-              </radialGradient>
-              {/* Specular: small, hard, near white. */}
-              <radialGradient
-                id={`${gradId}-hot`}
-                gradientUnits="userSpaceOnUse"
-                cx={-metalR * 0.32}
-                cy={-metalR * 0.44}
-                r={metalR * 0.34}
-              >
-                <stop offset="0" stopColor="#ffffff" stopOpacity="0.98" />
-                <stop offset="0.4" stopColor="#ffffff" stopOpacity="0.4" />
-                <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
-              </radialGradient>
-              {/* Fresnel rim: metal goes BRIGHT at grazing angles where a
-                  dielectric goes dark. Elliptical, so it hugs the silhouette. */}
-              <radialGradient
-                id={`${gradId}-rim`}
-                gradientUnits="userSpaceOnUse"
-                cx={0}
-                cy={0}
-                r={metalR}
-                gradientTransform={`scale(${metalSX} ${metalSY})`}
-              >
-                <stop offset="0.8" stopColor="#CFDCEE" stopOpacity="0" />
-                <stop offset="0.95" stopColor="#DEE8F6" stopOpacity="0.42" />
-                <stop offset="1" stopColor="#F6FAFF" stopOpacity="0.9" />
-              </radialGradient>
             </>
           ) : (
             <radialGradient
@@ -972,17 +898,6 @@ export default function UmbraFace({
             {S.bodyD && !(dots && !morphing) ? (
               <path d={S.bodyD} fill={`url(#${gradId})`} shapeRendering="geometricPrecision" />
             ) : null}
-            {/* Specular. Clipped to the body so the highlight cannot spill off
-                the silhouette, and drawn after the fill so it sits on top. */}
-            {metal && S.bodyD && !(dots && !morphing) ? (
-              <g clipPath={`url(#${clipId})`}>
-                {/* Form first, so it darkens the environment; then the
-                    highlights sit on top of the shaded result. */}
-                <path d={S.bodyD} fill={`url(#${gradId}-form)`} />
-                <path d={S.bodyD} fill={`url(#${gradId}-rim)`} />
-                <path d={S.bodyD} fill={`url(#${gradId}-hot)`} />
-              </g>
-            ) : null}
             {/* The hairline self-stroke closes the gaps between depth slices. */}
             {S.bodyD && paint.seam !== false && !(dots && !morphing) ? (
               <path
@@ -996,7 +911,7 @@ export default function UmbraFace({
             ) : null}
             {S.bodyD && !(dots && !morphing) ? (
               <g clipPath={`url(#${clipId})`}>
-                {S.texture.map((L, i) =>
+                {metal ? null : S.texture.map((L, i) =>
                   L.d ? (
                     <path
                       key={`t${i}`}
@@ -1010,7 +925,7 @@ export default function UmbraFace({
                     />
                   ) : null
                 )}
-                {S.overlays.map((v) => (
+                {metal ? null : S.overlays.map((v) => (
                   <path
                     key={v.id}
                     d={v.d}
@@ -1019,6 +934,23 @@ export default function UmbraFace({
                     filter={v.blur > 0 ? `url(#uf-b-${gid}-${v.id})` : undefined}
                   />
                 ))}
+                {/* Chrome. A matcap — a photograph of a lit sphere, looked up by
+                    surface normal — fitted to the body's extent and clipped to
+                    its outline. It must be the LAST body layer: the depth-slice
+                    texture above is opaque body colour and painted straight
+                    over it, which is why chrome read as flat grey. It replaces
+                    that shading rather than sitting under it, because a mirror
+                    has no diffuse term of its own to shade. */}
+                {metal ? (
+                  <image
+                    href={matcapChrome}
+                    x={-extent}
+                    y={-extent}
+                    width={extent * 2}
+                    height={extent * 2}
+                    preserveAspectRatio="none"
+                  />
+                ) : null}
                 {dots ? null : eyePaths(S, cfg)}
               </g>
             ) : null}
