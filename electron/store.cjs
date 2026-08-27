@@ -2542,19 +2542,35 @@ function createStore(opts = {}) {
       }
       const user = state.settings.userName || "Michael";
       const named = agent.name && agent.name !== "New Bot" ? agent.name : "";
+      // The opening brief.
+      //
+      // This used to contain the sentence "It is fine to just be glad to be
+      // here and stop talking", and every teammate ever created opened with
+      // "glad to be here" . it was reading its instructions out loud. Any
+      // phrase written in here comes back as the greeting, so the brief must
+      // describe the SHAPE of an opening and never demonstrate one.
+      //
+      // It also capped the whole thing at twelve words and forbade asking
+      // anything, which left exactly one legal output: a bare hello. That is
+      // why every bot sounded identical no matter what model was behind it.
+      const hour = new Date().getHours();
+      const partOfDay =
+        hour < 5 ? "the middle of the night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
       const brief = [
-        `${user} just made you. You are their new teammate${named ? `, called ${named}` : ""}.`,
+        `${user} just made you, a few seconds ago. You are their new teammate${named ? `, called ${named}` : ""}.`,
         agent.description ? `They set you up for: ${agent.description}` : "",
         named
           ? ""
           : "You have no name yet. Never invent one and never call yourself Hydo, that is the app.",
-        // The failure this is written against: every phrasing of "what do you
-        // want me for" is the same menu in different words, and it makes the
-        // first thing a new teammate does be an admin question. Someone warm
-        // says hello and lets you talk.
-        "Say hello like a person would. ONE short line, your own voice, under twelve words.",
-        `Use their name. Do not ask what they want, do not offer categories, do not list, do not say "how can I help".`,
-        "It is fine to just be glad to be here and stop talking. They will tell you what they need.",
+        `It is ${partOfDay} where they are.`,
+        // Two beats, because one is a door held ajar. The second beat is what
+        // stops every bot sounding the same: it has to come from something
+        // true about THIS moment rather than from a template.
+        "Say hello, and then say one more thing that is actually yours.",
+        "That second thing can be what you are curious about, something you noticed about how you were set up, or a real question about what they are working on. One question, asked because you want to know.",
+        `Not a menu. No "what can I help you with", no list of what you could do, no offer of categories.`,
+        "Do not describe yourself in the abstract and do not thank them for making you.",
+        "Two short lines. Their name once, at most.",
         "No tools. No SKIP.",
       ]
         .filter(Boolean)
