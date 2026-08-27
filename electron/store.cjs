@@ -703,7 +703,7 @@ function recentHistory(list, limit = 12) {
  * NOT waking . the expensive mistake is the one that bills.
  */
 const WANTS_BOX =
-  /\b(box exec|box ssh|on the (linux|shared) (box|machine)|linux (box|machine|workspace)|apt-get|apt install|sudo |docker |chrome on the box|the shared machine)\b/i;
+  /\b(box exec|box ssh|on the (linux|shared|) ?(box|machine)|linux (box|machine|workspace)|apt-get|apt install|sudo |docker |lux run|chrome on the box|the shared machine)\b/i;
 function wantsBox(text) {
   return WANTS_BOX.test(String(text || ""));
 }
@@ -1728,7 +1728,25 @@ function createStore(opts = {}) {
     const boxId = String((state.settings && state.settings.boxId) || "");
     const boxBlock =
       agent.boxEnabled && boxId
-        ? `\n## Shared Linux machine\n\nOne Ubuntu box for the whole team, id \`${boxId}\`. Run things on it with \`box exec ${boxId} -- <cmd>\`, or \`box ssh ${boxId}\` for a session. The disk is shared: browser logins and installed software stay for the next teammate, and everything on it is visible to all of them. Your scratch folder is \`/home/box/hydo/${agent.id}\`. It sleeps when nobody is using it; a command wakes it.\n`
+        ? [
+            "",
+            "## Shared Linux machine",
+            "",
+            `One Ubuntu box for the whole team, id \`${boxId}\`. Run things on it with \`box exec ${boxId} --timeout 120 -- <cmd>\`, or \`box ssh ${boxId}\` for a session. Your scratch folder is \`~/hydo/${agent.id}\`. The disk is shared: browser logins and installed software stay for the next teammate, and everything on it is visible to all of them. It sleeps when nobody is using it; a command wakes it.`,
+            "",
+            // Everything the box prints comes back through this conversation and
+            // is paid for by the token. The box has `rg`, `jq` and `curl`
+            // preinstalled (verified: docs.ascii.dev/box/machines), so there is
+            // never a reason to haul a whole file back to read one line of it.
+            "Keep what it prints small — every byte of it is charged to this conversation. Filter on the box with `rg`, `jq` or `head -c 2000`; never `cat` a whole file, a whole log or a whole page.",
+            "",
+            // The expensive mistake, named before it is made. A 1280x800
+            // screenshot is ~1,400 tokens; a twenty-step click-and-look loop is
+            // ~28,000, and it is the loop a model reaches for by default. `lux`
+            // runs that loop INSIDE the box and answers in text.
+            'For anything graphical — a login, a form, a page that will not yield to `curl` — use `lux start "<what to do>" && lux run`. It drives Chrome and the desktop inside the box and answers in text. Do NOT stream the desktop, take screenshots, or look at a screen in a loop: one screenshot costs more than most whole tasks, and you cannot see the stream anyway.',
+            "",
+          ].join("\n")
         : "";
     // What this teammate can actually reach, and what to say when it cannot.
     //

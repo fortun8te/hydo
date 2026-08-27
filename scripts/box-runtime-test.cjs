@@ -15,7 +15,16 @@
 //     `trial_auto_stop_required`, so the clamp has to happen before the call.
 
 const assert = require("node:assert/strict");
-const { createBoxRuntime, DEFAULT_TYPE, DEFAULT_TTL, TRIAL_MAX_TTL } = require("../electron/box-runtime.cjs");
+const {
+  createBoxRuntime,
+  DEFAULT_TYPE,
+  DEFAULT_TTL,
+  TRIAL_MAX_TTL,
+  MAX_TTL,
+  parseFrames,
+  idFrom,
+  placeFlags,
+} = require("../electron/box-runtime.cjs");
 
 /** A fake CLI that records every call. */
 function harness({ boxId = "", trial = true, existing = null } = {}) {
@@ -157,6 +166,157 @@ async function main() {
     assert.equal(rt.idleFor(1000), false, "just released is not idle yet");
     t += 60_000;
     assert.equal(rt.idleFor(1000), true, "idle once the quiet period passes");
+  }
+
+
+  // ---- `box new --json` is JSONL, and the id may not be on the last line ----
+  //
+  // The most expensive bug this file can hold. `box new` emits `created`, then
+  // any number of `state` frames, then `ready` (docs.ascii.dev/box/use-in-code).
+  // Reading only the LAST line means that whenever the stream does not end on
+  // `ready`, Hydo reports "create returned no id" while a machine is running,
+  // billing, and counted against a two-machine limit, with nothing on this Mac
+  // that knows its id well enough to stop it.
+  {
+    const stream = [
+      '{"event":"created","id":"bx_zz9"}',
+      '{"event":"state","state":"provisioned"}',
+      '{"event":"state","state":"cloning"}',
+    ].join("\n");
+    const frames = parseFrames(stream);
+    assert.equal(frames.length, 3, "every JSONL line is parsed, not just the last");
+    assert.equal(idFrom(frames), "bx_zz9", "the id is found wherever in the stream it appears");
+    // A half-written frame must not take the whole stream down with it.
+    assert.equal(idFrom(parseFrames(stream + "\n{\"event\":\"rea")), "bx_zz9");
+  }
+
+  // And end to end: a create whose last frame carries no id still persists one.
+  {
+    let stored = "";
+    const rt = createBoxRuntime({
+      installed: () => true,
+      getBoxId: () => stored,
+      setBoxId: (id) => {
+        stored = id;
+      },
+      exec: async (args) => {
+        if (args[0] === "status") return { ok: true, json: { account: { loginState: "active", identifier: "t@example.com" } } };
+        if (args[0] === "limits") return { ok: true, json: { accessTier: "trial" } };
+        if (args[0] === "list") return { ok: true, json: { boxes: [] } };
+        if (args[0] === "new") {
+          return {
+            ok: true,
+            json: { event: "state", state: "cloning" },
+            frames: [{ event: "created", id: "bx_zz9" }, { event: "state", state: "cloning" }],
+          };
+        }
+        return { ok: true, json: {} };
+      },
+    });
+    const res = await rt.ensureRunning();
+    assert.ok(res.ok, `a create that ends on a state frame is still a create: ${res.reason}`);
+    assert.equal(res.id, "bx_zz9");
+    assert.equal(stored, "bx_zz9", "and the id is remembered, so it can be stopped");
+  }
+
+  // ---- an `event: "error"` frame is a failure even on exit code 0 ----------
+  {
+    const rt = createBoxRuntime({
+      installed: () => true,
+      getBoxId: () => "",
+      exec: async (args) => {
+        if (args[0] === "status") return { ok: true, json: { account: { loginState: "active", identifier: "t@example.com" } } };
+        if (args[0] === "limits") return { ok: true, json: { accessTier: "trial" } };
+        if (args[0] === "list") return { ok: true, json: { boxes: [] } };
+        if (args[0] === "new") return { ok: false, reason: "trial_auto_stop_required", code: "trial_auto_stop_required" };
+        return { ok: true, json: {} };
+      },
+    });
+    const res = await rt.ensureRunning();
+    assert.equal(res.ok, false, "a refused create is a refused create");
+  }
+
+  // ---- global flags go after the subcommand, never at the end --------------
+  // `box exec <ID> [COMMAND]...` takes a variadic trailing COMMAND. A flag
+  // appended at the end is handed to the BOX as part of the command line.
+  {
+    assert.deepEqual(
+      placeFlags(["exec", "bx_1", "--", "ls", "-la"], ["--json"]),
+      ["exec", "--json", "bx_1", "--", "ls", "-la"],
+      "the flag lands before the positional args, not inside the command"
+    );
+    assert.deepEqual(placeFlags(["status", "--json"], ["--json"]), ["status", "--json"], "and is never doubled");
+  }
+
+  // ---- a STALE remembered id must still adopt, not create a second machine --
+  // The account limit on trial is TWO. A remembered id whose machine was
+  // deleted used to skip adoption entirely and go straight to `box new`,
+  // beside a box the user already had.
+  {
+    let stored = "bx_deleted";
+    let created = false;
+    const rt = createBoxRuntime({
+      installed: () => true,
+      getBoxId: () => stored,
+      setBoxId: (id) => {
+        stored = id;
+      },
+      exec: async (args) => {
+        if (args[0] === "status") return { ok: true, json: { account: { loginState: "active", identifier: "t@example.com" } } };
+        if (args[0] === "limits") return { ok: true, json: { accessTier: "trial" } };
+        if (args[0] === "info") return { ok: false, reason: "gone" };
+        if (args[0] === "list") {
+          return args.includes("--all")
+            ? { ok: true, json: { boxes: [{ id: "bx_theirs", state: "stopped" }] } }
+            : { ok: true, json: { boxes: [] } };
+        }
+        if (args[0] === "resume") return { ok: true, json: { box: { id: "bx_theirs", state: "running" } } };
+        if (args[0] === "new") {
+          created = true;
+          return { ok: true, json: { box: { id: "bx_second" } } };
+        }
+        return { ok: true, json: {} };
+      },
+    });
+    const res = await rt.ensureRunning();
+    assert.equal(created, false, "a dead id must not become a SECOND machine");
+    assert.equal(res.id, "bx_theirs", "it adopts the one that actually exists");
+    assert.equal(stored, "bx_theirs", "and forgets the dead id");
+  }
+
+  // ---- waking a stopped box costs no `limits` call --------------------------
+  // `box resume` keeps the box's own TTL, so the trial ceiling is not a
+  // question on this path — and this is the path the desk walks every morning.
+  {
+    const seen = [];
+    const rt = createBoxRuntime({
+      installed: () => true,
+      getBoxId: () => "bx_1",
+      exec: async (args) => {
+        seen.push(args[0]);
+        if (args[0] === "status") return { ok: true, json: { account: { loginState: "active", identifier: "t@example.com" } } };
+        if (args[0] === "info") return { ok: true, json: { box: { id: "bx_1", state: "stopped" } } };
+        return { ok: true, json: {} };
+      },
+    });
+    const res = await rt.ensureRunning();
+    assert.ok(res.resumed);
+    assert.ok(!seen.includes("limits"), "resume asks the API nothing it will not use");
+  }
+
+  // ---- the off-trial ceiling is a real number ------------------------------
+  // It was Number.MAX_SAFE_INTEGER, a value this API has never accepted. It
+  // only looked fine because nothing off trial had ever been tried.
+  {
+    const rt = createBoxRuntime({ installed: () => true });
+    assert.equal(rt.ttlFor(99 * 24 * 3600, false), MAX_TTL, "30 days is the documented maximum");
+    assert.ok(MAX_TTL < Number.MAX_SAFE_INTEGER);
+    // The two values that must never reach the wire, whatever is asked for.
+    for (const bad of [null, undefined, 0, NaN, "", "null"]) {
+      const v = rt.ttlFor(bad, true);
+      assert.equal(v, DEFAULT_TTL, `ttlFor(${String(bad)}) must fall back, not pass through`);
+    }
+    assert.notEqual(rt.ttlFor(28800, true), 28800, "28800 is never sent on trial");
   }
 
   // ---- the id lives on the app, never on an agent --------------------------
@@ -323,3 +483,47 @@ console.log("box-runtime-test (turn wiring) ok");
 }
 
 console.log("box-runtime-test (presets) ok");
+
+// ---- the bans, checked against the source ---------------------------------
+// Each of these is a standing instruction, and a standing instruction with no
+// test is a comment.
+{
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const rt = fs.readFileSync(path.join(__dirname, "../electron/box-runtime.cjs"), "utf8");
+  const store = fs.readFileSync(path.join(__dirname, "../electron/store.cjs"), "utf8");
+
+  if (/"--no-auto-stop"|'--no-auto-stop'/.test(rt)) {
+    throw new Error("--no-auto-stop is a machine that runs until someone notices the bill");
+  }
+  // `box prompt` runs an agent INSIDE the box on its own credits and its own
+  // context. Hydo's teammates are the agent; a second one behind them is a
+  // second bill and a second memory nobody can see.
+  if (/\["prompt"|'prompt'\s*,|\bbox prompt\b/.test(rt) || /\bbox prompt\b/.test(store)) {
+    throw new Error("box prompt is never used");
+  }
+  if (/--ttl["'\s]*,\s*(null|"null"|String\(null\))/.test(rt)) throw new Error("never a null ttl");
+  if (/28800/.test(rt)) throw new Error("28800 is not a ttl this app sends");
+
+  // ---- the block that is taxed on EVERY turn -------------------------------
+  // It sits at the front of the prompt of every box-enabled teammate, so its
+  // size is a per-turn cost and its content is the only lever Hydo has on what
+  // the model does with the machine.
+  const m = /const boxBlock =([\s\S]*?)\n        : "";/.exec(store);
+  if (!m) throw new Error("boxBlock not found");
+  const block = m[1];
+  if (block.length > 2000) throw new Error(`boxBlock is taxed every turn; keep it short (${block.length})`);
+  // The expensive default, named before the model reaches for it. A 1280x800
+  // screenshot is ~1,400 tokens and a twenty-step look-and-click loop is
+  // ~28,000; `lux` runs that loop inside the box and answers in text.
+  if (!/lux start/.test(block)) throw new Error("the block must point at lux for graphical work");
+  if (!/screenshot/i.test(block)) throw new Error("the block must forbid screenshot loops by name");
+  if (!/head -c|rg|jq/.test(block)) throw new Error("the block must teach filtering ON the box");
+  // Every byte the box prints is billed to the conversation that asked for it.
+  if (!/charged|token|cost/i.test(block)) throw new Error("the block must say output costs money");
+  // A path asserted rather than checked. `~` is true on any image; an absolute
+  // home is a guess, and the docs put lux's own output under a different one.
+  if (/\/home\/box\//.test(block)) throw new Error("do not hardcode an absolute home on the box");
+}
+
+console.log("box-runtime-test (bans + token rules) ok");

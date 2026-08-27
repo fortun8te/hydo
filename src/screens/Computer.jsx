@@ -183,6 +183,18 @@ export default function Computer() {
               team-visible. Chat, memory and routines are not on it — those stay
               on this Mac in each teammate&apos;s own profile.
             </p>
+            {/* Said here because it is the question the desktop button invites,
+                and the wrong answer to it is the most expensive habit available:
+                a teammate looking at a screen pays roughly 1,400 tokens per
+                glance, and a click-and-look loop pays it twenty times over. */}
+            <h3>How teammates use it</h3>
+            <p>
+              Over text — commands, files, output. They do not watch the screen:
+              looking at a picture of a desktop costs a teammate far more than
+              doing the work. When something really needs a browser or a window,
+              they hand the job to the box&apos;s own automation and get an answer
+              back in words. The desktop above is for you, not for them.
+            </p>
           </div>
         </>
       )}

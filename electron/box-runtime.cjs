@@ -45,13 +45,37 @@ const CLI = path.join(os.homedir(), ".ascii", "bin", "box");
 const DEFAULT_TYPE = "small";
 const DEFAULT_TTL = 1800;
 const TRIAL_MAX_TTL = 7200;
+/**
+ * The ceiling off trial. Documented at `/box/long-running-tasks`: 30 days
+ * (2,592,000s), and anything larger is capped server-side anyway.
+ *
+ * It was `Number.MAX_SAFE_INTEGER`, which is not a number this API has ever
+ * accepted . it just happened never to be sent, because nothing off trial had
+ * been tried. A cap that only works because the path is dead is not a cap.
+ */
+const MAX_TTL = 2_592_000;
 const IDLE_STOP_MS = 10 * 60 * 1000;
+
+/**
+ * One CLI call.
+ *
+ * `--no-update` goes in right AFTER the subcommand, never at the end. `box
+ * exec <id> [COMMAND]...` and `box ssh <id> [COMMAND]...` take a variadic
+ * trailing COMMAND, so a flag appended at the end is swallowed as part of the
+ * command the box is asked to run. Verified against `box exec --help`.
+ */
+function placeFlags(args, flags) {
+  const head = args.slice(0, 1);
+  const rest = args.slice(1);
+  const add = flags.filter((f) => !args.includes(f));
+  return [...head, ...add, ...rest];
+}
 
 function run(args, opts = {}) {
   return new Promise((resolve) => {
     execFile(
       CLI,
-      [...args, "--no-update"],
+      placeFlags(args, ["--no-update"]),
       { timeout: opts.timeout || 60_000, maxBuffer: 8 * 1024 * 1024 },
       (err, stdout, stderr) => {
         const out = String(stdout || "").trim();
@@ -65,15 +89,65 @@ function run(args, opts = {}) {
   });
 }
 
-async function runJson(args, opts) {
-  const res = await run([...args, "--json"], opts);
-  if (!res.ok) return res;
-  try {
-    const lines = res.out.split("\n").filter((l) => l.trim().startsWith("{"));
-    return { ok: true, json: JSON.parse(lines[lines.length - 1] || res.out) };
-  } catch {
-    return { ok: false, reason: "unparseable CLI output", out: res.out.slice(0, 300) };
+/**
+ * A CLI call whose output is JSON . or JSONL, which is the part that bites.
+ *
+ * Verified in the docs (`/box/use-in-code`) and against the CLI: `box info`,
+ * `box list`, `box status` and `box limits` emit ONE object, but LONG-RUNNING
+ * commands . `box new` above all . emit JSON Lines: `created`, then any number
+ * of `state` frames, then `ready`.
+ *
+ * This used to parse only the LAST line, which is the single most expensive
+ * bug this file could hold: if the final frame is a `state` event carrying no
+ * `id`, the caller reads "create returned no id" and throws away the id of a
+ * machine that is now running and billing, against a two-machine account
+ * limit, with nothing left that knows how to stop it.
+ *
+ * So: parse every line, and hand back the last frame that actually carries an
+ * id alongside the last frame overall. An `event: "error"` frame is a failure
+ * even when the process exited 0.
+ */
+function parseFrames(out) {
+  const frames = [];
+  for (const line of String(out || "").split("\n")) {
+    const t = line.trim();
+    if (!t.startsWith("{")) continue;
+    try {
+      frames.push(JSON.parse(t));
+    } catch {
+      /* a half-written frame is not a reason to lose the whole stream */
+    }
   }
+  return frames;
+}
+
+/** The box object inside a frame, whatever shape the frame chose. */
+function boxOf(frame) {
+  if (!frame || typeof frame !== "object") return null;
+  if (frame.box && typeof frame.box === "object") return frame.box;
+  return frame;
+}
+
+/** The id anywhere in a JSONL stream. Survives `ready` not being last. */
+function idFrom(frames) {
+  for (let i = frames.length - 1; i >= 0; i -= 1) {
+    const b = boxOf(frames[i]);
+    const id = b && (b.id || b.boxId);
+    if (typeof id === "string" && id) return id;
+  }
+  return "";
+}
+
+async function runJson(args, opts) {
+  const res = await run(placeFlags(args, ["--json"]), opts);
+  const frames = parseFrames(res.out);
+  if (!res.ok) return { ...res, frames };
+  const err = frames.find((f) => f && f.event === "error");
+  if (err) {
+    return { ok: false, reason: String(err.error || err.code || "box error").slice(0, 400), code: err.code || "", frames };
+  }
+  if (!frames.length) return { ok: false, reason: "unparseable CLI output", out: res.out.slice(0, 300) };
+  return { ok: true, json: frames[frames.length - 1], frames };
 }
 
 const installed = () => {
@@ -171,8 +245,11 @@ function createBoxRuntime(opts = {}) {
 
   /** The TTL we may actually ask for. Clamped before the call, never after. */
   function ttlFor(requested, trial) {
+    // `null`, `undefined`, `0`, `NaN` and a string all land on the default.
+    // Never `null` on the wire: the docs make a null TTL mean "auto-stop OFF",
+    // which on trial is refused and off trial is a machine that runs forever.
     const want = Number(requested) || DEFAULT_TTL;
-    const cap = trial ? TRIAL_MAX_TTL : Number.MAX_SAFE_INTEGER;
+    const cap = trial ? TRIAL_MAX_TTL : MAX_TTL;
     return Math.max(60, Math.min(want, cap));
   }
 
@@ -197,11 +274,12 @@ function createBoxRuntime(opts = {}) {
         return { ok: true, id: st.id, reused: true };
       }
 
-      const lim = await limits();
-      const trial = !!(lim.ok && lim.trial);
-      const ttl = ttlFor(reason.ttlSeconds, trial);
-
       if (st.state === "stopped") {
+        // No `limits` call on this path. Resume keeps the box's own TTL
+        // (`box resume --help`: "Omit to keep the Box's current setting"), so
+        // the trial ceiling is not a question here . and this is the common
+        // path, walked every time the desk wakes up. It was paying for an API
+        // round-trip whose answer it then threw away.
         const res = await exec(["resume", st.id], { timeout: 180_000 });
         if (!res.ok) return res;
         lastUsedAt = now();
@@ -219,7 +297,15 @@ function createBoxRuntime(opts = {}) {
       // Adopt only when there is EXACTLY one. Two or more is a real question
       // about which is the team's, and guessing at that is how you end up
       // writing to a stranger's disk.
-      if (!st.id) {
+      // `missing` counts as "no id" here, and that omission was a real bug.
+      //
+      // A remembered id whose machine has been deleted skipped adoption
+      // entirely and went straight to `box new`. On a two-machine trial with
+      // the user's own box already on the account, that is a second machine
+      // beside the first, one of 75 daily starts spent, and the team's files
+      // split across two disks . the exact outcome adoption exists to prevent,
+      // undone by checking for a remembered STRING rather than a live machine.
+      if (!st.id || st.state === "missing") {
         // `--all`, because `box list` defaults to `--filter r` . RUNNING only.
         // A stopped box is invisible to the default, so adoption would never
         // see the machine the user already made and would create a second one
@@ -244,11 +330,21 @@ function createBoxRuntime(opts = {}) {
         }
       }
 
+      // Only a real CREATE needs to know about the trial, because only
+      // `--ttl` on `box new` can be refused for exceeding it.
+      const lim = await limits();
+      const trial = !!(lim.ok && lim.trial);
+      const ttl = ttlFor(reason.ttlSeconds, trial);
       const args = ["new", "--type", reason.type || DEFAULT_TYPE, "--ttl", String(ttl)];
       const res = await exec(args, { timeout: 240_000 });
       if (!res.ok) return res;
-      const made = res.json && res.json.box ? res.json.box : res.json;
-      const id = made && made.id;
+      // `box new --json` is JSONL: `created`, then `state` frames, then
+      // `ready`. Reading the id off the LAST frame alone loses a running,
+      // billing machine whenever the stream does not end on `ready`, and there
+      // is then nothing left on this Mac that knows how to stop it. So the id
+      // is taken from anywhere in the stream, newest frame first.
+      const made = boxOf(res.json) || {};
+      const id = made.id || idFrom(res.frames || []);
       if (!id) return { ok: false, reason: "create returned no id" };
       setBoxId(id);
       lastUsedAt = now();
@@ -312,6 +408,10 @@ module.exports = {
   DEFAULT_TYPE,
   DEFAULT_TTL,
   TRIAL_MAX_TTL,
+  MAX_TTL,
   IDLE_STOP_MS,
   isLive,
+  parseFrames,
+  idFrom,
+  placeFlags,
 };
