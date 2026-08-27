@@ -126,6 +126,14 @@ function getRuntime(pin) {
       reqCounter: 0,
       pending: new Map(),
       sessionIndex: new Map(),
+      // Highest event seq seen per session, and the gateway's replay epoch.
+      // Both are the CLIENT half of Hermes' reconnect contract. `lastSeq` was
+      // being written to without ever being created, so the first event frame
+      // carrying a seq threw `Cannot read properties of undefined (reading
+      // 'set')` . uncaught, inside a readline handler, which takes the whole
+      // event stream down with it.
+      lastSeq: new Map(),
+      replayEpoch: '',
       logRing: [],
       // A pin naming any tool that touches disk gets file checkpoints.
       checkpoints: !key || /(^|,)(file|terminal)(,|$)/.test(key),
@@ -252,6 +260,16 @@ function handleLine(rt, raw) {
 
   // Server-pushed event. The NAME is params.type, never msg.method.
   if (msg.method === 'event' && msg.params && typeof msg.params.type === 'string') {
+    // The gateway's replay epoch. Seq counters live in the gateway PROCESS, so
+    // a restart resets them to 1 while we still hold a high watermark . and
+    // `events.since(sid, 97)` would then return nothing forever, with
+    // `truncated: false`, so we would believe we had missed nothing. Comparing
+    // the epoch is the only way to notice, so a change wipes every watermark.
+    const epoch = String(msg.params.epoch || msg.params.replay_epoch || '');
+    if (epoch && rt.replayEpoch && rt.replayEpoch !== epoch) {
+      rt.lastSeq.clear();
+    }
+    if (epoch) rt.replayEpoch = epoch;
     // Every frame carries `seq`. Remembering the last one is the entire
     // client half of Hermes' documented reconnect contract: without it, a
     // resume cannot tell whether it missed anything, so mid-stream output
@@ -550,7 +568,15 @@ function startChild(rt) {
 
   readline.createInterface({ input: proc.stdout }).on('line', (line) => {
     if (rt.child !== proc) return; // stale child
-    handleLine(rt, line);
+    // Guarded. A throw in here is an uncaught exception inside a readline
+    // handler, and it does not fail just this frame . it ends the stream, so
+    // the teammate stops mid-sentence and nothing says why. No single frame
+    // is worth that.
+    try {
+      handleLine(rt, line);
+    } catch (err) {
+      pushLog(rt, `[protocol] frame handler threw: ${err && err.message}`);
+    }
   });
   readline.createInterface({ input: proc.stderr }).on('line', (line) => {
     pushLog(rt, `[stderr] ${String(line).trim()}`);
@@ -1495,8 +1521,61 @@ function resume(botId, sessionId, opts = {}) {
         opts,
       };
       bots.set(botId, bot);
-      getRuntime(pin).sessionIndex.set(bot.sessionId, botId);
+      const rt = getRuntime(pin);
+      rt.sessionIndex.set(bot.sessionId, botId);
+      // Replay whatever happened while we were not listening. Without this the
+      // seq we track is bookkeeping nobody reads, and any blip in the link
+      // silently swallows mid-stream output . which reads as a teammate that
+      // stopped mid-sentence for no reason.
+      replayMissed(rt, bot.sessionId).catch(() => {});
       return publicSession(bot);
+    });
+}
+
+/**
+ * Ask for the frames we missed, and feed them through the normal path.
+ *
+ * Hermes returns bare event objects (the frame's `params`), not envelopes,
+ * precisely so a client can hand them straight to its existing dispatch . so
+ * that is what this does rather than reimplementing a second one.
+ *
+ * `truncated` means the ring evicted frames between our watermark and its
+ * oldest retained seq. There is no way to recover those from here, so it is
+ * logged rather than papered over: a gap you know about is worth more than a
+ * replay that quietly pretends to be complete.
+ */
+function replayMissed(rt, sessionId) {
+  const sid = String(sessionId || '');
+  if (!sid) return Promise.resolve();
+  const since = rt.lastSeq.get(sid) || 0;
+  return request('session.events.since', { session_id: sid, last_seen: since }, REQUEST_TIMEOUT_MS, rt.pin)
+    .then((res) => {
+      if (!res) return;
+      // A restart resets the gateway's counters, so our watermark is
+      // meaningless against the new epoch. Drop it rather than replay against
+      // numbers that no longer refer to the same events.
+      if (res.epoch && rt.replayEpoch && res.epoch !== rt.replayEpoch) {
+        rt.lastSeq.delete(sid);
+      }
+      if (res.epoch) rt.replayEpoch = res.epoch;
+      if (res.truncated) {
+        pushLog(rt, `[replay] gap on ${sid}: frames older than the ring were lost`);
+      }
+      const frames = Array.isArray(res.events) ? res.events : [];
+      for (const ev of frames) {
+        if (!ev || typeof ev.type !== 'string') continue;
+        const seq = Number(ev.seq);
+        if (Number.isFinite(seq)) {
+          rt.lastSeq.set(sid, Math.max(rt.lastSeq.get(sid) || 0, seq));
+        }
+        routeEvent(rt, ev);
+      }
+      if (frames.length) pushLog(rt, `[replay] ${frames.length} missed frame(s) on ${sid}`);
+    })
+    .catch((err) => {
+      // An older gateway will not know the method. That is not an error worth
+      // surfacing; it just means no replay is available.
+      pushLog(rt, `[replay] unavailable: ${err && err.message}`);
     });
 }
 
