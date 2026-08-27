@@ -55,6 +55,11 @@ contextBridge.exposeInMainWorld("hydo", {
 
   // Model picker: providers + their models, layered on this bot's live session.
   listModels: (agentId, opts) => ipcRenderer.invoke("hydo:listModels", agentId, opts),
+  // Self-hosted endpoints from ~/.hermes/config.yaml. `providers` carries no
+  // api_key by construction (electron/local-providers.cjs) — a key in
+  // renderer state is a key in a devtools heap snapshot.
+  localProviders: () => ipcRenderer.invoke("hydo:localProviders"),
+  probeLocalProvider: (id) => ipcRenderer.invoke("hydo:probeLocalProvider", id),
 
   // Hermes' own transcript and session registry.
   history: (agentId) => ipcRenderer.invoke("hydo:history", agentId),

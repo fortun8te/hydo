@@ -204,3 +204,90 @@
   outline: 2px solid var(--cursor-accent, #2f81f7);
   outline-offset: 2px;
 }
+
+/* -- local / self-hosted endpoints ------------------------------------------ */
+
+/* `.hy-row__control` is a column with gap:0 — two controls dropped into one
+   Row stacked and touched. This row wants them side by side. */
+.settings__local-ctl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings__health {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.settings__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  /* Unknown/checking: the same neutral as the text, so a probe in flight does
+     not read as a verdict. */
+  background: var(--sand-fill-ghost-selected, #7777772c);
+}
+
+.settings__health[data-state="ok"] .settings__dot {
+  background: var(--sand-fill-success);
+}
+
+.settings__health[data-state="offline"] .settings__dot,
+.settings__health[data-state="unauthorized"] .settings__dot,
+.settings__health[data-state="http"] .settings__dot {
+  background: var(--sand-fill-danger);
+}
+
+/* Not configured is not a failure — the address in the shipped config is a
+   placeholder. Amber, and the word says "Not set up". */
+.settings__health[data-state="unconfigured"] .settings__dot {
+  background: var(--sand-fill-warning, #ffb224);
+}
+
+/* Two segments, one track — the whole decision is "hosted or mine". */
+.settings__seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--cursor-bg-tertiary, #7777772c);
+}
+
+/* `.hy-dialog button` (0,1,1) sets `color: inherit` and beat a bare
+   `.settings__seg-btn` (0,1,0) — the unselected segment painted at full
+   primary white, so both segments looked selected. Scoped to the track. */
+.settings__seg .settings__seg-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settings__seg .settings__seg-btn:hover:not([data-on]):not(:disabled) {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.settings__seg .settings__seg-btn[data-on] {
+  background: var(--sand-fill-primary, #fafafa);
+  color: var(--sand-text-on-primary, #141414);
+  font-weight: var(--sand-font-weight-medium, 500);
+}
+
+.settings__seg .settings__seg-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}

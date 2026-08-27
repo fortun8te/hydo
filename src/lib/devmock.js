@@ -566,7 +566,47 @@ export function installDevMock() {
     openWorkspace: async () => ({ ok: true, path: "/tmp/hydo-workspace" }),
     listModels: async () => ({
       ok: true,
-      providers: [{ name: "xai", models: [{ id: "grok-4.6" }, { id: "grok-4.5" }] }],
+      providers: [
+        { name: "xai", models: [{ id: "grok-4.6" }, { id: "grok-4.5" }] },
+        { name: "unsloth", models: [{ id: "unsloth/Qwen3.8-Flash-Next-GGUF" }] },
+        { name: "ollama", models: [{ id: "gemma4:12B" }] },
+      ],
+    }),
+    // Mirrors ~/.hermes/config.yaml as shipped: unsloth still on the
+    // placeholder host, ollama and lmstudio on real loopback addresses. No
+    // api_key here either — the real IPC never sends one.
+    localProviders: async () => ({
+      ok: true,
+      providers: [
+        {
+          id: "unsloth",
+          name: "unsloth",
+          api: "http://REPLACE-WITH-PC-LAN-IP:8888/v1",
+          host: "REPLACE-WITH-PC-LAN-IP:8888",
+          model: "unsloth/Qwen3.8-Flash-Next-GGUF",
+          transport: "chat_completions",
+          hasKey: true,
+          placeholder: true,
+        },
+        {
+          id: "ollama",
+          name: "ollama",
+          api: "http://localhost:11434/v1",
+          host: "localhost:11434",
+          model: "gemma4:12B",
+          transport: "chat_completions",
+          hasKey: true,
+          placeholder: false,
+        },
+      ],
+    }),
+    probeLocalProvider: async (id) => ({
+      ok: true,
+      id,
+      status:
+        id === "unsloth"
+          ? { state: "unconfigured", detail: "Address is still the placeholder — see docs/LOCAL-MODEL.md." }
+          : { state: "ok", detail: "Answering at localhost:11434." },
     }),
 
     // Plugins ("Connected apps") — contract lives in electron/hermes-plugins.cjs.

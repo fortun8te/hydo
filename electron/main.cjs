@@ -5,6 +5,7 @@ const { createStore } = require("./store.cjs");
 const gateway = require("./hermes-gateway.cjs");
 const plugins = require("./hermes-plugins.cjs");
 const boxRuntime = require("./box-runtime.cjs");
+const localProviders = require("./local-providers.cjs");
 
 // Every Hermes-backed handler below degrades to a truthful empty answer rather
 // than rejecting into the renderer: `available()` false must leave the app
@@ -503,6 +504,20 @@ app.whenReady().then(() => {
     if (!gateway.available()) return nope("Hermes is not installed");
     const payload = await gateway.modelOptions(agentId, opts || {});
     return payload ? ok({ ...payload }) : nope("model.options unavailable");
+  });
+
+  // ── Local / self-hosted endpoints (~/.hermes/config.yaml `providers:`) ──
+  // These are not in `model.options` as anything you can tell apart from the
+  // forty hosted providers, and a local server that is off looks exactly like
+  // a broken model once a turn fails. So: list them, and probe them, from the
+  // main process — the api_key is read inside local-providers.cjs and never
+  // crosses this boundary. See docs/LOCAL-MODEL.md.
+  ipcMain.handle("hydo:localProviders", () => ok({ providers: localProviders.list() }));
+  ipcMain.handle("hydo:probeLocalProvider", async (_e, id) => {
+    const found = localProviders.list().find((p) => p.id === id);
+    if (!found) return nope("No such provider in ~/.hermes/config.yaml");
+    const status = await localProviders.probe(found, { key: localProviders.keyFor(found.id) });
+    return ok({ id: found.id, host: found.host, status });
   });
 
   // ── Hermes-side transcript (the real one, beyond Hydo's state.json) ────

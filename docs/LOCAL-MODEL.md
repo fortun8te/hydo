@@ -146,3 +146,35 @@ chat happily and never touch the box — and the symptom is a teammate that
 describes what it would do rather than doing it.
 
 Turn 1 carries no tools; that is a short internal call, not a fault.
+
+---
+
+## Switching to it, and back
+
+Settings → General now carries an **Own hardware** row directly under Chat
+model. It is a two-segment switch — the hosted model on the left, your endpoint
+on the right — so the flip is one click either way, and the hosted pick is
+remembered so coming back lands on the same model you left.
+
+Beside it is the honest part: Hydo probes `GET <api>/models` with the provider's
+key when the dialog opens and reports what actually happened, before you send a
+message and get a failure that looks like a broken model.
+
+| what you see | what it means |
+| --- | --- |
+| **Reachable** | the endpoint answered a model listing |
+| **Not set up** (amber) | the `api` is still `REPLACE-WITH-PC-LAN-IP` — the switch is disabled until you fix it, per the top of this file |
+| **Offline** | nothing answered: server down, bound to loopback, or the firewall |
+| **Key rejected** | it answered and refused the `api_key` |
+
+`Not set up` is deliberately not the same word as `Offline`: nothing was ever
+dialled, and sending someone to debug a Windows firewall over a string that is
+not an address is the failure this row exists to prevent.
+
+The probe runs in the main process (`electron/local-providers.cjs`). The
+`api_key` is read there, sent as a bearer, and dropped — it never crosses IPC
+into the renderer and never appears in a status line.
+
+With more than one provider in the block, a **Local endpoint** row picks which
+machine the switch points at. Changing it does not change the model you are
+running unless you were already on a local one.
