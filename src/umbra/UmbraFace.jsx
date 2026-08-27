@@ -313,6 +313,34 @@ function useReducedMotion() {
   return reduced;
 }
 
+// -------------------------------------------------------------- chrome
+//
+// Chrome is not a colour with shading on it. A polished metal ball is almost
+// entirely a MIRROR: what you read as "chrome" is the room reflected in it —
+// bright sky along the top, a hard dark band where the horizon wraps, a
+// lighter bounce off the floor below that, and a thin specular hit near the
+// top where the light source is.
+//
+// A radial gradient cannot say that. It only knows distance from a point, so
+// it produces a shiny plastic ball. This is a VERTICAL ramp with deliberately
+// tight stops: the sharp transitions are what the eye reads as polish, and
+// softening them turns it back into plastic.
+const CHROME_RAMP = [
+  [0.0, "#F2F5F8"],  // sky, blown out at the very top
+  [0.16, "#C3CAD2"], // sky falling off
+  [0.34, "#7E868F"], // approaching the horizon
+  [0.44, "#2E3339"], // the horizon band. The dark line is the whole trick.
+  [0.52, "#464C54"],
+  [0.62, "#9BA3AC"], // floor bounce coming back up
+  [0.78, "#D9DEE4"], // bright bounce
+  [0.9, "#8E959D"],
+  [1.0, "#5A6068"],  // shadow terminator at the bottom
+];
+
+function isMetal(colorId) {
+  return String(colorId || "") === "chrome";
+}
+
 // -------------------------------------------------------------- the live face
 //
 // The animating half of UmbraView: an avatar built once in a ref, re-aimed with
@@ -743,6 +771,7 @@ export default function UmbraFace({
     const clipId = `uf-clip-${gid}`;
     const gradId = `uf-grad-${gid}`;
     const scaled = paint.scaleX !== 1 || paint.scaleY !== 1;
+    const metal = isMetal(tint);
 
     return (
       <svg
@@ -759,18 +788,51 @@ export default function UmbraFace({
       >
         {title ? <title>{title}</title> : null}
         <defs>
-          <radialGradient
-            id={gradId}
-            gradientUnits="userSpaceOnUse"
-            cx={paint.cx}
-            cy={paint.cy}
-            r={paint.r}
-            gradientTransform={scaled ? `scale(${paint.scaleX} ${paint.scaleY})` : undefined}
-          >
-            <stop offset="0" stopColor={ramp[0]} />
-            <stop offset="0.38" stopColor={ramp[1]} />
-            <stop offset="1" stopColor={ramp[2]} />
-          </radialGradient>
+          {metal ? (
+            <>
+              {/* Vertical, in the BODY's own space, so the reflection stays
+                  put while the head turns. A reflection that rotates with the
+                  object is the classic tell that it is painted on. */}
+              <linearGradient
+                id={gradId}
+                gradientUnits="userSpaceOnUse"
+                x1={0}
+                y1={-paint.r}
+                x2={0}
+                y2={paint.r}
+              >
+                {CHROME_RAMP.map(([off, col]) => (
+                  <stop key={off} offset={off} stopColor={col} />
+                ))}
+              </linearGradient>
+              {/* The specular hit: a small blown-out highlight up and to the
+                  left, where the light actually is (cfg.lightX/lightY). */}
+              <radialGradient
+                id={`${gradId}-spec`}
+                gradientUnits="userSpaceOnUse"
+                cx={-paint.r * 0.3}
+                cy={-paint.r * 0.52}
+                r={paint.r * 0.62}
+              >
+                <stop offset="0" stopColor="#ffffff" stopOpacity="0.92" />
+                <stop offset="0.45" stopColor="#ffffff" stopOpacity="0.22" />
+                <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+              </radialGradient>
+            </>
+          ) : (
+            <radialGradient
+              id={gradId}
+              gradientUnits="userSpaceOnUse"
+              cx={paint.cx}
+              cy={paint.cy}
+              r={paint.r}
+              gradientTransform={scaled ? `scale(${paint.scaleX} ${paint.scaleY})` : undefined}
+            >
+              <stop offset="0" stopColor={ramp[0]} />
+              <stop offset="0.38" stopColor={ramp[1]} />
+              <stop offset="1" stopColor={ramp[2]} />
+            </radialGradient>
+          )}
           {S.bodyD ? (
             <clipPath id={clipId}>
               <path d={S.bodyD} />
@@ -789,6 +851,13 @@ export default function UmbraFace({
             {/* NONZERO winding: the depth rings union into one solid body. */}
             {S.bodyD && !(dots && !morphing) ? (
               <path d={S.bodyD} fill={`url(#${gradId})`} shapeRendering="geometricPrecision" />
+            ) : null}
+            {/* Specular. Clipped to the body so the highlight cannot spill off
+                the silhouette, and drawn after the fill so it sits on top. */}
+            {metal && S.bodyD && !(dots && !morphing) ? (
+              <g clipPath={`url(#${clipId})`}>
+                <path d={S.bodyD} fill={`url(#${gradId}-spec)`} />
+              </g>
             ) : null}
             {/* The hairline self-stroke closes the gaps between depth slices. */}
             {S.bodyD && paint.seam !== false && !(dots && !morphing) ? (

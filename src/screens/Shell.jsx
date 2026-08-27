@@ -432,10 +432,36 @@ export default function Shell({ state }) {
             }}
           />
         ) : (
-          <div className="sand-transcript">
-            <p className="mute" style={{ margin: "auto", padding: 24 }}>
-              Hit + in the sidebar to start a teammate or a channel.
+          <div className="sand-home">
+            {/* An empty app should show you the thing it makes, not a sentence
+                pointing at a button in the corner. */}
+            <div className="sand-home__marks" aria-hidden="true">
+              {["chrome", "cyan", "orange"].map((tint, i) => (
+                <UmbraFace
+                  key={tint}
+                  className={`sand-home__mark sand-home__mark--${i}`}
+                  tint={tint}
+                  shape={["squircle", "blob", "hex"][i]}
+                  size={i === 0 ? 92 : 62}
+                  live
+                  mood="fidget"
+                  poke
+                />
+              ))}
+            </div>
+            <h1 className="sand-home__title">No teammates yet</h1>
+            <p className="sand-home__sub">
+              A teammate is a person-shaped thing with its own memory, its own
+              workspace and its own tools. Make one and tell it what it is for.
             </p>
+            <div className="sand-home__actions">
+              <button type="button" className="ghost ghost--solid" onClick={() => setBotCreate(true)}>
+                New teammate
+              </button>
+              <button type="button" className="ghost" onClick={() => setChannelCreate(true)}>
+                New channel
+              </button>
+            </div>
           </div>
         )}
 

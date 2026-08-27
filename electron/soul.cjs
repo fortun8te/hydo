@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const SOUL_MARK = /<!--\s*hydo-soul:\s*(\d+)\s*-->/;
-const SOUL_VERSION = 24;
+const SOUL_VERSION = 25;
 const SOUL_PACKED = path.join(__dirname, "SOUL.default.md");
 
 function loadDefaultSoul() {

@@ -162,6 +162,17 @@ function harvest() {
   if (claudeJson && claudeJson.mcpServers) {
     for (const row of fromClaudeMap(claudeJson.mcpServers, "claude")) add(row);
   }
+  // Claude Code scopes MCP servers PER PROJECT as well as globally, under
+  // `projects["<abs path>"].mcpServers`. Reading only the global map missed
+  // every server added while working in a repo — which in practice is most of
+  // the interesting ones, because that is where you add them.
+  if (claudeJson && claudeJson.projects && typeof claudeJson.projects === "object") {
+    for (const proj of Object.values(claudeJson.projects)) {
+      if (proj && proj.mcpServers) {
+        for (const row of fromClaudeMap(proj.mcpServers, "claude")) add(row);
+      }
+    }
+  }
   const claudeMcp = parseJson(path.join(HOME, ".claude", "mcp.json"));
   if (claudeMcp && claudeMcp.mcpServers) {
     for (const row of fromClaudeMap(claudeMcp.mcpServers, "claude")) add(row);

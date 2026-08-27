@@ -24,6 +24,11 @@ export const COLORS = [
   { id: "purple",  label: "Violet",  value: "#8B5CF0", from: "#9159FE", to: "#5C39A1", ink: "#141414" },
   { id: "magenta", label: "Pink",    value: "#E0479B", from: "#FF47A6", to: "#A21E62", ink: "#141414" },
   { id: "gray",    label: "Grey",    value: "#9A9A9A", from: "#B7B7B7", to: "#777777", ink: "#141414" },
+  // Chrome is not a colour, it is a REFLECTION, so `value` here is only the
+  // fallback for places that draw a flat swatch. UmbraFace paints it with a
+  // banded vertical ramp instead (see CHROME_RAMP): polished metal shows you
+  // the room, not itself.
+  { id: "chrome",  label: "Chrome",  value: "#C6CBD2", from: "#FFFFFF", to: "#5A6068", ink: "#0E1013", metal: true },
 ];
 
 // `iris` is the old field name for the same value. Kept so anything still

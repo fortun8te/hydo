@@ -27,3 +27,16 @@ assert.equal(cfg.command, pencil.command);
 assert.ok(Array.isArray(cfg.args));
 
 console.log(`mcp-import-test ok n=${names.length} ${names.join(",")}`);
+
+// Claude Code scopes MCP servers per project as well as globally, under
+// `projects["<abs path>"].mcpServers`. Reading only the global map missed
+// every server added while working inside a repo, which is where you add most
+// of them. Assert the source is read, not a frozen list of names.
+{
+  const src = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "..", "electron", "mcp-import.cjs"),
+    "utf8"
+  );
+  assert.ok(/claudeJson\.projects/.test(src), "project-scoped servers are harvested");
+  assert.ok(/proj\.mcpServers/.test(src), "from each project's own map");
+}
