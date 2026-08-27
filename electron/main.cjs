@@ -564,6 +564,20 @@ app.whenReady().then(() => {
   // cannot spend money.
   if (typeof store.attachBox === "function") store.attachBox(boxes);
 
+  // Background processes a teammate left running. Session scoped: one bot
+  // cannot see or reap another's.
+  ipcMain.handle("hydo:processes", (_e, agentId) =>
+    gateway.listProcesses(agentId).then((processes) => ok({ processes }))
+  );
+  ipcMain.handle("hydo:killProcess", async (_e, agentId, processId) => {
+    try {
+      await gateway.killProcess(agentId, processId);
+      return ok({});
+    } catch (err) {
+      return nope(err.message);
+    }
+  });
+
   ipcMain.handle("hydo:boxStatus", () => boxes.status());
   ipcMain.handle("hydo:boxLimits", () => boxes.limits());
   ipcMain.handle("hydo:boxEnsure", (_e, reason) => boxes.ensureRunning(reason || {}));

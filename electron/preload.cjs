@@ -96,6 +96,9 @@ contextBridge.exposeInMainWorld("hydo", {
   dismissClarify: (id) => ipcRenderer.invoke("hydo:dismissClarify", id),
   // The ONE shared box. `boxEnsure` starts or resumes it and therefore starts
   // billing; everything else is free to call.
+  // What this teammate left running in the background, and stopping one.
+  processes: (agentId) => ipcRenderer.invoke("hydo:processes", agentId),
+  killProcess: (agentId, processId) => ipcRenderer.invoke("hydo:killProcess", agentId, processId),
   boxStatus: () => ipcRenderer.invoke("hydo:boxStatus"),
   boxLimits: () => ipcRenderer.invoke("hydo:boxLimits"),
   boxEnsure: (reason) => ipcRenderer.invoke("hydo:boxEnsure", reason),

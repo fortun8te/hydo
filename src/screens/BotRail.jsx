@@ -99,6 +99,10 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   const [connections, setConnections] = useState([]);
   const [toolsets, setToolsets] = useState([]);
   const [abilitiesOpen, setAbilitiesOpen] = useState(false);
+  // What this teammate left running. Polled only while the rail is open . a
+  // background process is a rare thing and this is an RPC, so a permanent
+  // timer would cost far more than the answer is worth.
+  const [procs, setProcs] = useState([]);
   const customOn = isCustomHex(agent?.blob);
   const pip = botWorks(agent, agent?.id) ? "work" : pipOf(agent);
   const todos = Array.isArray(agent?.todos) ? agent.todos : [];
@@ -160,6 +164,23 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   ]
     .filter(Boolean)
     .join(" · ");
+
+  useEffect(() => {
+    if (!agent?.id) return undefined;
+    let gone = false;
+    const read = () =>
+      Promise.resolve(window.hydo?.processes?.(agent.id))
+        .then((res) => {
+          if (!gone && res && res.ok) setProcs(res.processes || []);
+        })
+        .catch(() => {});
+    read();
+    const t = setInterval(read, 5000);
+    return () => {
+      gone = true;
+      clearInterval(t);
+    };
+  }, [agent?.id]);
 
   function toggleToolset(name, on) {
     const next = on
@@ -494,6 +515,36 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           onClick={() => onChange({ notifications: !notifications })}
         />
       </div>
+      {/* Only when there is something. A section that says "nothing running"
+          every time is a row you learn to skip. */}
+      {procs.length ? (
+        <div className="bot-rail__routines">
+          <span className="bot-rail__notify-title">Still running</span>
+          <ul className="bot-rail__procs">
+            {procs.map((p) => (
+              <li key={p.session_id || p.id} className="bot-rail__proc">
+                <span className="bot-rail__proc-cmd" title={p.command || ""}>
+                  {p.command || p.session_id}
+                </span>
+                <button
+                  type="button"
+                  className="ghost bot-rail__proc-stop"
+                  onClick={() => {
+                    window.hydo?.killProcess?.(agent.id, p.session_id || p.id);
+                    setProcs((list) => list.filter((x) => (x.session_id || x.id) !== (p.session_id || p.id)));
+                  }}
+                >
+                  Stop
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p>
+            Started by this Bot and still going after its turn ended. Stopping
+            one here only touches this Bot&apos;s.
+          </p>
+        </div>
+      ) : null}
       {/* Permission, not provisioning. Turning this on creates no machine and
           turning it off deletes none: there is exactly one workspace for the
           whole desk, and this says whether this teammate may use it. */}

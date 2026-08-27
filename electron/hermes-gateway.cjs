@@ -1238,6 +1238,42 @@ function interruptSubagent(botId, subagentId) {
   });
 }
 
+/**
+ * Background processes this teammate started, and stopping one.
+ *
+ * `terminal` is in the `builder` profile, so a teammate can leave a dev server
+ * or a watcher running after its turn ends. Until now the only way to find one
+ * was Activity Monitor.
+ *
+ * Both are SESSION SCOPED. That is the whole reason only these two are
+ * wrapped: `process.stop` exists too and is `kill_all()` with no session
+ * scope, so on a desk where several teammates share a gateway it would reap
+ * another one's work. It is deliberately not exposed.
+ */
+function listProcesses(botId) {
+  return Promise.resolve()
+    .then(() => {
+      const bot = requireBot(botId);
+      return requestFor(botId, 'process.list', { session_id: bot.sessionId });
+    })
+    .then((res) => (res && Array.isArray(res.processes) ? res.processes : []))
+    // A teammate with no session yet simply has nothing running. That is an
+    // answer, not an error, and the rail should not light up red for it.
+    .catch(() => []);
+}
+
+function killProcess(botId, processId) {
+  return Promise.resolve().then(() => {
+    const bot = requireBot(botId);
+    const pid = String(processId || '').trim();
+    if (!pid) throw new Error('killProcess: processId required');
+    return requestFor(botId, 'process.kill', {
+      session_id: bot.sessionId,
+      process_id: pid,
+    });
+  });
+}
+
 function steerSubagent(botId, subagentId, text) {
   return Promise.resolve().then(() => {
     const bot = requireBot(botId);
@@ -1961,6 +1997,8 @@ module.exports = {
   interruptSubagent,
   steerSubagent,
   steer,
+  listProcesses,
+  killProcess,
   close,
   shutdown,
   logTail,
