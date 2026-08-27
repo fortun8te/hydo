@@ -140,6 +140,32 @@ function createWindow() {
 // `store.flush()` in `will-quit` threw ReferenceError and took the app down.
 let liveStore = null;
 
+/**
+ * One Hydo, however many times you launch it.
+ *
+ * Every instance starts its OWN Hermes gateway, and every teammate in it is a
+ * python child of that gateway. So a second launch is not a second window, it
+ * is a second copy of the whole tree: measured on this machine, one live app
+ * was holding five children while a long-running Hermes desktop next to it held
+ * seventy-five, at 0.8 GB. Stacking those is how you end up with a laptop full
+ * of agents nobody is talking to.
+ *
+ * The second launch hands its argv to the first and exits, so double-clicking
+ * the app in the Dock raises the window you already have instead of building a
+ * new one beside it.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+}
+
 app.whenReady().then(() => {
   brandDock();
   let push = () => {};

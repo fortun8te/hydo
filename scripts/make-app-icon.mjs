@@ -89,9 +89,9 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" wid
          A vivid azure at the crown falling to a deeper blue at the floor, so
          the tile has a sky and the body has something to rise out of. -->
     <linearGradient id="ground" x1="0.5" y1="0" x2="0.42" y2="1">
-      <stop offset="0%"   stop-color="#1B9DF6"/>
-      <stop offset="38%"  stop-color="#0F8AEA"/>
-      <stop offset="100%" stop-color="#0C7FE6"/>
+      <stop offset="0%"   stop-color="#29A9FA"/>
+      <stop offset="38%"  stop-color="#1596F2"/>
+      <stop offset="100%" stop-color="#0E86EC"/>
     </linearGradient>
 
     <!-- The body is a LIT VOLUME, not a white shape.
@@ -101,11 +101,11 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" wid
          a body filled blue with a white outline drawn on top always reads as a
          sticker, because the outline has a start and an end and light does
          not. -->
-    <radialGradient id="core" cx="50%" cy="63%" r="56%">
-      <stop offset="0%"   stop-color="#3BC4FA" stop-opacity="1"/>
-      <stop offset="58%"  stop-color="#4ACDFB" stop-opacity="0.98"/>
-      <stop offset="80%"  stop-color="#8FDFFD" stop-opacity="0.66"/>
-      <stop offset="92%"  stop-color="#D3F1FE" stop-opacity="0.28"/>
+    <radialGradient id="core" cx="50%" cy="58%" r="64%">
+      <stop offset="0%"   stop-color="#20BDFA" stop-opacity="1"/>
+      <stop offset="62%"  stop-color="#34C6FB" stop-opacity="0.98"/>
+      <stop offset="84%"  stop-color="#7CD8FC" stop-opacity="0.60"/>
+      <stop offset="95%"  stop-color="#CFEFFE" stop-opacity="0.22"/>
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
     </radialGradient>
 
@@ -142,9 +142,9 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" wid
     <g transform="translate(${TX.toFixed(2)} ${TY.toFixed(2)}) scale(${K.toFixed(5)})">
       <!-- Glow passes, widest first, all in white so the blue ground shows
            through them rather than being tinted twice. -->
-      <path d="${body.path}" fill="#FFFFFF" opacity="0.16" filter="url(#wide)"/>
-      <path d="${body.path}" fill="#FFFFFF" opacity="0.46" filter="url(#bloom)"/>
-      <path d="${body.path}" fill="#FFFFFF" opacity="0.78" filter="url(#edge)"/>
+      <path d="${body.path}" fill="#FFFFFF" opacity="0.26" filter="url(#wide)"/>
+      <path d="${body.path}" fill="#FFFFFF" opacity="0.68" filter="url(#bloom)"/>
+      <path d="${body.path}" fill="#FFFFFF" opacity="0.92" filter="url(#edge)"/>
 
       <!-- White body, THEN the blue laid back into its middle. See #core. -->
       <path d="${body.path}" fill="#FFFFFF"/>
