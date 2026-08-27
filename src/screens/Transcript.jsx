@@ -988,8 +988,8 @@ export default function Transcript({
           shape={agent.shape}
           size={28}
           live
-          morph={presence.mood !== "typing"}
-          mood={presence.mood === "typing" ? "looking" : presence.mood}
+          morph
+          mood={presence.mood}
         />
         <span className="sand-inchat__idle" />
         <span className="sand-inchat__busy">{busy}</span>

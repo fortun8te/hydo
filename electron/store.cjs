@@ -1263,15 +1263,18 @@ function createStore(opts = {}) {
       const taken = state.agents.some(
         (a) => a.id !== agent.id && String(a.name).toLowerCase() === next.toLowerCase()
       );
-      if (next && !taken && next !== agent.name) patch.name = next;
+      // "my name is Michael" is the user introducing THEMSELVES. A bot that
+      // hears it and renames itself Michael has inverted the sentence, and it
+      // happens often enough that the app refuses the name outright rather
+      // than relying on the model to get the direction right every time.
+      const isUser =
+        next.toLowerCase() === String(state.settings.userName || "").trim().toLowerCase();
+      if (next && !taken && !isUser && next !== agent.name) patch.name = next;
     }
-    if (typeof spec.label === "string") {
-      const lab = spec.label.trim().slice(0, 24);
-      // A label that repeats the name tells you nothing and reads as a bug in
-      // the roster ("Finn  finn"). The label is a ROLE.
-      const nameNow = String(patch.name || agent.name || "").toLowerCase();
-      patch.label = lab.toLowerCase() === nameNow ? "" : lab;
-    }
+    // `label` is deliberately NOT settable by the bot. It is a one-word role
+    // shown next to the name in the roster, it is Michael's shorthand for his
+    // own team, and every attempt a bot made at one was either its own name
+    // back or a guess from its first thirty seconds. It stays a human field.
     if (typeof spec.description === "string") {
       patch.description = spec.description.trim().slice(0, 600);
     }

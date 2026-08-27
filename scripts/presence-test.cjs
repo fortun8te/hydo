@@ -50,8 +50,11 @@ async function main() {
   const lookingAct = presenceOf({ working: true, activity: "Reading", now: 5000, since: 1 });
   assert.equal(lookingAct.mood, "looking");
 
+  // Writing IS dots now. The face tells you nothing while a reply is being
+  // composed; three dots is the one gesture everyone already reads as "words
+  // are coming", and UmbraFace morphs the body into them.
   const writing = presenceOf({ working: true, activity: "Writing", now: 5000, since: 1 });
-  assert.equal(writing.mood, "looking", "writing stays a looking blob, not typing dots");
+  assert.equal(writing.mood, "typing", "writing becomes dots");
 
   const spin = presenceOf({ working: true, activity: "Searching", now: 5000, since: 1 });
   assert.equal(spin.mood, "spin");

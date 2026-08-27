@@ -423,6 +423,60 @@ app.whenReady().then(() => {
   // Open a link in the real browser. Scheme-checked: the URL reaches here from
   // an artifact, which a model wrote, and `shell.openExternal` will happily
   // hand file:// or a custom scheme to the OS.
+  /**
+   * Native file picker, returning real paths.
+   *
+   * Hermes' attach handlers take a PATH, not bytes, and Electron 42 removed
+   * `File.path` from dropped files in favour of `webUtils.getPathForFile`.
+   * A native dialog sidesteps that entirely, and is the better affordance
+   * anyway: it starts where the user actually keeps things.
+   */
+  ipcMain.handle("hydo:pickFiles", async () => {
+    const { dialog } = require("electron");
+    const res = await dialog.showOpenDialog(win, {
+      properties: ["openFile", "multiSelections"],
+      buttonLabel: "Attach",
+    });
+    if (res.canceled) return { ok: true, files: [] };
+    return {
+      ok: true,
+      files: (res.filePaths || []).map((p) => ({
+        path: p,
+        name: path.basename(p),
+        ext: path.extname(p).slice(1).toLowerCase(),
+        size: (() => {
+          try {
+            return fs.statSync(p).size;
+          } catch {
+            return 0;
+          }
+        })(),
+      })),
+    };
+  });
+
+  /**
+   * Hand a file to a teammate's Hermes session, routed by type.
+   *
+   * Images and PDFs have dedicated handlers because Hermes treats them as
+   * content the model can actually SEE; everything else goes through
+   * `attachFile`, which puts it on the turn as a readable document.
+   */
+  ipcMain.handle("hydo:attachAny", async (_e, agentId, filePath) => {
+    const ext = String(path.extname(filePath || "")).slice(1).toLowerCase();
+    try {
+      if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"].includes(ext)) {
+        return { ok: true, kind: "image", res: await gateway.attachImage(agentId, filePath) };
+      }
+      if (ext === "pdf") {
+        return { ok: true, kind: "pdf", res: await gateway.attachPdf(agentId, filePath, {}) };
+      }
+      return { ok: true, kind: "file", res: await gateway.attachFile(agentId, filePath, {}) };
+    } catch (err) {
+      return { ok: false, reason: err.message, ext };
+    }
+  });
+
   ipcMain.handle("hydo:openExternal", (_e, url) => {
     const raw = String(url || "");
     if (!/^https?:\/\//i.test(raw)) return { ok: false, reason: "blocked-scheme" };

@@ -129,8 +129,44 @@ const STEADY = {
   blink: MOTION_BY_ID.idle.blink,
 };
 
+// Slowed variants of two engine motions.
+//
+// `scan` ships with 150ms "snappy" transitions and `nod` with 190ms. On a
+// working face that snap is right; on a face that is just waiting for you to
+// finish typing it reads as a flinch, and between them they were 41% of the
+// idle cast. Same poses, three to four times the duration, smooth easing, and
+// long holds so the pose actually lands before the next one starts.
+function slowed(base, mult, hold) {
+  const m = MOTION_BY_ID[base];
+  if (!m) return MOTION_BY_ID.idle;
+  return {
+    ...m,
+    id: `calm-${base}`,
+    motionScale: (m.motionScale ?? 1) * 0.6,
+    steps: (m.steps || []).map((st) => ({
+      ...st,
+      transition: "smooth",
+      transitionMs: Math.round((st.transitionMs || 300) * mult),
+      holdMs: Math.round((st.holdMs || 500) * hold),
+    })),
+  };
+}
+
+let CALM = null;
+function calmMotions() {
+  if (!CALM) {
+    CALM = {
+      calmScan: slowed("scan", 4.2, 2.4),
+      calmNod: slowed("nod", 3.4, 2.8),
+    };
+  }
+  return CALM;
+}
+
 function motionFor(id) {
   if (id === "spin") return STEADY;
+  const calm = calmMotions();
+  if (calm[id]) return calm[id];
   return MOTION_BY_ID[id] || MOTION_BY_ID.idle;
 }
 
@@ -591,10 +627,13 @@ function useLiveFrame(shapeId, motionId, cfg, active, stagger, morphRef, pokeRef
           // this fires at most twice per beat; the guard below stops it firing
           // again on the frame right after a poke released, when `fidgetShown`
           // still holds "bounce" and the eyes are mid-settle.
-          if (beat.kind !== fidgetShown && MOTION_BY_ID[beat.kind] && now - lastPlay > 240) {
-            fidgetShown = beat.kind;
-            lastPlay = now;
-            play(avatarRef.current, MOTION_BY_ID[beat.kind]);
+          if (beat.kind !== fidgetShown && now - lastPlay > 240) {
+            const m = motionFor(beat.kind);
+            if (m) {
+              fidgetShown = beat.kind;
+              lastPlay = now;
+              play(avatarRef.current, m);
+            }
           }
           // Gaze is one eased drift, and the body leans a little with it
           // rather than the head swivelling off a fixed torso. No stretch: a

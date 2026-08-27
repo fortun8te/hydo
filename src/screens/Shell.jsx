@@ -328,7 +328,12 @@ export default function Shell({ state }) {
                           mood={sending || botBusy(selected) || botWorks(selected, selected.id) ? "spin" : "idle"}
                           poke
                         />
-                        <span className="sand-row__dot" title="Online" aria-label="Online" />
+                        {/* Same rule as the roster: a pip is a claim about a
+                            turn that is actually running. This one was
+                            hardcoded and said "Online" forever. */}
+                        {botWorks(selected, selected.id) || sending ? (
+                          <span className="sand-row__dot is-work" title="Working" aria-label="Working" />
+                        ) : null}
                       </span>
                     )}
                   </button>

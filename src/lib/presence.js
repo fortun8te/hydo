@@ -71,7 +71,11 @@ export function userTypingOf(draft, lastKeyAt, now, idleMs = USER_IDLE_MS) {
 export function moodFromActivity(activity) {
   const s = String(activity || "").toLowerCase();
   if (!s) return null;
-  if (/(writ|typ|compos|draft)/.test(s)) return "looking";
+  // Writing becomes DOTS. This used to return "looking" on the reasoning that
+  // a face is warmer than an indicator, but the face gives you nothing while a
+  // reply is being written, and three dots is the one gesture everybody
+  // already reads as "words are coming". UmbraFace morphs into them.
+  if (/(writ|typ|compos|draft)/.test(s)) return "typing";
   if (/(read|look|think|listen)/.test(s)) return "looking";
   return "spin";
 }

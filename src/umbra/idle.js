@@ -56,11 +56,17 @@ export const IDLE = {
 
 // Weighted, and deliberately short. `bounce` and `excited` are REACTIONS and
 // belong to a poke; a teammate who bounces while waiting looks unwell.
+// The engine's own `scan` runs 150ms "snappy" transitions and `nod` runs
+// 190ms. Those are flinches, and they were 41% of the cast: that is the quick
+// twitchy look. Only smooth motions here now — `lookAround` is 520-560ms
+// smooth on 1s holds, `peek` is 500-650ms on 1.6-2.6s holds — plus two slowed
+// variants defined in UmbraFace (`calmScan`, `calmNod`) for variety without
+// the snap.
 const CAST = [
-  ["lookAround", 0.42],
-  ["scan", 0.3],
-  ["peek", 0.17],
-  ["nod", 0.11],
+  ["lookAround", 0.4],
+  ["peek", 0.3],
+  ["calmScan", 0.2],
+  ["calmNod", 0.1],
 ];
 
 function pickKind(r, avoid) {
@@ -78,7 +84,7 @@ function nextKind(seed, n, avoid) {
     const hit = pickKind(hash01(seed * 3.7 + n * 11.3 + i * 5.1), avoid);
     if (hit) return hit;
   }
-  return avoid === "lookAround" ? "scan" : "lookAround";
+  return avoid === "lookAround" ? "peek" : "lookAround";
 }
 
 function span(r, min, max) {

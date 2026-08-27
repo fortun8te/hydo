@@ -53,8 +53,8 @@ async function main() {
 
   // ---- REACTIONS ARE NOT IDLE BEHAVIOUR.
   const cast = new Set(a.kinds);
-  for (const banned of ["bounce", "excited", "wink", "sideEye", "curious"]) {
-    assert.ok(!cast.has(banned), `${banned} is a reaction, not a way of waiting`);
+  for (const banned of ["bounce", "excited", "wink", "sideEye", "curious", "scan", "nod"]) {
+    assert.ok(!cast.has(banned), `${banned} snaps or reacts; not a way of waiting`);
   }
   assert.ok(cast.size >= 3, `some variety in the cast, got ${[...cast].join(",")}`);
 

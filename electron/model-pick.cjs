@@ -113,11 +113,17 @@ function grokFlag(id) {
 }
 
 function agentsModelBlock(agent, settings) {
+  // The user's name goes in AGENTS.md, which is the only durable context a
+  // Hermes session gets. It was nowhere: not in the soul, not here, so every
+  // bot opened by asking a question the app already knew the answer to.
+  // Stable text, so it does not disturb the cached prompt prefix.
+  const you = String((settings && settings.userName) || "").trim();
   const chat = sessionModel(agent, settings);
   const code = codingModel(agent, settings);
   const grok = grokFlag(code);
   const harness = harnessInfo(settings);
   const lines = [
+    ...(you ? ["## Who you are talking to", `Their name is **${you}**. Use it. Never ask for it.`, ""] : []),
     "## Models",
     chat ? `Hermes session model: \`${chat}\`.` : "Hermes session model: inherit from Hermes config.",
     `Coding harness (Settings): **${harness.label}**. Workdir is this workspace.`,
