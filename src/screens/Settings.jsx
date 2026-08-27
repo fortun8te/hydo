@@ -30,6 +30,51 @@ const THEME_OPTIONS = [
 const ACCENT_OPTIONS = ["Black", "Blue", "Purple"];
 const LANGUAGE_OPTIONS = ["Follow System", "English"];
 
+// The version, spelled out from what the main process measured. Every branch
+// here exists because the field it reads can legitimately be null: a bundle
+// built on a machine without git has no commit count, and a dev run has no
+// build timestamp at all. None of them may render an empty "( )".
+function buildLabel(info) {
+  if (!info) return "Reading build…";
+  const bits = [];
+  if (info.build != null) bits.push(`build ${info.build}`);
+  if (info.shortSha) bits.push(info.shortSha);
+  if (!bits.length) bits.push("build unknown");
+  if (info.dirty) bits.push("uncommitted changes");
+  return `${info.version} (${bits.join(" · ")})`;
+}
+
+// One sentence, and it must be true of THIS process. `channel === "dev"` comes
+// from app.isPackaged in the main process, so a vite run can never claim to be
+// a release just because a stamp from last week's pack sits beside it.
+function buildDesc(info, check) {
+  if (!info) return "Asking the main process what this build is.";
+  if (info.channel === "dev") {
+    return "Running from source with vite — this is not a release build. Rebuild and install writes a packaged Hydo.app to /Applications.";
+  }
+  const when = info.builtAt ? new Date(info.builtAt).toLocaleString() : null;
+  const built = when ? `Packaged ${when}.` : "Packaged build.";
+  if (!check) return built;
+  if (check.state === "behind") {
+    return `${built} The working copy at ${info.repo} is ${check.behind} commit${check.behind === 1 ? "" : "s"} ahead of it.`;
+  }
+  if (check.state === "dirty") return `${built} It matches the working copy's HEAD, which has uncommitted changes.`;
+  if (check.state === "current") return `${built} It matches the working copy's HEAD exactly.`;
+  return `${built} ${check.reason || "The working copy could not be compared."}`;
+}
+
+// The pill on the right. "Up to date" was hardcoded and therefore always said
+// that; this one can say four other things.
+function buildPill(info, check) {
+  if (!info) return "…";
+  if (info.channel === "dev") return "Dev";
+  if (!check) return "…";
+  if (check.state === "behind") return `${check.behind} behind`;
+  if (check.state === "current") return "Up to date";
+  if (check.state === "dirty") return "HEAD + edits";
+  return "Unknown";
+}
+
 function detectedZone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -531,17 +576,25 @@ export default function Settings({
 
         <div className="settings__scroll">
           <div className="settings__body">
-            {/* One card, not five.
-                General used to be a stack of labelled RowGroups — Account,
-                Appearance, Models, Bot — each its own rounded fill with a
-                heading above it, so the pane read as a pile of separate
-                objects you had to re-orient inside of every time. The
-                reference is a single container: every setting is one row, and
-                a 1px hairline inset from the container's edges is all that
-                separates them. The rows are still in the same order, so the
-                grouping survives as adjacency instead of as chrome. */}
+            {/* Groups, not one long list — and not one card per row either.
+                This pane has been both. It started as a card PER ROW, which
+                read as a pile of separate objects; that was collapsed into a
+                single card, which fixed the noise and lost the map: fifteen
+                rows in one fill, findable only by reading all of them. What is
+                here now is the middle the reference asks for — four groups,
+                each holding several related rows, with a quiet label OUTSIDE
+                the fill. The gap between groups (.settings__body, 28px) is
+                deliberately much larger than the gap between rows inside one
+                (0, they share an edge and are split by an inset hairline), so
+                the grouping is legible as space rather than as chrome.
+
+                The first row of a group never carries `divided`: a hairline
+                above the top row draws a line across the card's own rounded
+                edge. Where the first row is conditional the flag is COMPUTED
+                from the same condition rather than hardcoded. */}
             {pane === "general" && (
               <section className="settings__section">
+                <SectionLabel>Account</SectionLabel>
                 <RowGroup>
                   <AccountRow
                     name={accountName || settings.userName}
@@ -561,7 +614,15 @@ export default function Settings({
                       onChange={(userName) => onChange({ userName })}
                     />
                   </Row>
-                  <Row divided label="Theme">
+                </RowGroup>
+              </section>
+            )}
+
+            {pane === "general" && (
+              <section className="settings__section">
+                <SectionLabel>Appearance</SectionLabel>
+                <RowGroup>
+                  <Row label="Theme">
                     <Select
                       ariaLabel="Theme"
                       value={appearance}
@@ -585,6 +646,14 @@ export default function Settings({
                       onChange={(v) => onChange({ language: v })}
                     />
                   </Row>
+                </RowGroup>
+              </section>
+            )}
+
+            {pane === "general" && (
+              <section className="settings__section">
+                <SectionLabel>Where turns run</SectionLabel>
+                <RowGroup>
                   {/* Order, and why it is this one.
                       It used to read: Chat model → Own hardware → Local
                       endpoint → harness. So you picked a model before you had
@@ -594,7 +663,6 @@ export default function Settings({
                       which machine → which model → what does the heavy coding. */}
                   {activeLocal && (
                     <Row
-                      divided
                       label="Local or cloud"
                       description={
                         <>
@@ -637,7 +705,7 @@ export default function Settings({
                       flip. The description says which of the two it is doing. */}
                   {localList.length > 1 && (
                     <Row
-                      divided
+                      divided={!!activeLocal}
                       label="Local endpoint"
                       // One sentence, true in both modes: "Local or cloud" above
                       // already says which mode is live, so this row does not
@@ -665,7 +733,11 @@ export default function Settings({
                       />
                     </Row>
                   )}
-                  <Row divided label="Chat model" description="Model for chat turns — default grok-4.6.">
+                  <Row
+                    divided={!!activeLocal || localList.length > 1}
+                    label="Chat model"
+                    description="Model for chat turns — default grok-4.6."
+                  >
                     <Select
                       ariaLabel="Chat model"
                       value={chatModel}
@@ -753,7 +825,15 @@ export default function Settings({
                       />
                     </Row>
                   )}
-                  <Row divided label="Timezone" description="Bots use this timezone for routines and scheduled work.">
+                </RowGroup>
+              </section>
+            )}
+
+            {pane === "general" && (
+              <section className="settings__section">
+                <SectionLabel>System</SectionLabel>
+                <RowGroup>
+                  <Row label="Timezone" description="Bots use this timezone for routines and scheduled work.">
                     <Select
                       ariaLabel="Timezone"
                       value={timezone}
@@ -778,18 +858,145 @@ export default function Settings({
             )}
 
             {pane === "updates" && (
-              <section className="settings__section">
-                <SectionLabel>Version</SectionLabel>
-                <RowGroup>
-                  <Row
-                    strong
-                    label="Build 2026.08.26.2"
-                    description="Hydo is current. There is no auto-updater — builds ship by hand."
-                  >
-                    <span className="settings__pct">Up to date</span>
-                  </Row>
-                </RowGroup>
-              </section>
+              <>
+                <section className="settings__section">
+                  <SectionLabel>Version</SectionLabel>
+                  <RowGroup>
+                    {/* Not a literal. `buildLabel` formats what
+                        electron/build-info.cjs measured: package.json's
+                        version, the commit COUNT as the build number, and the
+                        short sha, stamped into the bundle at build time by
+                        scripts/stamp-build.cjs because a packaged app has no
+                        .git of its own. The old row carried a
+                        dotted date typed into JSX as its label, and was wrong
+                        two days later. */}
+                    <Row strong label={buildLabel(build)} description={buildDesc(build, buildCheck)}>
+                      <span className="settings__pct">{buildPill(build, buildCheck)}</span>
+                    </Row>
+                    <Row
+                      divided
+                      label="Check the working copy"
+                      description="Compares this build's commit against the repo it was built from. Offline — there is no server to ask."
+                    >
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          const check = window.hydo?.checkBuild;
+                          if (typeof check !== "function") return;
+                          setBuildCheck(null);
+                          Promise.resolve(check())
+                            .then((res) => {
+                              if (!res) return;
+                              setBuild(res.info || null);
+                              setBuildCheck(res.check || null);
+                            })
+                            .catch(() => setBuildCheck({ state: "unknown", reason: "git could not be read." }));
+                        }}
+                      >
+                        Check now
+                      </Button>
+                    </Row>
+                  </RowGroup>
+                </section>
+
+                <section className="settings__section">
+                  <SectionLabel>Install</SectionLabel>
+                  <RowGroup>
+                    {/* Two clicks, deliberately. The first only says what the
+                        second will do — a ~90 second build followed by a swap
+                        of the bundle in /Applications — because a control that
+                        takes the machine away for that long on one click is a
+                        trap. The main process refuses outright while any
+                        teammate is mid-turn. */}
+                    <Row
+                      strong
+                      label="Rebuild and install"
+                      description={
+                        rebuild === "running"
+                          ? "Running npm run pack, then swapping /Applications/Hydo.app. This takes a minute or two."
+                          : rebuild === "confirm"
+                            ? `This runs npm run pack in ${(build && build.repo) || "the working copy"}, then replaces /Applications/Hydo.app with the result. The running app is not restarted. It will refuse while a teammate is mid-turn.`
+                            : rebuildNote ||
+                              "Builds the current working copy and swaps the result into /Applications. Nothing is downloaded."
+                      }
+                    >
+                      {rebuild === "running" ? (
+                        <span className="settings__pct">Building…</span>
+                      ) : rebuild === "confirm" ? (
+                        <div className="settings__local-ctl">
+                          <Button onClick={() => setRebuild("")}>Cancel</Button>
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              const run = window.hydo?.rebuildAndInstall;
+                              if (typeof run !== "function") return;
+                              setRebuild("running");
+                              setRebuildNote("");
+                              Promise.resolve(run())
+                                .then((res) => {
+                                  if (res && res.ok) {
+                                    setRebuild("done");
+                                    setRebuildNote(
+                                      `Installed to ${res.installed}${res.seconds ? ` in ${res.seconds}s` : ""}. The running app is still the old one until you relaunch.`,
+                                    );
+                                    const again = window.hydo?.checkBuild;
+                                    if (typeof again === "function") {
+                                      Promise.resolve(again())
+                                        .then((r) => {
+                                          if (!r) return;
+                                          setBuild(r.info || null);
+                                          setBuildCheck(r.check || null);
+                                        })
+                                        .catch(() => {});
+                                    }
+                                  } else {
+                                    setRebuild("failed");
+                                    setRebuildNote(
+                                      res && res.reason === "busy"
+                                        ? `${res.detail || "A teammate is mid-turn."} Nothing was built.`
+                                        : `${(res && res.reason) || "The build failed."} /Applications was not touched.`,
+                                    );
+                                  }
+                                })
+                                .catch((err) => {
+                                  setRebuild("failed");
+                                  setRebuildNote(`${err?.message || "The build failed."} /Applications was not touched.`);
+                                });
+                            }}
+                          >
+                            Build and install
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button variant="secondary" onClick={() => setRebuild("confirm")}>
+                          {rebuild === "done" ? "Rebuild again" : "Rebuild…"}
+                        </Button>
+                      )}
+                    </Row>
+                    {/* Only after a successful install, and never automatic.
+                        Relaunching an app the user did not ask to lose is a
+                        crash with a nicer name. */}
+                    {rebuild === "done" && (
+                      <Row
+                        divided
+                        label="Relaunch into the new build"
+                        description="Quits and reopens Hydo. Anything mid-turn is lost, so this is never done for you."
+                      >
+                        <Button variant="primary" onClick={() => window.hydo?.relaunch?.()}>
+                          Relaunch now
+                        </Button>
+                      </Row>
+                    )}
+                  </RowGroup>
+                  {/* The one thing this pane cannot do, said plainly instead of
+                      drawn as a button that would always fail: there is no git
+                      remote, no release feed and no electron-updater here. */}
+                  <p className="settings__note">
+                    There is no auto-updater and no download. Hydo has no release server to check — updating means
+                    rebuilding from the copy of the source on this machine.
+                  </p>
+                </section>
+              </>
             )}
           </div>
         </div>

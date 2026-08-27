@@ -59,6 +59,62 @@ assert.ok(
   "the endpoint row is gated on having more than one endpoint, not on being local",
 );
 
+// ── 1b. the groups the order lives in ─────────────────────────────────────
+// The rows above are now spread across four labelled groups rather than one
+// long card. Their ORDER is unchanged and asserted above; what is added here
+// is that the grouping exists and is the right grouping. The geometry — label
+// outside the fill, hairlines between rows, real space between groups — is
+// measured in a real window by scripts/settings-groups-test.cjs; this only
+// pins which rows belong to which group, which is a source fact.
+const GROUPS = ["Account", "Appearance", "Where turns run", "System"];
+let groupCursor = -1;
+for (const name of GROUPS) {
+  const at = jsx.indexOf(`<SectionLabel>${name}</SectionLabel>`);
+  assert.ok(at > 0, `Settings.jsx has no ${name} group`);
+  assert.ok(at > groupCursor, `the ${name} group is out of order`);
+  groupCursor = at;
+}
+// One card per row was the bug BEFORE the single card; four groups for ~13
+// rows is the middle. If the count of groups ever approaches the count of
+// rows, that regression is back.
+const groupCount = (jsx.match(/<SectionLabel>/g) || []).length;
+const rowCount = (jsx.match(/<Row\b/g) || []).length;
+assert.ok(groupCount < rowCount / 2, `${groupCount} groups for ${rowCount} rows is drifting back to card-per-row`);
+
+// Every row lands in the group it belongs to: appearance rows after the
+// Appearance label and before "Where turns run", and so on.
+// `aria-label="Local or cloud"` on the switch itself sits hundreds of lines
+// above the row that carries the same words, and a plain indexOf finds that
+// one first — which is how this check failed the first time it was written.
+const at = (needle) => {
+  const i = typeof needle === "string" ? jsx.indexOf(needle) : jsx.search(needle);
+  assert.ok(i > 0, `Settings.jsx no longer contains ${needle}`);
+  return i;
+};
+const rowAt = (label) => at(new RegExp(`(?<!aria-)label="${label}"`));
+const appearanceAt = at("<SectionLabel>Appearance</SectionLabel>");
+const turnsAt = at("<SectionLabel>Where turns run</SectionLabel>");
+const systemAt = at("<SectionLabel>System</SectionLabel>");
+for (const label of ["Theme", "Accent", "Language"]) {
+  const i = rowAt(label);
+  assert.ok(i > appearanceAt && i < turnsAt, `"${label}" belongs to the Appearance group`);
+}
+for (const label of ["Local or cloud", "Local endpoint", "Chat model", "Coding harness"]) {
+  const i = rowAt(label);
+  assert.ok(i > turnsAt && i < systemAt, `"${label}" belongs to the "Where turns run" group`);
+}
+assert.ok(rowAt("Timezone") > systemAt, "Timezone belongs to the System group");
+assert.ok(rowAt("Your name") < appearanceAt, "Your name belongs to the Account group");
+
+// The first row of a group must never carry `divided` — a hairline above the
+// top row cuts across the card's own rounded corner. Where that first row is
+// conditional the flag is COMPUTED from the same condition, never dropped.
+assert.ok(/divided=\{!!activeLocal\}/.test(jsx), "the endpoint row's divider must follow whether a row precedes it");
+assert.ok(
+  /divided=\{!!activeLocal \|\| localList\.length > 1\}/.test(jsx),
+  "Chat model can be the first row of its group and must compute its divider"
+);
+
 // ── 2. the harness tells the truth about leaving your machine ─────────────
 // Established by reading model-pick.agentsModelBlock: the harness is prose in
 // AGENTS.md instructing a shell-out, not a router. Grok Build therefore runs

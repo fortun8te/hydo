@@ -411,6 +411,18 @@ export function installDevMock() {
   <text class="lbl" x="574" y="218" text-anchor="middle">Sun</text>
 </svg>`;
 
+  const MOCK_BUILD = {
+    version: "0.1.1",
+    build: 116,
+    channel: "release",
+    sha: "af72db76f0db61fad565dd3d5512a98f05029a09",
+    shortSha: "af72db7",
+    dirty: false,
+    builtAt: "2026-08-27T23:24:44.088Z",
+    repo: "/Users/you/Projects/hydo",
+    platform: "darwin-arm64",
+  };
+
   window.hydo = {
     readArtifact: async (id) =>
       id === "art-1"
@@ -425,6 +437,20 @@ export function installDevMock() {
           }
         : { ok: false, reason: "unknown" },
     listArtifacts: async () => ({ ok: true, artifacts: [] }),
+    // Updates pane fixture. The real values come from the MAIN process
+    // (electron/build-info.cjs) and cannot exist in a browser, so the mock
+    // stands in with the shape that has something to look at: a packaged build
+    // that is a few commits behind its working copy. Nothing here is what the
+    // app reports when it is actually running — devmock only ever loads under
+    // `?mock=1` in a dev build.
+    buildInfo: async () => ({ ok: true, info: MOCK_BUILD }),
+    checkBuild: async () => ({
+      ok: true,
+      info: MOCK_BUILD,
+      check: { ok: true, state: "behind", behind: 3, dirty: true, headShort: "1c0ffee" },
+    }),
+    rebuildAndInstall: async () => ({ ok: false, reason: "The dev mock cannot run a build." }),
+    relaunch: async () => ({ ok: true }),
     openExternal: async () => ({ ok: true }),
     getState: async () => JSON.parse(JSON.stringify(state)),
     onState: (fn) => {
