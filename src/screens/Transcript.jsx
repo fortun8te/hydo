@@ -1162,13 +1162,21 @@ export default function Transcript({
               <ChoiceCard
                 title={toText(msg.text) || "Quick question."}
                 sub={
-                  answered
-                    ? "Answered — carrying on."
-                    : "I've paused until you answer. Pick one or type your own."
+                  msg.dismissed
+                    ? "Dismissed. Carrying on without it."
+                    : answered
+                    ? "Answered, carrying on."
+                    : "Paused until you answer. Pick one, type your own, or dismiss."
                 }
                 choices={msg.choices}
                 picked={answered || null}
-                resolved={!!answered}
+                resolved={!!answered || !!msg.dismissed}
+                dismissed={!!msg.dismissed}
+                onDismiss={
+                  answered || msg.dismissed
+                    ? undefined
+                    : () => window.hydo?.dismissClarify?.(msg.id)
+                }
                 answer={answered}
                 speaker={from}
                 requireCustom

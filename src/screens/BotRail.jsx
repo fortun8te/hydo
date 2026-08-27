@@ -280,8 +280,10 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             onClick={() => onChange({ profilePinned: false, toolProfile: "chat" })}
           >
             <span>Auto</span>
+            {/* The RUNG, not just a number. "Auto 16.6k" reads as "auto costs
+                16.6k always", when it means "auto has climbed to Work". */}
             <span className="bot-rail__preset-cost">
-              {pinned ? "off" : tokenLabel(profileTokens)}
+              {pinned ? "off" : `${profileLabel(toolProfile)} ${tokenLabel(profileTokens)}`}
             </span>
           </button>
           {PRESETS.map((p) => {

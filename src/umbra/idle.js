@@ -56,22 +56,58 @@ export const IDLE = {
 
 // Weighted, and deliberately short. `bounce` and `excited` are REACTIONS and
 // belong to a poke; a teammate who bounces while waiting looks unwell.
-// The engine's own `scan` runs 150ms "snappy" transitions and `nod` runs
-// 190ms. Those are flinches, and they were 41% of the cast: that is the quick
-// twitchy look. Only smooth motions here now — `lookAround` is 520-560ms
-// smooth on 1s holds, `peek` is 500-650ms on 1.6-2.6s holds — plus two slowed
-// variants defined in UmbraFace (`calmScan`, `calmNod`) for variety without
-// the snap.
-const CAST = [
-  ["lookAround", 0.4],
-  ["peek", 0.3],
-  ["calmScan", 0.2],
+// THE CAST CHANGES AS HE WAITS.
+//
+// One flat list of motions gives you a loop. A person who has been waiting
+// two minutes does not behave like one who just looked up: they start alert,
+// settle into idle glances, and eventually get visibly bored. `restless`
+// already tracks that decay, so the cast is drawn from it.
+//
+// Everything here is SMOOTH. The engine's `scan` (140ms) and `nod` (190ms) and
+// `alert` (160ms) are flinches, right for a working face and wrong for one
+// that is just there; the slowed variants in UmbraFace cover that ground
+// without the snap.
+//
+// ALERT — just arrived, or you just typed something
+const CAST_ALERT = [
+  ["listening", 0.26], // attentive, head tilts toward you
+  ["calmCurious", 0.2],
+  ["lookAround", 0.18],
+  ["calmScan", 0.14],
+  ["peek", 0.12],
   ["calmNod", 0.1],
 ];
+// EASY — the middle stretch
+const CAST_EASY = [
+  ["lookAround", 0.24],
+  ["idle", 0.2], // the engine's own glance left/right, 500ms
+  ["peek", 0.16],
+  ["thinking", 0.14],
+  ["listening", 0.1],
+  ["calmSideEye", 0.09],
+  ["shy", 0.07],
+];
+// SETTLED — been waiting a while, and it shows
+const CAST_SETTLED = [
+  ["bored", 0.26], // 800ms steps, drowsy
+  ["idle", 0.18],
+  ["meditate", 0.16], // 1400ms steps
+  ["sleepy", 0.14],
+  ["calmYawn", 0.12],
+  ["lookAround", 0.08],
+  ["shy", 0.06],
+];
 
-function pickKind(r, avoid) {
+/** Pick the cast for how long he has been standing there. */
+function castFor(restless) {
+  if (restless > 0.66) return CAST_ALERT;
+  if (restless > 0.28) return CAST_EASY;
+  return CAST_SETTLED;
+}
+
+function pickKind(cast, r, avoid) {
   let acc = 0;
-  for (const [id, w] of CAST) {
+  for (const [id, w] of cast) {
     acc += w;
     if (r < acc) return id === avoid ? null : id;
   }
@@ -79,12 +115,13 @@ function pickKind(r, avoid) {
 }
 
 /** Choose a motion, never the same one twice running. */
-function nextKind(seed, n, avoid) {
-  for (let i = 0; i < 4; i++) {
-    const hit = pickKind(hash01(seed * 3.7 + n * 11.3 + i * 5.1), avoid);
+function nextKind(seed, n, avoid, restless) {
+  const cast = castFor(restless);
+  for (let i = 0; i < 5; i++) {
+    const hit = pickKind(cast, hash01(seed * 3.7 + n * 11.3 + i * 5.1), avoid);
     if (hit) return hit;
   }
-  return avoid === "lookAround" ? "peek" : "lookAround";
+  return avoid === cast[0][0] ? cast[1][0] : cast[0][0];
 }
 
 function span(r, min, max) {
@@ -163,7 +200,7 @@ export function idleStep(st, now, ease) {
     if (s.kind === "idle") {
       // `s.last` is what he did LAST time he moved, so two motion beats in a
       // row are never the same one even though a still beat sits between them.
-      s.kind = nextKind(s.seed, s.n, s.last);
+      s.kind = nextKind(s.seed, s.n, s.last, restless);
       s.until += span(r, IDLE.MOVE_MIN, IDLE.MOVE_MAX);
     } else {
       s.last = s.kind;

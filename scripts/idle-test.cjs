@@ -56,7 +56,39 @@ async function main() {
   for (const banned of ["bounce", "excited", "wink", "sideEye", "curious", "scan", "nod"]) {
     assert.ok(!cast.has(banned), `${banned} snaps or reacts; not a way of waiting`);
   }
-  assert.ok(cast.size >= 3, `some variety in the cast, got ${[...cast].join(",")}`);
+  assert.ok(cast.size >= 8, `real variety, got ${cast.size}: ${[...cast].join(",")}`);
+
+  // ---- THE CAST CHANGES AS HE WAITS --------------------------------------
+  // A flat list of motions is a loop. Someone who has been waiting two
+  // minutes should not behave like someone who just looked up: alert first,
+  // easy glances in the middle, visibly bored by the end. `restless` drives
+  // it, so the states seen early and late must actually differ.
+  {
+    const st = makeIdleState(0.42);
+    const early = new Set();
+    const late = new Set();
+    let prev = null;
+    for (let t = 0; t < 200_000; t += 100) {
+      const r = idleStep(st, t, (x) => x);
+      if (r.kind !== prev && r.kind !== "idle") {
+        (t < 40_000 ? early : t > 140_000 ? late : new Set()).add?.(r.kind);
+        prev = r.kind;
+      } else if (r.kind !== prev) {
+        prev = r.kind;
+      }
+    }
+    assert.ok(early.size >= 2, `alert cast plays early, got ${[...early]}`);
+    assert.ok(late.size >= 2, `settled cast plays late, got ${[...late]}`);
+    const overlap = [...late].filter((k) => early.has(k));
+    assert.ok(
+      overlap.length < Math.min(early.size, late.size),
+      `early and late must differ, both were ${[...early]}`
+    );
+    // The drowsy motions belong to waiting a long time, not to arriving.
+    for (const drowsy of ["bored", "sleepy", "meditate"]) {
+      assert.ok(!early.has(drowsy), `${drowsy} must not play in the first seconds`);
+    }
+  }
 
   // ---- NEVER THE SAME MOTION TWICE RUNNING.
   const moves = a.kinds.filter((k, i) => k !== "idle" && a.kinds[i - 1] === "idle");

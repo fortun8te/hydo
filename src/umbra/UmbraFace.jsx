@@ -158,6 +158,9 @@ function calmMotions() {
     CALM = {
       calmScan: slowed("scan", 4.2, 2.4),
       calmNod: slowed("nod", 3.4, 2.8),
+      calmSideEye: slowed("sideEye", 1.8, 2.2),
+      calmYawn: slowed("yawn", 2.0, 2.0),
+      calmCurious: slowed("curious", 2.4, 2.2),
     };
   }
   return CALM;

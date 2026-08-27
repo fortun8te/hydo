@@ -22,6 +22,7 @@ export default function ChoiceCard({
   onPick,
   onCustom,
   onDismiss,
+  dismissed = false,
 }) {
   const [draft, setDraft] = useState("");
   const list = Array.isArray(choices) ? choices.filter((c) => c && c.id != null) : [];
@@ -61,7 +62,12 @@ export default function ChoiceCard({
           ) : null}
           {heading}
         </div>
-        {onDismiss ? (
+        {dismissed ? (
+          <span className="hy-choice__dismissed">
+            <span className="hy-choice__dismissed-dot" aria-hidden="true" />
+            Dismissed
+          </span>
+        ) : onDismiss ? (
           <button
             type="button"
             className="hy-choice__close"

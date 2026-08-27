@@ -93,6 +93,7 @@ contextBridge.exposeInMainWorld("hydo", {
   compact: (agentId) => ipcRenderer.invoke("hydo:compact", agentId),
 
   // Undo a teammate's file changes.
+  dismissClarify: (id) => ipcRenderer.invoke("hydo:dismissClarify", id),
   pickFiles: () => ipcRenderer.invoke("hydo:pickFiles"),
   attachAny: (agentId, filePath) => ipcRenderer.invoke("hydo:attachAny", agentId, filePath),
   openExternal: (url) => ipcRenderer.invoke("hydo:openExternal", url),

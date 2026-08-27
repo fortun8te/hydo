@@ -1181,6 +1181,10 @@ aside.routine-rail .routine-rail__toolbar {
 }
 
 .bot-rail .bot-rail__preset-cost {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10.5px;
   color: var(--sand-text-tertiary, #8d8d8d);
 }

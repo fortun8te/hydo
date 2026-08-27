@@ -214,6 +214,17 @@ function normalizeState(raw) {
   const landing = cannedLandingTexts(settings.userName);
   const messages = raw.messages && typeof raw.messages === "object" ? raw.messages : {};
   for (const a of agents) {
+    // One-time migration into auto mode.
+    //
+    // Auto is ESCALATE-ONLY on purpose, which is right inside a conversation
+    // and wrong for bots that existed before auto did: they were all born on
+    // `builder`, so they would sit at ~16.6k forever and auto could never
+    // bring them down. Anything not hand-pinned drops to the cheapest rung
+    // once, and climbs back from there as turns actually need it.
+    if (a && a.profilePinned === undefined) {
+      a.profilePinned = false;
+      if (a.toolProfile === "builder") a.toolProfile = "chat";
+    }
     if (a && a.model) a.model = modelPick.normalizeChatModel(a.model);
     if (a && (!a.model || /muse/i.test(a.model))) {
       a.model = "";
@@ -2359,20 +2370,19 @@ function createStore(opts = {}) {
       const user = state.settings.userName || "Michael";
       const named = agent.name && agent.name !== "New Bot" ? agent.name : "";
       const brief = [
-        `You just came online as ${user}'s new teammate${named ? ` called ${named}` : ""}.`,
-        agent.description ? `You were set up for: ${agent.description}` : "",
-        // Unnamed is the common case, and the failure mode is specific: the
-        // soul is titled "Hydo teammate", so an unnamed bot introduces itself
-        // as "I'm Hydo". Hydo is the APP. Say so, and ask for a name instead
-        // of inventing one.
+        `${user} just made you. You are their new teammate${named ? `, called ${named}` : ""}.`,
+        agent.description ? `They set you up for: ${agent.description}` : "",
         named
           ? ""
-          : "You have NO NAME yet. Do not invent one and do not call yourself Hydo, that is the app you live in. Ask what to call you.",
-        "Open the thread yourself. One short bubble, your own voice, under fifteen words.",
-        named
-          ? "Say what you are for and invite the first job."
-          : "Ask for a name and what you are for, in one line.",
-        "Do not list. Do not say 'How can I help you today'. No tools. No SKIP.",
+          : "You have no name yet. Never invent one and never call yourself Hydo, that is the app.",
+        // The failure this is written against: every phrasing of "what do you
+        // want me for" is the same menu in different words, and it makes the
+        // first thing a new teammate does be an admin question. Someone warm
+        // says hello and lets you talk.
+        "Say hello like a person would. ONE short line, your own voice, under twelve words.",
+        `Use their name. Do not ask what they want, do not offer categories, do not list, do not say "how can I help".`,
+        "It is fine to just be glad to be here and stop talking. They will tell you what they need.",
+        "No tools. No SKIP.",
       ]
         .filter(Boolean)
         .join(" ");
@@ -2956,6 +2966,37 @@ function createStore(opts = {}) {
         msg.error = err.message;
         save();
       }
+      return publicState();
+    },
+    /**
+     * Dismiss a clarify without answering it.
+     *
+     * The card blocks the turn, so with no way out an unwanted question just
+     * sits there forever holding the bot open. Hermes still has to be told
+     * something or the session waits, so a dismiss sends an explicit skip
+     * rather than silently dropping it.
+     */
+    async dismissClarify(messageId) {
+      const entry = selectedEntry();
+      if (!entry) return publicState();
+      const msg = threadOf(entry.id).find((m) => m.id === messageId);
+      if (!msg || msg.kind !== "clarify" || msg.answered) return publicState();
+      msg.answered = "";
+      msg.dismissed = true;
+      logAction(entry.id, "clarify", "dismissed a question");
+      save();
+      try {
+        const gateway = require("./hermes-gateway.cjs");
+        await gateway.respondClarify(
+          msg.fromId,
+          msg.requestId,
+          "Skipped. Carry on with your best judgement and say what you assumed.",
+          { questionId: msg.questionId || undefined }
+        );
+      } catch (err) {
+        msg.error = err.message;
+      }
+      save();
       return publicState();
     },
     async answerClarify(messageId, answer) {

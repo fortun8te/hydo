@@ -477,6 +477,11 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle("hydo:dismissClarify", async (_e, id) => {
+    const next = await store.dismissClarify(id);
+    push();
+    return next;
+  });
   ipcMain.handle("hydo:openExternal", (_e, url) => {
     const raw = String(url || "");
     if (!/^https?:\/\//i.test(raw)) return { ok: false, reason: "blocked-scheme" };
