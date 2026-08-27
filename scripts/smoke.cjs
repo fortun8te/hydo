@@ -21,6 +21,10 @@ const path = require("node:path");
 const { app, BrowserWindow } = require("electron");
 
 process.env.HYDO_DIST = "1";
+// Ask main.cjs to skip its single-instance lock. Without this the smoke test
+// quits silently with exit 0 whenever the real app is running — a test that
+// passes by not running is worse than no test at all.
+process.env.HYDO_SMOKE = "1";
 
 const problems = [];
 process.on("uncaughtException", (e) => problems.push(`uncaught: ${e && e.message}`));

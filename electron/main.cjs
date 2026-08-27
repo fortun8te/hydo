@@ -225,7 +225,14 @@ let liveBoxes = null;
  * the app in the Dock raises the window you already have instead of building a
  * new one beside it.
  */
-if (!app.requestSingleInstanceLock()) {
+// The smoke test boots this same file to check the real app comes up, so it
+// must be allowed a second instance — otherwise the lock below quits it before
+// it prints anything, and it exits 0. That is what happened: adding the lock
+// turned `npm run smoke` into a no-op that reported success whenever the app
+// was open, which is every time anyone would think to run it.
+const SMOKE = process.env.HYDO_SMOKE === "1";
+
+if (!SMOKE && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", () => {
