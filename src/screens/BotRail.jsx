@@ -93,6 +93,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   const label = agent?.label ?? "";
   const description = agent?.description ?? "";
   const notifications = !!agent?.notifications;
+  const boxEnabled = !!agent?.boxEnabled;
   const [wheelOpen, setWheelOpen] = useState(false);
   const [profiles, setProfiles] = useState(FALLBACK_PROFILES);
   const [connections, setConnections] = useState([]);
@@ -491,6 +492,27 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           aria-checked={notifications}
           aria-label="Notifications"
           onClick={() => onChange({ notifications: !notifications })}
+        />
+      </div>
+      {/* Permission, not provisioning. Turning this on creates no machine and
+          turning it off deletes none: there is exactly one workspace for the
+          whole desk, and this says whether this teammate may use it. */}
+      <div className="bot-rail__notify">
+        <div>
+          <span className="bot-rail__notify-title">Linux workspace</span>
+          <p>
+            Let this Bot use the shared Ubuntu machine. All Bots use the same
+            one, so logins it makes stay signed in for the others. It stops
+            itself when nobody is working.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={boxEnabled ? "bot-rail__toggle is-on" : "bot-rail__toggle"}
+          role="switch"
+          aria-checked={boxEnabled}
+          aria-label="Linux workspace"
+          onClick={() => onChange({ boxEnabled: !boxEnabled })}
         />
       </div>
       <div className="bot-rail__routines">

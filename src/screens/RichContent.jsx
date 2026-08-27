@@ -634,6 +634,39 @@ function parseBlocks(raw, depth = 0) {
   return blocks;
 }
 
+/**
+ * Copy, on any fenced block.
+ *
+ * The reason this matters more here than in a docs site: a teammate that
+ * writes you a prompt, a command or a config has produced something whose
+ * whole purpose is to be used somewhere else. Selecting twelve lines of a
+ * scrolling transcript by hand is the difference between that being useful and
+ * being a screenshot.
+ *
+ * The label changes to "Copied" rather than firing a toast: the confirmation
+ * belongs on the thing you clicked, and a transcript full of toasts is noise.
+ */
+function CopyBlock({ text }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className={done ? "hy-rc-copy is-done" : "hy-rc-copy"}
+      // The full text, not the rendered node: a copy that loses the newlines
+      // is worse than no copy at all.
+      onClick={() => {
+        navigator.clipboard?.writeText(String(text || ""));
+        setDone(true);
+        window.setTimeout(() => setDone(false), 1400);
+      }}
+      aria-label={done ? "Copied" : "Copy to clipboard"}
+      title={done ? "Copied" : "Copy"}
+    >
+      {done ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 function Caret() {
   // shares .hy-caret with the transcript's streaming caret
   return <span className="hy-caret hy-rc-caret" aria-hidden="true" />;
@@ -675,6 +708,9 @@ function MdBlock({ block, idx, caret }) {
     return (
       <div className="hy-rc-pre-wrap">
         {b.lang ? <span className="hy-rc-pre-lang">{b.lang}</span> : null}
+        {/* Not while it is still streaming: a copy button on a half-written
+            block hands you half a prompt. */}
+        {caret ? null : <CopyBlock text={b.text} />}
         <pre className="hy-rc-pre" tabIndex={0} aria-label={b.lang ? `${b.lang} code block` : "code block"}>
           <code className="hy-rc-pre-code">
             {b.text}

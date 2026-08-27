@@ -1250,3 +1250,44 @@ button.hy-rc-image-tile {
 .hy-rc-mathblock .katex-error {
   color: #ff6b78;
 }
+
+/* Copy, on a fenced block.
+   Sits in the corner and stays quiet until you go near the block: a button
+   that is always fully lit competes with the code for attention, and the code
+   is the point. It never hides completely, because a control you cannot see is
+   a control nobody finds. */
+.hy-rc-pre-wrap { position: relative; }
+
+.hy-rc-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  padding: 3px 9px;
+  border: 1px solid var(--sand-line, #ffffff1a);
+  border-radius: 7px;
+  background: var(--hy-menu, #1c1c1c);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.hy-rc-pre-wrap:hover .hy-rc-copy,
+.hy-rc-copy:focus-visible { opacity: 1; }
+.hy-rc-copy:hover { color: var(--sand-text-primary, #fcfcfc); }
+.hy-rc-copy.is-done {
+  opacity: 1;
+  color: var(--sand-ok, #2bb673);
+  border-color: rgba(43, 182, 115, 0.4);
+}
+.hy-rc-copy:focus-visible {
+  outline: 2px solid var(--sand-accent, #2a92fe);
+  outline-offset: 2px;
+}
+
+/* The language tag and the button share a corner; move the tag left so they
+   do not stack. */
+.hy-rc-pre-wrap .hy-rc-pre-lang { right: 64px; }
