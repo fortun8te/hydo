@@ -297,3 +297,68 @@ Python in `~/.hermes/hermes-agent`, with file names given so the next person
 can check them rather than trust this file. No Hydo turn was driven end to end
 against the box; the context cap discussed at the top of this file was still
 being raised on the PC side while this was written.
+
+---
+
+## Reasoning: leave thinking ON. Turning it off makes the model wrong.
+
+The intuition is that a slow model should think less. Measured, it is the wrong
+trade — and the measurement is unambiguous:
+
+| | thinking ON | thinking OFF |
+|---|---|---|
+| bat-and-ball (answer 0.05) | 10.4s, 162 tok -> **0.05** | 1.1s, 5 tok -> **0.10** |
+| capital of France | 2.9s, 37 tok -> Paris | 1.0s, 2 tok -> Paris |
+
+Thinking off falls straight into the classic trap. It is three times faster and
+wrong, which is the worst combination available.
+
+Note also what thinking does NOT do: it does not slow generation. Three clean
+samples each way on the same prompt gave 15.2 / 17.6 / 15.4 tok/s with thinking
+and 14.8 / 16.0 / 14.5 without. **The rate is flat at ~15.5 tok/s.** Thinking
+costs ~35% MORE TOKENS for the same answer (105 vs 75), not slower tokens. An
+earlier note in this project framed it as a speed-up; that was wrong.
+
+### And Hydo cannot switch it per turn anyway
+
+`chat_template_kwargs.enable_thinking` is a server-side setting.
+`agent_init.py:436` only merges a provider's `extra_body` when the session's
+provider is literally `custom` or `custom:<name>`; Hydo sends the provider's own
+key (`unsloth`), so an `extra_body` block on a `providers:` entry is **inert**.
+One was added here during testing and removed again rather than left in the file
+looking load-bearing.
+
+Per-task control would need two provider entries — one thinking, one not — and a
+Hydo-side choice of which to use per turn. Worth doing only if the ~35% token
+saving on easy turns is worth the wrong answers on hard ones being one
+mis-routing away.
+
+---
+
+## What actually costs the time: prefill, and it is cached
+
+29 tool schemas is 3,338 prompt tokens, and reading them took **9.4s before a
+single output token**. That dwarfs generation for a short reply.
+
+But the server caches the prefix:
+
+| | wall | cached |
+|---|---|---|
+| cold | 9.4s | — |
+| warm, same prompt | **1.5s** | 3,334 / 3,338 |
+| same tools, new message | 2.6s | 2,822 |
+
+So the tool-schema cost is once per session, NOT per turn — as long as the
+prompt prefix stays byte-identical. Two consequences worth keeping:
+
+- **A smaller tool profile is the biggest lever on the cold turn.** `builder`
+  ships 29 tools; `chat` ships 3. A local teammate that will never open a shell
+  should not carry one.
+- **Anything volatile at the FRONT of the prompt costs 8 seconds a turn,
+  forever.** A clock in AGENTS.md would do it. Checked: Hydo is clean today, the
+  only timestamp goes to a log file.
+
+This also re-prices a bug already fixed. The `reasoning_effort` churn — where a
+changed effort counted as a different session and rebuilt it before every first
+real turn — was not merely wasteful. It threw the cache away each time, so it
+was costing ~8 seconds, not a few hundred milliseconds.
