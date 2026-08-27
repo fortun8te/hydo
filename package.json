@@ -1,6 +1,7 @@
 {
   "name": "hydo",
   "version": "0.1.0",
+  "author": "Michael Knaap",
   "private": true,
   "description": "Hydo — Grok Bot chrome, our backend",
   "main": "electron/main.cjs",

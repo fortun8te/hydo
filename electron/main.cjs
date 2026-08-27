@@ -39,6 +39,34 @@ try {
   /* already resolved: keep whatever it picked rather than crash on boot */
 }
 
+/**
+ * Say whether the GPU is actually doing the work.
+ *
+ * Electron enables hardware acceleration by default, so it is tempting to
+ * assume and move on . which is what I did until I measured it. It can also
+ * fall back to software silently: a driver blocklist, a remote session, a
+ * VM. This app animates SVG faces on a rAF loop, so a silent fallback to
+ * software compositing is the difference between smooth and visibly bad, with
+ * nothing anywhere saying why.
+ *
+ * Read AFTER a window exists. Queried before that it reports
+ * `disabled_software` for everything regardless of the truth, which is a
+ * convincing way to misdiagnose a machine that is perfectly fine.
+ */
+function logGpu() {
+  try {
+    const s = app.getGPUFeatureStatus() || {};
+    const soft = ["gpu_compositing", "rasterization"].filter(
+      (k) => s[k] && !String(s[k]).startsWith("enabled")
+    );
+    if (soft.length) {
+      console.warn(`[hydo] software rendering: ${soft.map((k) => `${k}=${s[k]}`).join(", ")}`);
+    }
+  } catch {
+    /* never worth failing to launch over */
+  }
+}
+
 /** The Dock icon, which a packaged .app gets from its bundle and dev does not. */
 function brandDock() {
   if (process.platform !== "darwin" || !app.dock) return;
@@ -86,6 +114,8 @@ function createWindow() {
   win.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {});
   win.webContents.on("did-finish-load", () => {
     win.webContents.setZoomFactor(1);
+    // Only meaningful once something has been painted.
+    logGpu();
   });
 
   const distIndex = path.join(__dirname, "../dist/index.html");
