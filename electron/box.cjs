@@ -45,6 +45,47 @@ const TEAM_BOX = "hydo-team";
  */
 const IDLE_STOP_MS = 12 * 60 * 1000;
 
+/**
+ * Always-on, for routines that must fire while the Mac is shut.
+ *
+ * A stopped box runs NOTHING . it is a frozen filesystem snapshot, there are
+ * no wake timers, and auto-stop counts from creation rather than from last
+ * activity. So "run this every morning whether or not my laptop is open" has
+ * exactly one shape: a box that never stops.
+ *
+ * The arithmetic decides the size, and it is close:
+ *
+ *   a month            2,592,000 s
+ *   the $20 plan       2,000,000 VM-seconds
+ *   small   (0.5x)     1,296,000  . 65% of the plan. Fits, with headroom.
+ *   default (1x)       2,592,000  . 130%. Does not fit.
+ *   large   (2x)       5,184,000  . 259%.
+ *
+ * So an always-on team computer is a SMALL box or it is a surprise bill. Two
+ * vCPUs and 4GB is thin for a desktop, which is the honest trade: a machine
+ * that is always there, or a faster one that is only there when you are.
+ *
+ * Requires a payment method . `--no-auto-stop` is refused on the trial, which
+ * caps auto-stop at two hours and cannot disable it.
+ */
+const ALWAYS_ON_SIZE = "small";
+const MONTH_SECONDS = 2_592_000;
+const PLAN_SECONDS = 2_000_000;
+const SIZE_RATE = { small: 0.5, default: 1, large: 2 };
+
+/** What running this size continuously would cost, as a share of the plan. */
+function alwaysOnCost(size = ALWAYS_ON_SIZE) {
+  const rate = SIZE_RATE[size] ?? 1;
+  const used = MONTH_SECONDS * rate;
+  return {
+    size,
+    vmSeconds: used,
+    planSeconds: PLAN_SECONDS,
+    percentOfPlan: Math.round((used / PLAN_SECONDS) * 100),
+    fits: used <= PLAN_SECONDS,
+  };
+}
+
 function run(args, opts = {}) {
   return new Promise((resolve) => {
     execFile(
@@ -145,14 +186,19 @@ async function findTeamBox() {
  * the same machine every other time. Never creates a second one: a duplicate
  * would split the team's files in half and double the bill.
  */
-async function ensure() {
+async function ensure(opts = {}) {
   const st = await status();
   if (!st.installed) return { ok: false, reason: "not-installed" };
   if (!st.signedIn) return { ok: false, reason: "signed-out" };
 
   const found = await findTeamBox();
   if (!found) {
-    const made = await runJson(["new", "--name", TEAM_BOX], { timeout: 180_000 });
+    // `alwaysOn` is what makes a routine fire with the laptop shut, and it is
+    // also what turns this from "pennies when I use it" into a standing
+    // monthly cost. It is never the default.
+    const args = ["new", "--name", TEAM_BOX];
+    if (opts.alwaysOn) args.push("--size", ALWAYS_ON_SIZE, "--no-auto-stop");
+    const made = await runJson(args, { timeout: 180_000 });
     if (!made.ok) return made;
     return { ok: true, box: made.json, created: true };
   }
@@ -220,6 +266,8 @@ module.exports = {
   CLI,
   TEAM_BOX,
   IDLE_STOP_MS,
+  ALWAYS_ON_SIZE,
+  alwaysOnCost,
   installed,
   status,
   limits,

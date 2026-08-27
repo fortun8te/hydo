@@ -168,6 +168,32 @@ export default function Computer() {
             </div>
           ) : null}
 
+          {/* The one question that decides the bill, answered where it is
+              asked rather than in a doc nobody opens. */}
+          <div className="hy-computer__card">
+            <h3>Routines while your Mac is off</h3>
+            <p>
+              A stopped machine runs nothing. It is a frozen snapshot, there
+              are no wake timers, and auto-stop counts from when it started
+              rather than from when you last used it. So a routine that has to
+              fire at 8am whether or not your laptop is open needs a machine
+              that never stops.
+            </p>
+            <p>
+              That fits, but only at the small size. A month is 2,592,000
+              seconds; the $20 plan buys 2,000,000 VM-seconds. A small machine
+              spends them at half rate, so running it continuously uses about{" "}
+              <strong>65% of the plan</strong>. The default size would want 130%
+              and the large one 259%.
+            </p>
+            <p className="mute">
+              The trade is real: two vCPUs and 4GB is thin for a desktop. A
+              machine that is always there, or a faster one that is only there
+              when you are. Always-on also needs a payment method . the trial
+              refuses it and caps auto-stop at two hours.
+            </p>
+          </div>
+
           {/* Said out loud, because the opposite is the natural assumption and
               getting it wrong is how somebody puts a secret in the wrong
               place. */}

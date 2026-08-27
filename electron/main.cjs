@@ -525,7 +525,8 @@ app.whenReady().then(() => {
   ipcMain.handle("hydo:boxStatus", () => box.status());
   ipcMain.handle("hydo:boxLimits", () => box.limits());
   ipcMain.handle("hydo:boxList", () => box.list());
-  ipcMain.handle("hydo:boxEnsure", () => box.ensure());
+  ipcMain.handle("hydo:boxEnsure", (_e, opts) => box.ensure(opts || {}));
+  ipcMain.handle("hydo:boxCost", (_e, size) => ({ ok: true, cost: box.alwaysOnCost(size) }));
   ipcMain.handle("hydo:boxDesktop", (_e, id) => box.desktopUrl(id));
   ipcMain.handle("hydo:boxStop", (_e, id) => box.stop(id));
 
