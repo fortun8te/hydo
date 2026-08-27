@@ -1032,6 +1032,12 @@ function FileGlyph({ kind }) {
  */
 export function FileChip({ file, onOpen }) {
   const viewer = useSelfViewer(onOpen);
+  // `saveFile` answers {ok:true, path} | {ok:false, canceled} | {ok:false,
+  // reason} — and every one of those was thrown away, so a download of a file
+  // the teammate had since deleted was a button that did nothing at all. The
+  // reason takes over the meta line rather than adding a row, so nothing in
+  // the chip moves.
+  const [saveError, setSaveError] = useState("");
   const f = file && typeof file === "object" ? file : {};
   const chip = safe(
     () => {
@@ -1062,7 +1068,7 @@ export function FileChip({ file, onOpen }) {
                 <span className="hy-rc-file-name-base">{base}</span>
                 {ext ? <span className="hy-rc-file-name-ext">{ext}</span> : null}
               </span>
-              <span className="hy-rc-file-meta">{size || label}</span>
+              <span className="hy-rc-file-meta">{saveError || size || label}</span>
             </span>
           </button>
           {f.path || f.src ? (
@@ -1071,9 +1077,25 @@ export function FileChip({ file, onOpen }) {
               className="hy-rc-file-dl"
               title="Download"
               aria-label={`Download ${full}`}
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                if (f.path && window.hydo?.saveFile) window.hydo.saveFile(f.path, full);
+                if (!f.path || !window.hydo?.saveFile) {
+                  setSaveError("This build cannot save files.");
+                  return;
+                }
+                setSaveError("");
+                try {
+                  const res = await window.hydo.saveFile(f.path, full);
+                  // Cancelling the picker is not a failure and must not be
+                  // reported as one.
+                  if (res && !res.ok && !res.canceled) {
+                    setSaveError(
+                      res.reason === "missing" ? "That file is no longer there." : res.reason || "Could not save it."
+                    );
+                  }
+                } catch (err) {
+                  setSaveError(err?.message || "Could not save it.");
+                }
               }}
             >
               <i className="gb-icon gb-icon-arrow-down" aria-hidden="true" />

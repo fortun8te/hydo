@@ -131,7 +131,20 @@ export default function Composer({
   // Index of the attachment being previewed full screen, or -1.
   const [shot, setShot] = useState(-1);
 
-  const mode = menuMode(draft, menuOpen);
+  // Escape has to be able to put the slash/mention menu away, and until this
+  // existed it could not: `menuMode` reads the DRAFT, so a draft starting
+  // with "/" (or ending in "@foo") re-opened the menu on every render. The
+  // Escape branch below called `onMenuToggle(false)` — which only clears the
+  // plus button's own flag — and preventDefault'd, so the key looked handled
+  // and the menu never moved. The only way out was to delete the slash.
+  // Dismissal lasts until the draft changes again, so typing the next
+  // character brings the menu back exactly as before.
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => {
+    setDismissed(false);
+  }, [draft]);
+
+  const mode = dismissed ? null : menuMode(draft, menuOpen);
   const query = filterOf(draft, mode);
 
   // Autosize.
@@ -310,6 +323,7 @@ export default function Composer({
       if (mode) {
         if (e.key === "Escape") {
           e.preventDefault();
+          setDismissed(true);
           onMenuToggle(false);
           return;
         }

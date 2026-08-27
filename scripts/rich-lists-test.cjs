@@ -175,8 +175,10 @@ assert.ok(
   "FileChip formats the size it was given"
 );
 assert.ok(
-  /\{size \|\| label\}/.test(src),
-  "and prints the size under the name, falling back to the kind only when there is none"
+  /\{saveError \|\| size \|\| label\}/.test(src),
+  "and prints the size under the name, falling back to the kind only when there is none " +
+    "— with a failed download's reason taking the line ahead of both, because a Download " +
+    "button that answers {ok:false} and shows nothing is a button that does nothing"
 );
 // The download control is a real button next to the name, not a click on the
 // chip itself — opening a file and saving a copy are different intentions.

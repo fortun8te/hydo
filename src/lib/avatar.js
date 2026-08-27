@@ -36,10 +36,23 @@ export function fileToAvatar(file) {
         canvas.height = AVATAR_PX;
         const ctx = canvas.getContext("2d");
         ctx.imageSmoothingQuality = "high";
+        // Centre horizontally, but NOT vertically on a tall photo.
+        //
+        // A phone portrait is roughly 3:4, and its subject's head sits in the
+        // upper third. Taking the middle square of one lands on the torso: fed
+        // a real 960x1280 photo this produced an avatar of a black t-shirt with
+        // the face clipped at the top edge — technically the picture, useless
+        // at 32px in a sidebar.
+        //
+        // 18% down from the top is the standard portrait bias and it degrades
+        // safely: on a square image the term is zero, and on a landscape one
+        // the vertical axis is already the short side so there is nothing to
+        // choose. Only tall images move.
+        const overflowY = img.naturalHeight - side;
         ctx.drawImage(
           img,
           (img.naturalWidth - side) / 2,
-          (img.naturalHeight - side) / 2,
+          overflowY * 0.18,
           side,
           side,
           0,
