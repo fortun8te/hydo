@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { initialOf } from "../lib/marks.js";
 import { fileToAvatar } from "../lib/avatar.js";
-import { Dialog, DialogNav, SectionLabel, RowGroup, Row, Select, Button } from "../kit/ui.jsx";
+import { Dialog, DialogNav, SectionLabel, RowGroup, Row, Select, Button, TextInput } from "../kit/ui.jsx";
 
 const PANES = [
   { id: "general", label: "General", icon: "settings-gear" },
@@ -327,6 +327,17 @@ export default function Settings({
                     onSignOut={onSignOut}
                     onAvatar={(userAvatar) => onChange({ userAvatar })}
                   />
+                  {/* There was no way to set your own name ANYWHERE in the
+                      app: the store seeded the developer's, and every prompt a
+                      teammate used to address you read from it. */}
+                  <Row divided label="Your name" description="What teammates call you.">
+                    <TextInput
+                      ariaLabel="Your name"
+                      value={settings.userName || ""}
+                      placeholder="Your name"
+                      onChange={(userName) => onChange({ userName })}
+                    />
+                  </Row>
                   <Row divided label="Theme">
                     <Select
                       ariaLabel="Theme"

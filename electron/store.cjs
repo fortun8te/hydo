@@ -1,6 +1,7 @@
 const { randomUUID } = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const { soulSnapshot, memorySnapshot } = require("./soul.cjs");
 const botHome = require("./bot-home.cjs");
 const artifactLib = require("./artifacts.cjs");
@@ -46,6 +47,29 @@ const PROFILE_IDS = ["chat", "writer", "researcher", "builder", "full"];
 // state.json, and that file is re-serialised on every save, so this is a cap
 // on how much work every future write does . not just on the picture.
 const MAX_AVATAR = 350_000;
+
+/**
+ * Who the user is, when nobody has said yet.
+ *
+ * This was the literal string "Michael" in six places — the developer's own
+ * name, seeded into every fresh install and used as the fallback everywhere a
+ * name is read, including the prompts teammates use to address the user. On
+ * anyone else's machine the app opened already calling them Michael.
+ *
+ * The OS account name is the one thing we can know without asking. "You" is the
+ * floor, because a teammate saying "You" is merely plain, and saying someone
+ * else's name is uncanny.
+ */
+const DEFAULT_USER_NAME = (() => {
+  try {
+    const raw = String(os.userInfo().username || "").trim();
+    if (!raw || raw === "root") return "You";
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  } catch {
+    return "You";
+  }
+})();
+
 
 // Toolsets a teammate may hand ITSELF, on top of whatever profile it is on.
 //
@@ -102,7 +126,7 @@ function landingLines() {
 }
 
 function cannedLandingTexts(user) {
-  const name = String(user || "Michael").trim() || "Michael";
+  const name = String(user || DEFAULT_USER_NAME).trim() || DEFAULT_USER_NAME;
   return new Set([
     `${name}. I'm here.`,
     "Point me at something.",
@@ -129,7 +153,7 @@ function seedState() {
     selectedId: null,
     settings: {
       appearance: "dark",
-      userName: "Michael",
+      userName: DEFAULT_USER_NAME,
       userAvatar: "",
       boxId: "",
       model: "grok-4.6",
@@ -242,7 +266,7 @@ function normalizeState(raw) {
   const ids = new Set(agents.map((a) => a.id).concat(channels.map((c) => c.id)));
   const settings = {
     appearance: "dark",
-    userName: "Michael",
+    userName: DEFAULT_USER_NAME,
     // A square image as a data URI, or "" for the letter mark. Stored inline
     // rather than as a path: state.json is the only thing that survives a
     // reinstall, and an avatar that points at a file the user later moves is
@@ -680,7 +704,7 @@ function trackSubagent(agent, evt) {
 }
 
 function standing(agent, settings, soul, memory, extra) {
-  const user = settings.userName || "Michael";
+  const user = settings.userName || DEFAULT_USER_NAME;
   void memory;
   const parts = [
     `You are ${agent.name}${agent.label ? ` (${agent.label})` : ""}.`,
@@ -1092,7 +1116,7 @@ function createStore(opts = {}) {
   /** Human name for whoever wrote a message. */
   function authorName(msg) {
     if (!msg) return "someone";
-    if (msg.role === "user") return state.settings.userName || "Michael";
+    if (msg.role === "user") return state.settings.userName || DEFAULT_USER_NAME;
     const bot = state.agents.find((a) => a.id === msg.fromId);
     return bot ? bot.name : "a teammate";
   }
@@ -1127,7 +1151,7 @@ function createStore(opts = {}) {
     if (!snapshot || !snapshot.text) return "";
     const who =
       snapshot.fromId === "user"
-        ? state.settings.userName || "Michael"
+        ? state.settings.userName || DEFAULT_USER_NAME
         : (state.agents.find((a) => a.id === snapshot.fromId) || {}).name || "a teammate";
     const quoted = snapshot.text.replace(/\s+/g, " ").trim().slice(0, 400);
     return `Replying to ${who}: "${quoted}"`;
@@ -2870,7 +2894,7 @@ function createStore(opts = {}) {
         save();
         return publicState();
       }
-      const user = state.settings.userName || "Michael";
+      const user = state.settings.userName || DEFAULT_USER_NAME;
       const named = agent.name && agent.name !== "New Bot" ? agent.name : "";
       // The opening brief.
       //
@@ -2960,6 +2984,13 @@ function createStore(opts = {}) {
       }
       if (Object.prototype.hasOwnProperty.call(patch, "codingHarness")) {
         state.settings.codingHarness = modelPick.normalizeHarness(state.settings.codingHarness);
+      }
+      // A name is free text from a text field, and it lands in prompts as well
+      // as in the sidebar — so bound it here rather than trusting the caller.
+      // Blank means "go back to the OS account name", never an empty sidebar.
+      if (Object.prototype.hasOwnProperty.call(patch, "userName")) {
+        const v = String(patch.userName || "").replace(/\s+/g, " ").trim().slice(0, 60);
+        state.settings.userName = v || DEFAULT_USER_NAME;
       }
       // The avatar rides in state.json, which is read back and rendered into
       // an <img>. Validate the shape rather than trusting the caller: only a
@@ -3299,11 +3330,11 @@ function createStore(opts = {}) {
           agent,
           peer,
           trimmed,
-          `${agent.name} pinged you on behalf of ${state.settings.userName || "Michael"}:\n${trimmed}`
+          `${agent.name} pinged you on behalf of ${state.settings.userName || DEFAULT_USER_NAME}:\n${trimmed}`
         );
         const wrap = await speak(
           agent,
-          `You pinged ${peer.name}. They said:\n${specialist.text}\nTell ${state.settings.userName || "Michael"} what landed, in one bubble.`,
+          `You pinged ${peer.name}. They said:\n${specialist.text}\nTell ${state.settings.userName || DEFAULT_USER_NAME} what landed, in one bubble.`,
           "Do not repeat the ping protocol.",
           agent.id
         );

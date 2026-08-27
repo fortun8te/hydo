@@ -77,7 +77,6 @@ const HOME_ENABLED = false;
 // settings grows a real full-name field, resolve it here: an explicit
 // `userFullName` wins, then a `userName` that already carries a surname, then
 // the account holder.
-const ACCOUNT_FULL_NAME = "Michael Knaap";
 
 // "When did they last touch a key", rounded to the second.
 //
@@ -97,12 +96,23 @@ const DRAFT_SAVE_MS = 250;
 function keyStamp() {
   return Math.floor(Date.now() / 1000) * 1000;
 }
+/**
+ * The name to show for the person using the app.
+ *
+ * This used to DISCARD a stored one-word name and return the hardcoded
+ * "Michael Knaap" — the developer's own — so setting your name to "Sam" left
+ * the sidebar reading Michael Knaap on every machine in the world. A one-word
+ * name is a name; plenty of people only give one.
+ *
+ * The store seeds `userName` from the OS account, so the literal fallback here
+ * is only reached when there is genuinely nothing at all to show.
+ */
 function accountName(settings) {
   const full = String(settings?.userFullName || "").trim();
   if (full) return full;
   const named = String(settings?.userName || "").trim();
-  if (named.includes(" ")) return named;
-  return ACCOUNT_FULL_NAME;
+  if (named) return named;
+  return "You";
 }
 
 export default function Shell({ state }) {
