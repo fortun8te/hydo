@@ -3028,16 +3028,36 @@ function createStore(opts = {}) {
       const prompt = replyTo ? `${replyPreamble(replyTo)}\n\n${body}` : body;
       await attachUserImages(agent, images);
       if (agent.backgroundTurn || hermesBusy(agent.id)) {
+        // Redirect the work that is happening, rather than queue a note for
+        // after it finishes.
+        //
+        // Two different steers, and which one is right depends on where the
+        // work actually is. If the teammate delegated, the worker is the thing
+        // heading the wrong way, so steer that. If the teammate is doing it
+        // itself, `session.steer` redirects its live turn . which Hydo had
+        // never called, so "actually, do it the other way" arrived only after
+        // the wrong thing was finished.
+        //
+        // The note stays as the last resort. It is worse than steering (it
+        // lands a turn late) but far better than silence.
+        const noted = () =>
+          oweNote(agent.id, `[User sent while a turn was running: "${body.slice(0, 240)}"]`);
         try {
           const gateway = require("./hermes-gateway.cjs");
-          const last = (agent.subagentIds && agent.subagentIds[agent.subagentIds.length - 1]) || agent.lastSubagentId;
+          const last =
+            (agent.subagentIds && agent.subagentIds[agent.subagentIds.length - 1]) ||
+            agent.lastSubagentId;
           if (last && gateway.steerSubagent) {
-            gateway.steerSubagent(agent.id, last, body).catch(() => {});
+            gateway.steerSubagent(agent.id, last, body).catch(() => noted());
+            logAction(agent.id, "steer", "redirected a worker mid-job");
+          } else if (typeof gateway.steer === "function") {
+            gateway.steer(agent.id, body).catch(() => noted());
+            logAction(agent.id, "steer", "redirected the turn");
           } else {
-            oweNote(agent.id, `[User sent while a worker was running: "${body.slice(0, 240)}"]`);
+            noted();
           }
         } catch {
-          oweNote(agent.id, `[User sent while a worker was running: "${body.slice(0, 240)}"]`);
+          noted();
         }
         save();
         return publicState();
