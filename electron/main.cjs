@@ -35,7 +35,25 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL || "http://127.0.0.1:5173";
 app.setName("Hydo");
 app.setAppUserModelId("com.hydo.app");
 try {
-  app.setPath("userData", path.join(app.getPath("appData"), "Hydo"));
+  // One env override, for verification only.
+  //
+  // The pin below is deliberate and stays the default. But with NO way around
+  // it, `npm run smoke`, `npm run app` and a bare `electron .` all read and
+  // write the user's REAL roster — so any automated check that boots the app
+  // is one bad write away from the thing it was meant to protect. A teammate
+  // asked to verify its own UI change would have had no safe way to do it.
+  //
+  // Explicit and absolute only: a relative path would resolve against whatever
+  // cwd the caller happened to have, which is how a "temp" dir ends up inside
+  // someone's home. Anything unusable falls through to the pin rather than
+  // guessing.
+  const override = String(process.env.HYDO_USER_DATA || "").trim();
+  if (override && path.isAbsolute(override)) {
+    fs.mkdirSync(override, { recursive: true });
+    app.setPath("userData", override);
+  } else {
+    app.setPath("userData", path.join(app.getPath("appData"), "Hydo"));
+  }
 } catch {
   /* already resolved: keep whatever it picked rather than crash on boot */
 }

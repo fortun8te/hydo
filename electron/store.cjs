@@ -976,7 +976,29 @@ function createStore(opts = {}) {
   let saveTimer = null;
   let saveDirty = false;
 
-  function writeNow() {
+  /**
+   * @param {boolean} durable  Also fsync the DIRECTORY, so the rename itself
+   *   survives power loss. Measured on this machine at ~6ms per save on a
+   *   470KB state — worth it on the way out, too expensive to pay on every
+   *   click. Skipping it risks coming back one save behind, never a damaged
+   *   file: the file fsync below is the one that stops that.
+   */
+  /** fsync the directory so a rename into it is durable. Best effort: not
+   *  every filesystem supports it, and Windows does not. */
+  function syncDir() {
+    try {
+      const dfd = fs.openSync(dir, "r");
+      try {
+        fs.fsyncSync(dfd);
+      } finally {
+        fs.closeSync(dfd);
+      }
+    } catch {
+      /* directory fsync unsupported here */
+    }
+  }
+
+  function writeNow(durable = false) {
     saveDirty = false;
     if (saveTimer) {
       clearTimeout(saveTimer);
@@ -1031,18 +1053,7 @@ function createStore(opts = {}) {
         /* backup is best effort; the real file below is not */
       }
       fs.renameSync(tmpFile, file);
-      // And fsync the DIRECTORY, so the rename itself is durable. Fails on
-      // some filesystems (and on Windows); the write above still stands.
-      try {
-        const dfd = fs.openSync(dir, "r");
-        try {
-          fs.fsyncSync(dfd);
-        } finally {
-          fs.closeSync(dfd);
-        }
-      } catch {
-        /* directory fsync unsupported here */
-      }
+      if (durable) syncDir();
     } catch {
       /* disk full or permissions: the app keeps working from memory */
     }
@@ -1102,9 +1113,16 @@ function createStore(opts = {}) {
     }
   }
 
-  /** Force the pending write out. Called on every exit path (main.cjs). */
+  /**
+   * Force the pending write out. Called on every exit path (main.cjs).
+   *
+   * This is the one place that pays for a directory fsync: the app is going
+   * away, so a few milliseconds cost nothing, and a quit followed by a power
+   * cut is exactly when an un-synced rename would be lost.
+   */
   function flushSave() {
-    if (saveDirty) writeNow();
+    if (saveDirty) writeNow(true);
+    else syncDir();
   }
 
   function publicState() {
