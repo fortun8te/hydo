@@ -255,6 +255,57 @@ async function probe(provider, opts = {}) {
   }
 }
 
+/**
+ * What this endpoint can actually serve.
+ *
+ * Settings only ever offered the ONE model named as `default_model` in
+ * config.yaml, because that is all Hermes' `model.options` reports for a custom
+ * provider. But a local server holds a shelf: this user's box answers with
+ * seven — a 27B alongside the flash one, a couple of gemmas, and UI-TARS, which
+ * is a GUI-vision model and a far better choice for driving the shared desktop.
+ * Picking between them meant hand-editing YAML.
+ *
+ * `loaded` matters and is carried through. An unloaded model is a real choice,
+ * but it is one that pays a load before the first token, and a picker that hides
+ * that difference makes the slow one look broken.
+ *
+ * Entries whose id is a raw shard filename are dropped: `…-00001-of-00003` is
+ * the weights on disk, not something to select.
+ */
+async function models(provider, opts = {}) {
+  const doFetch = opts.fetch || globalThis.fetch;
+  if (!provider || !provider.api) return { ok: false, reason: "no endpoint" };
+  if (provider.placeholder) return { ok: false, reason: "placeholder" };
+  if (typeof doFetch !== "function") return { ok: false, reason: "no network client" };
+  const key = opts.key || "";
+  const ctl = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = ctl ? setTimeout(() => ctl.abort(), opts.timeout || PROBE_TIMEOUT_MS) : null;
+  try {
+    const res = await doFetch(probeUrl(provider.api), {
+      method: "GET",
+      headers: key ? { Authorization: `Bearer ${key}` } : {},
+      signal: ctl ? ctl.signal : undefined,
+    });
+    if (!res.ok) return { ok: false, reason: `answered ${res.status}` };
+    const body = await res.json();
+    const rows = Array.isArray(body && body.data) ? body.data : [];
+    const out = [];
+    for (const m of rows) {
+      const id = String((m && m.id) || "").trim();
+      if (!id) continue;
+      if (/-\d{5}-of-\d{5}$/.test(id)) continue;
+      out.push({ id, loaded: m.loaded !== false, context: m.context_length || null });
+    }
+    // Loaded first — the ones that answer without paying a load.
+    out.sort((a, b) => Number(b.loaded) - Number(a.loaded) || a.id.localeCompare(b.id));
+    return { ok: true, models: out };
+  } catch {
+    return { ok: false, reason: "unreachable" };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** list() + a probe for each, in parallel. */
 async function status(file = CONFIG, opts = {}) {
   const providers = list(file);
@@ -267,4 +318,4 @@ async function status(file = CONFIG, opts = {}) {
   return probed;
 }
 
-module.exports = { CONFIG, parseProviders, list, keyFor, probe, probeUrl, isPlaceholder, hostOf, status, isLocalHost, paceOf, paceFor };
+module.exports = { CONFIG, parseProviders, list, keyFor, probe, probeUrl, isPlaceholder, hostOf, status, isLocalHost, paceOf, paceFor, models };

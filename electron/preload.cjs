@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld("hydo", {
   // renderer state is a key in a devtools heap snapshot.
   localProviders: () => ipcRenderer.invoke("hydo:localProviders"),
   probeLocalProvider: (id) => ipcRenderer.invoke("hydo:probeLocalProvider", id),
+  localModels: (id) => ipcRenderer.invoke("hydo:localModels", id),
 
   // Hermes' own transcript and session registry.
   history: (agentId) => ipcRenderer.invoke("hydo:history", agentId),

@@ -410,6 +410,33 @@ export default function Settings({
   }
   const activeStatus = (activeLocal && localState[activeLocal.id]) || { state: "unknown", detail: "" };
 
+  // What the endpoint can actually serve.
+  //
+  // The model list Hermes reports for a custom provider is the ONE line from
+  // config.yaml, so picking any other model your own server holds meant editing
+  // YAML by hand. This box answers with six; asking it directly is the only way
+  // to know. Only asked when a local provider is the live one, so a hosted user
+  // never pays a network call for a row they cannot see.
+  const [localModels, setLocalModels] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    if (!activeLocal || !runningLocal || activeStatus.state !== "ok") {
+      setLocalModels([]);
+      return () => {
+        alive = false;
+      };
+    }
+    Promise.resolve(window.hydo?.localModels?.(activeLocal.id))
+      .then((res) => {
+        if (!alive) return;
+        setLocalModels(res && res.ok && Array.isArray(res.models) ? res.models : []);
+      })
+      .catch(() => alive && setLocalModels([]));
+    return () => {
+      alive = false;
+    };
+  }, [activeLocal && activeLocal.id, runningLocal, activeStatus.state]);
+
   // Tokens/sec. Measured by electron/store.cjs on a COMPLETED turn (a delta of
   // Hermes' cumulative output counters over the turn's wall time) — there is no
   // live rate to show mid-turn, so the label says "last turn" and means it.
@@ -597,7 +624,17 @@ export default function Settings({
                     <Select
                       ariaLabel="Chat model"
                       value={chatModel}
-                      options={modelSelectOptions(chatModel, modelOpts, localByModel)}
+                      options={
+                        runningLocal && localModels.length
+                          ? localModels.map((m) => ({
+                              value: m.id,
+                              // An unloaded model is a real choice that pays a
+                              // load before its first token. Hiding that makes
+                              // the slow one look broken.
+                              label: m.loaded ? m.id : `${m.id} — not loaded`,
+                            }))
+                          : modelSelectOptions(chatModel, modelOpts, localByModel)
+                      }
                       onChange={(v) => {
                         const patch = { model: v };
                         // Picking a self-hosted model out of the flat list used
@@ -605,6 +642,11 @@ export default function Settings({
                         // went to xAI with a model it has never heard of.
                         const local = localByModel.get(v);
                         if (local) patch.provider = local.id;
+                        // A model taken off the endpoint's own shelf has no
+                        // entry in localByModel (that map is built from
+                        // config.yaml), so carry the provider we asked.
+                        else if (runningLocal && activeLocal && localModels.some((m) => m.id === v))
+                          patch.provider = activeLocal.id;
                         else if (/muse/i.test(v)) patch.provider = "meta-ai";
                         else if (/grok/i.test(v)) patch.provider = "xai-oauth";
                         onChange(patch);

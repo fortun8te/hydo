@@ -513,6 +513,14 @@ app.whenReady().then(() => {
   // main process — the api_key is read inside local-providers.cjs and never
   // crosses this boundary. See docs/LOCAL-MODEL.md.
   ipcMain.handle("hydo:localProviders", () => ok({ providers: localProviders.list() }));
+  // The shelf this endpoint holds, not just the one line in config.yaml.
+  ipcMain.handle("hydo:localModels", async (_e, id) => {
+    const found = localProviders.list().find((p) => p.id === id);
+    if (!found) return nope("No such provider in ~/.hermes/config.yaml");
+    const res = await localProviders.models(found, { key: localProviders.keyFor(found.id) });
+    return res.ok ? ok({ id: found.id, models: res.models }) : nope(res.reason);
+  });
+
   ipcMain.handle("hydo:probeLocalProvider", async (_e, id) => {
     const found = localProviders.list().find((p) => p.id === id);
     if (!found) return nope("No such provider in ~/.hermes/config.yaml");
