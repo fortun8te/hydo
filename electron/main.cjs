@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Notification } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, Notification, screen } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createStore } = require("./store.cjs");
@@ -78,10 +78,58 @@ function brandDock() {
   }
 }
 
+/**
+ * Where the window was last time.
+ *
+ * Every launch opened at exactly 1280x860 in the OS default position, so
+ * resizing the app was a thing you did once per session, forever. Kept beside
+ * the store rather than inside it: window geometry is a property of this
+ * machine's screen, not of the user's teammates, and state.json is already
+ * re-serialised on every save.
+ *
+ * Restored defensively. A saved rect can name a monitor that is no longer
+ * plugged in, and a window placed on a display that does not exist is a window
+ * you cannot reach — so the rect has to intersect a CURRENT display, or it is
+ * discarded and the default used.
+ */
+const WINDOW_STATE_FILE = () => path.join(app.getPath("userData"), "window.json");
+
+function loadWindowState() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(WINDOW_STATE_FILE(), "utf8"));
+    const { x, y, width, height } = raw || {};
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+    if (width < 980 || height < 640) return null;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return { width, height };
+    const onScreen = screen.getAllDisplays().some((d) => {
+      const b = d.workArea;
+      // Its title bar has to be grabbable, not merely some pixel of it visible.
+      return x + width > b.x + 80 && x < b.x + b.width - 80 && y >= b.y - 8 && y < b.y + b.height - 40;
+    });
+    return onScreen ? { x, y, width, height } : { width, height };
+  } catch {
+    return null;
+  }
+}
+
+function saveWindowState(win) {
+  try {
+    if (!win || win.isDestroyed() || win.isMinimized()) return;
+    // getNormalBounds, not getBounds: saving the FULLSCREEN rect means the next
+    // launch opens a window the size of the display with no way back.
+    const b = win.getNormalBounds();
+    fs.writeFileSync(WINDOW_STATE_FILE(), JSON.stringify(b));
+  } catch {
+    /* geometry is a convenience; never let it break a quit */
+  }
+}
+
 function createWindow() {
+  const saved = loadWindowState();
   const win = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    ...(saved || {}),
+    width: (saved && saved.width) || 1280,
+    height: (saved && saved.height) || 860,
     minWidth: 980,
     minHeight: 640,
     title: "Hydo",
@@ -98,6 +146,21 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  // Debounced: a drag fires these continuously, and each one is a disk write.
+  let geomTimer = null;
+  const remember = () => {
+    clearTimeout(geomTimer);
+    geomTimer = setTimeout(() => saveWindowState(win), 400);
+  };
+  win.on("resize", remember);
+  win.on("move", remember);
+  // And once more synchronously on close, because the debounce may not have
+  // fired yet when the user resizes and immediately quits.
+  win.on("close", () => {
+    clearTimeout(geomTimer);
+    saveWindowState(win);
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
