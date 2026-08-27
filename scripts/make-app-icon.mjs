@@ -62,8 +62,8 @@ const TY = S * CROWN - BOX.y0 * K;
 // SQUARE is what the reference fixes — not their position relative to whatever
 // silhouette is behind them. Fractions of S, measured off the reference.
 const EYE = [
-  { cx: 0.408, cy: 0.605, rx: 0.074, ry: 0.119 },
-  { cx: 0.652, cy: 0.573, rx: 0.075, ry: 0.129 },
+  { cx: 0.417, cy: 0.601, rx: 0.071, ry: 0.105 },
+  { cx: 0.653, cy: 0.562, rx: 0.071, ry: 0.112 },
 ];
 const TILT = -7;
 
@@ -89,9 +89,9 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" wid
          A vivid azure at the crown falling to a deeper blue at the floor, so
          the tile has a sky and the body has something to rise out of. -->
     <linearGradient id="ground" x1="0.5" y1="0" x2="0.42" y2="1">
-      <stop offset="0%"   stop-color="#2BADF8"/>
-      <stop offset="38%"  stop-color="#0D93F1"/>
-      <stop offset="100%" stop-color="#0A73DC"/>
+      <stop offset="0%"   stop-color="#1B9DF6"/>
+      <stop offset="38%"  stop-color="#0F8AEA"/>
+      <stop offset="100%" stop-color="#0C7FE6"/>
     </linearGradient>
 
     <!-- The body is a LIT VOLUME, not a white shape.
@@ -101,11 +101,11 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" wid
          a body filled blue with a white outline drawn on top always reads as a
          sticker, because the outline has a start and an end and light does
          not. -->
-    <radialGradient id="core" cx="50%" cy="47%" r="58%">
-      <stop offset="0%"   stop-color="#17ADFF" stop-opacity="1"/>
-      <stop offset="62%"  stop-color="#2FBCFF" stop-opacity="1"/>
-      <stop offset="84%"  stop-color="#63CEFF" stop-opacity="0.85"/>
-      <stop offset="94%"  stop-color="#BFE9FF" stop-opacity="0.42"/>
+    <radialGradient id="core" cx="50%" cy="63%" r="56%">
+      <stop offset="0%"   stop-color="#3BC4FA" stop-opacity="1"/>
+      <stop offset="58%"  stop-color="#4ACDFB" stop-opacity="0.98"/>
+      <stop offset="80%"  stop-color="#8FDFFD" stop-opacity="0.66"/>
+      <stop offset="92%"  stop-color="#D3F1FE" stop-opacity="0.28"/>
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
     </radialGradient>
 
@@ -129,7 +129,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" wid
       <feGaussianBlur stdDeviation="${(S * 0.085).toFixed(1)}"/>
     </filter>
     <filter id="bloom" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="${(S * 0.032).toFixed(1)}"/>
+      <feGaussianBlur stdDeviation="${(S * 0.045).toFixed(1)}"/>
     </filter>
     <filter id="edge" x="-40%" y="-40%" width="180%" height="180%">
       <feGaussianBlur stdDeviation="${(S * 0.009).toFixed(1)}"/>
@@ -143,7 +143,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" wid
       <!-- Glow passes, widest first, all in white so the blue ground shows
            through them rather than being tinted twice. -->
       <path d="${body.path}" fill="#FFFFFF" opacity="0.16" filter="url(#wide)"/>
-      <path d="${body.path}" fill="#FFFFFF" opacity="0.30" filter="url(#bloom)"/>
+      <path d="${body.path}" fill="#FFFFFF" opacity="0.46" filter="url(#bloom)"/>
       <path d="${body.path}" fill="#FFFFFF" opacity="0.78" filter="url(#edge)"/>
 
       <!-- White body, THEN the blue laid back into its middle. See #core. -->
