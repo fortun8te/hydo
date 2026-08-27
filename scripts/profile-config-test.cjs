@@ -117,6 +117,44 @@ try {
     assert.equal(fs.readFileSync(file, "utf8"), once, "and an identical write is skipped");
   }
 
+  // ---- the deny rules are ENFORCED, not advised --------------------------
+  // `approvals.deny` is matched before the --yolo bypass, so it is the only
+  // place a rule holds regardless of what the review model decides or what
+  // somebody switches off in a hurry. AGENTS.md says "never rm -rf" in prose;
+  // this is the same rule as enforcement.
+  {
+    fs.rmSync(file, { force: true });
+    botHome.prepare(dir, id, "soul");
+    const body = fs.readFileSync(file, "utf8");
+
+    // The bug this shipped with: PROFILE_CONFIG emitted its own `approvals:`
+    // block and the launch config's was mirrored in AFTER it. YAML honours the
+    // last definition of a duplicate key, so the deny list was silently
+    // discarded and `approvals.deny` answered []. A rule that looks enforced
+    // and is not is worse than one you know you do not have.
+    const blocks = (body.match(/^approvals:/gm) || []).length;
+    assert.equal(blocks, 1, `exactly one approvals block, got ${blocks}`);
+
+    assert.ok(/^\s+deny:/m.test(body), "the deny list is present");
+    for (const glob of ["rm -rf *", "*curl*|*sh*"]) {
+      assert.ok(body.includes(JSON.stringify(glob)), `denies ${glob}`);
+    }
+    // Quoted, because a glob starting with * is not valid bare YAML.
+    assert.ok(body.includes('"*curl*|*sh*"'), "globs are quoted");
+
+    // It must sit INSIDE the approvals block, after its other keys . not at
+    // top level, where it would be a different setting entirely.
+    const at = body.lastIndexOf("approvals:");
+    const denyAt = body.indexOf("deny:", at);
+    assert.ok(denyAt > at, "deny lives under approvals");
+
+    // And a config that already denies something is left alone rather than
+    // having a second list stacked under it.
+    const twice = body;
+    botHome.prepare(dir, id, "soul");
+    assert.equal(fs.readFileSync(file, "utf8"), twice, "re-running does not stack a second deny list");
+  }
+
   console.log("profile-config-test ok");
 } finally {
   fs.rmSync(profile, { recursive: true, force: true });

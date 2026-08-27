@@ -170,11 +170,73 @@ This folder is your sandbox. Write files here.
  * wrong choice for a long-running teammate. Everything else stays Hermes'
  * business, so a Hermes upgrade that improves a default still reaches us.
  */
+/**
+ * The rules in AGENTS.md that should not be advice.
+ *
+ * `approvals.deny` is fnmatch globs against terminal commands, and it blocks
+ * BEFORE the --yolo / mode=off bypass . which makes it the only place a rule
+ * holds regardless of what the review model decides or what anyone turns off
+ * in a hurry. AGENTS.md already says "never rm -rf" and "never touch Hydo or
+ * Hermes install files", but a sentence in a prompt is a request. These are
+ * the same two rules as enforcement.
+ *
+ * Deliberately short. Every glob here is a command a teammate has no business
+ * running under any circumstances . not a list of things that are usually
+ * unwise, which is what the approval flow is already for. A long deny list
+ * turns into a teammate that cannot work and a user who disables it.
+ */
+const DENY_GLOBS = [
+  // Recursive force-delete, in the spellings that actually get typed.
+  "rm -rf *",
+  "rm -fr *",
+  "rm -r -f *",
+  "sudo rm -rf *",
+  // Its own installation, and Hydo's. A teammate that breaks these cannot
+  // report that it broke them.
+  "* ~/.hermes/*",
+  "* ~/Projects/hydo/*",
+  // Piping the network into a shell. This is how a prompt injection becomes
+  // code execution, and no legitimate task needs it done blind.
+  "*curl*|*sh*",
+  "*wget*|*sh*",
+  // Disk devices.
+  "dd if=* of=/dev/*",
+  "mkfs*",
+];
+
 const PROFILE_CONFIG = `# Written by Hydo. A Hermes profile does not inherit ~/.hermes/config.yaml,
 # so anything not set here is the code default, not your own setting.
 compression:
   tail_mode: lean
 `;
+
+/**
+ * Fold the deny globs INTO whichever `approvals:` block the file ends up with.
+ *
+ * The first version of this emitted its own `approvals:` block, and the launch
+ * config's `approvals:` was then mirrored in after it. YAML takes the LAST
+ * definition of a duplicate key, so the deny list was silently discarded .
+ * `hermes config get approvals.deny` answered `[]`. Which is exactly the
+ * failure a deny list exists to prevent: a rule that looks enforced and is not
+ * is worse than one you know you do not have.
+ */
+function withDeny(text) {
+  const deny = ["  deny:", ...DENY_GLOBS.map((g) => `    - ${JSON.stringify(g)}`)].join("\n");
+  const lines = String(text).split("\n");
+  // The LAST approvals block, because that is the one YAML honours.
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) if (/^approvals:/.test(lines[i])) at = i;
+  if (at < 0) return `${text.replace(/\s*$/, "")}\napprovals:\n${deny}\n`;
+  let end = at + 1;
+  while (end < lines.length && /^\s/.test(lines[end])) {
+    // Already denies something (hand-written, or a re-run): leave it be
+    // rather than stacking a second list it would then shadow.
+    if (/^\s+deny:/.test(lines[end])) return text;
+    end++;
+  }
+  lines.splice(end, 0, deny);
+  return lines.join("\n");
+}
 
 /**
  * Top-level blocks copied from the launch config into every bot profile.
@@ -264,7 +326,7 @@ function writeProfileConfig(home) {
   } catch {
     /* no launch config: the bot runs on Hermes' defaults, as before */
   }
-  const want = mirrored ? `${PROFILE_CONFIG}\n${mirrored}\n` : PROFILE_CONFIG;
+  const want = withDeny(mirrored ? `${PROFILE_CONFIG}\n${mirrored}\n` : PROFILE_CONFIG);
   try {
     // Only when it would change: this file is cheap, but a bot may have been
     // given settings by hand and rewriting them every launch would be rude.
