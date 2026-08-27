@@ -92,6 +92,8 @@ function connectionRows(listed) {
 }
 
 export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCreateRoutine, onOpenUndo }) {
+  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.BotRail = (window.__rc.BotRail || 0) + 1; }
+
   const name = agent?.name ?? "";
   const label = agent?.label ?? "";
   const description = agent?.description ?? "";
@@ -112,6 +114,11 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   // What the LIVE session reports as enabled, which is a different question
   // from what Hydo configured. Read only while Advanced is open.
   const [live, setLive] = useState(null);
+  // Hermes' approvals.mode for THIS bot's own profile, and the permanent
+  // "always" allowlist it has accumulated — docs/SAFETY.md gaps #1/#2. Read
+  // only while Advanced is open, same reasoning as `live` above: it is an
+  // extra RPC per bot, not something worth polling permanently.
+  const [approvals, setApprovals] = useState(null);
   const customOn = isCustomHex(agent?.blob);
   // The rail is opened ON a teammate, not on a conversation, so the pip means
   // "a turn of theirs is running" and the label says where. It used to say
@@ -226,6 +233,55 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
       gone = true;
     };
   }, [agent?.id, abilitiesOpen]);
+
+  function loadApprovals() {
+    if (!agent?.id) return;
+    Promise.resolve(window.hydo?.approvalSettings?.(agent.id))
+      .then((res) => {
+        if (res && res.ok) setApprovals(res);
+      })
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    setApprovals(null);
+    if (!agent?.id || !abilitiesOpen) return undefined;
+    let gone = false;
+    Promise.resolve(window.hydo?.approvalSettings?.(agent.id))
+      .then((res) => {
+        if (!gone && res && res.ok) setApprovals(res);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [agent?.id, abilitiesOpen]);
+
+  function setApprovalMode(mode) {
+    if (!agent?.id) return;
+    // Optimistic: this rewrites the bot's own config.yaml, not the toggle in
+    // React state, so nothing here is "the real state" until the RPC
+    // answers — but a mode picker that only updates after a disk write feels
+    // broken on a fast click.
+    setApprovals((cur) => (cur ? { ...cur, mode, isDefault: false } : cur));
+    Promise.resolve(window.hydo?.setApprovalMode?.(agent.id, mode))
+      .then((res) => {
+        if (res && res.ok) setApprovals((cur) => (cur ? { ...cur, mode: res.mode, isDefault: res.isDefault } : cur));
+        else loadApprovals();
+      })
+      .catch(() => loadApprovals());
+  }
+
+  function revokeApproval(pattern) {
+    if (!agent?.id) return;
+    setApprovals((cur) => (cur ? { ...cur, allowlist: cur.allowlist.filter((p) => p !== pattern) } : cur));
+    Promise.resolve(window.hydo?.revokeApproval?.(agent.id, pattern))
+      .then((res) => {
+        if (res && res.ok) setApprovals((cur) => (cur ? { ...cur, allowlist: res.allowlist } : cur));
+        else loadApprovals();
+      })
+      .catch(() => loadApprovals());
+  }
 
   function toggleToolset(name, on) {
     const next = on
@@ -587,6 +643,54 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
               </div>
             </>
           )}
+      <div className="bot-rail__field">
+        <span className="bot-rail__field-label">Approvals</span>
+        {!approvals ? (
+          <p className="bot-rail__hint mute">Reading this teammate's own config…</p>
+        ) : (
+          <>
+            <select
+              value={approvals.mode}
+              aria-label="Approval mode"
+              onChange={(e) => setApprovalMode(e.target.value)}
+            >
+              <option value="smart">Smart — auto-approve what a guard model judges low-risk</option>
+              <option value="manual">Manual — ask every time</option>
+            </select>
+            {/* The honest label docs/SAFETY.md's gap #1 asked for: a value
+                nobody chose looks identical to a value someone did, unless
+                the UI says which. */}
+            <p className="bot-rail__cost">
+              {approvals.isDefault
+                ? "Inherited from Hermes' own default — nobody has set this for this teammate."
+                : "Set for this teammate. Hermes' own default is Smart."}
+            </p>
+            {approvals.allowlist.length ? (
+              <ul className="bot-rail__procs" role="group" aria-label="Always-approved commands">
+                {approvals.allowlist.map((pattern) => (
+                  <li key={pattern} className="bot-rail__proc">
+                    <span className="bot-rail__proc-cmd" title={pattern}>
+                      {pattern}
+                    </span>
+                    <button
+                      type="button"
+                      className="ghost bot-rail__proc-stop"
+                      onClick={() => revokeApproval(pattern)}
+                    >
+                      Revoke
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="bot-rail__hint mute">
+                Nothing on this teammate's permanent allowlist. Answering "Always" on an approval adds a pattern
+                here, forever, until revoked.
+              </p>
+            )}
+          </>
+        )}
+      </div>
       <div className="bot-rail__field">
         <span className="bot-rail__field-label">Connections</span>
         {connections.length === 0 ? (

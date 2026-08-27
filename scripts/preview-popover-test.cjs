@@ -39,8 +39,14 @@ assert.ok(/e\.key !== "Escape"/.test(art), "Escape closes it");
 
 assert.ok(/\.artifact-modal \{[^}]*position: fixed/s.test(rails), "the modal covers the window");
 assert.ok(/\.artifact-modal \{[^}]*place-items: center/s.test(rails), "the card is centred");
-// The room has to actually go dark, or it is a floating panel and not a preview.
-assert.ok(/\.artifact-modal__scrim \{[^}]*background: #000000a6/s.test(rails), "the background is darkened");
+// The room has to actually go dark, or it is a floating panel and not a
+// preview. `--hy-scrim-heavy` is per-theme (rgba(0,0,0,x) dark / rgba(20,20,
+// 20,x) light) so a fixed hex would be wrong in one theme — see rails.css's
+// light-mode pass for why the literal became a token.
+assert.ok(
+  /\.artifact-modal__scrim \{[^}]*background: var\(--hy-scrim-heavy\)/s.test(rails),
+  "the background is darkened"
+);
 assert.ok(/\.artifact \{[^}]*width: min\(1040px/s.test(rails), "wider than the 620px rail it replaced");
 // Same band as .sheet (20). A preview under the sidebar would be a rail again.
 assert.ok(/\.artifact-modal \{[^}]*z-index: 20/s.test(rails), "same z band as the sheets");

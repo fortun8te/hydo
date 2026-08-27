@@ -127,6 +127,13 @@ contextBridge.exposeInMainWorld("hydo", {
   pollPluginAuth: (id, sessionId) => ipcRenderer.invoke("hydo:pollPluginAuth", id, sessionId),
   setPluginKey: (id, value, envVar) =>
     ipcRenderer.invoke("hydo:setPluginKey", id, value, envVar),
+
+  // Approval mode (Hermes' approvals.mode: smart/manual, never off from
+  // here) and the permanent "always" allowlist — scoped to ONE bot's own
+  // profile (~/.hermes/profiles/hydo<id>/config.yaml). See docs/SAFETY.md.
+  approvalSettings: (agentId) => ipcRenderer.invoke("hydo:approvalSettings", agentId),
+  setApprovalMode: (agentId, mode) => ipcRenderer.invoke("hydo:setApprovalMode", agentId, mode),
+  revokeApproval: (agentId, pattern) => ipcRenderer.invoke("hydo:revokeApproval", agentId, pattern),
   onState: (fn) => {
     const listener = (_e, state) => fn(state);
     ipcRenderer.on("hydo:state", listener);

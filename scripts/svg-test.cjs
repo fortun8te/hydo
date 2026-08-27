@@ -65,8 +65,15 @@ assert.ok(!/type="checkbox"/.test(src), "no real checkbox — it is a record, no
 console.log("richtext-test ok");
 
 // ---- math ------------------------------------------------------------------
-assert.ok(src.includes('import katex from "katex"'), "KaTeX is bundled, not fetched");
-assert.ok(src.includes('katex/dist/katex.min.css'), "and its fonts ship with it");
+// KaTeX must ship with the app, never come off a CDN. It is now a dynamic
+// import (it was ~262 kB of the launch chunk for a feature most threads never
+// use), so assert the local specifier + stylesheet and that no network URL
+// sneaks in — the "bundled, not fetched" rule, restated for the lazy path.
+assert.ok(src.includes('import("katex")'), "KaTeX is bundled, not fetched");
+assert.ok(src.includes('import("katex/dist/katex.min.css")'), "and its fonts ship with it");
+assert.ok(!/["'\`]https?:\/\/[^"'\`]*katex/i.test(src), "never a CDN copy of KaTeX");
+// The lazy path must degrade to the TeX source, never to a blank gap.
+assert.ok(/if \(!katexMod\) return "";/.test(src), "no KaTeX yet -> no HTML -> source chip");
 // dangerouslySetInnerHTML on model input is only safe because trust:false makes
 // KaTeX refuse the commands that emit raw HTML. Assert it is set explicitly.
 assert.ok(/trust: false/.test(src), "trust:false — the whole reason the HTML is safe");

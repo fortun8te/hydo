@@ -1,6 +1,4 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import katex from "katex";
-import "katex/dist/katex.min.css";
 import { createPortal } from "react-dom";
 import {
   KIND_LABEL,
@@ -123,9 +121,32 @@ function safeSrc(v) {
  *
  * Do not pass `trust:true`, and do not feed this anything but TeX.
  */
+/**
+ * KaTeX is ~270 kB minified — a quarter of the whole renderer bundle — and the
+ * overwhelming majority of messages contain no maths at all. Importing it at
+ * module scope put that quarter on the launch critical path for everyone, so
+ * it is pulled in (with its stylesheet) the first time a <Tex> actually
+ * mounts. `katexMod` is the module once resolved; until then <Tex> renders the
+ * TeX source in a code chip, which is exactly the fallback that already
+ * existed for un-renderable input, so a formula is never a blank gap.
+ */
+let katexMod = null;
+let katexLoading = null;
+function loadKatex() {
+  if (katexMod || katexLoading) return katexLoading;
+  katexLoading = Promise.all([import("katex"), import("katex/dist/katex.min.css")])
+    .then(([m]) => {
+      katexMod = m.default || m;
+      return katexMod;
+    })
+    .catch(() => null);
+  return katexLoading;
+}
+
 function texHtml(tex, displayMode) {
+  if (!katexMod) return "";
   try {
-    return katex.renderToString(toText(tex), {
+    return katexMod.renderToString(toText(tex), {
       displayMode: !!displayMode,
       throwOnError: false,
       strict: false,
@@ -138,7 +159,21 @@ function texHtml(tex, displayMode) {
 }
 
 function Tex({ tex, block }) {
-  const html = safe(() => texHtml(tex, block), "");
+  // `ready` only ever flips false -> true, and only for the mounts that are
+  // alive when KaTeX lands; a later mount finds katexMod already set and
+  // renders the maths on its first paint with no extra state change.
+  const [ready, setReady] = useState(() => !!katexMod);
+  useEffect(() => {
+    if (katexMod) return undefined;
+    let alive = true;
+    loadKatex().then(() => {
+      if (alive) setReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const html = ready ? safe(() => texHtml(tex, block), "") : "";
   // No KaTeX output at all: show the source rather than an empty gap, so a
   // formula is never silently lost.
   if (!html) {

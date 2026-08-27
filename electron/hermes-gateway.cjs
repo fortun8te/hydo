@@ -64,6 +64,18 @@ const STARTUP_TIMEOUT_MS = num('HYDO_GATEWAY_STARTUP_TIMEOUT_MS', 60_000);
 const REQUEST_TIMEOUT_MS = num('HYDO_GATEWAY_RPC_TIMEOUT_MS', 120_000);
 const TURN_TIMEOUT_MS = num('HYDO_GATEWAY_TURN_TIMEOUT_MS', 900_000);
 
+// Quitting is not an RPC. `shutdown()` used to await every `session.close` at
+// the full REQUEST_TIMEOUT_MS, and a child that has stopped answering — which
+// is exactly what mid-turn looks like — made that the whole 120s: measured
+// 120,004ms with the python SIGSTOPped, during which `will-quit` has already
+// called preventDefault, so Hydo sits in the Dock with no window and no way to
+// say why. A clean close is worth a moment, never worth a quit that hangs.
+const SHUTDOWN_CLOSE_MS = num('HYDO_GATEWAY_SHUTDOWN_CLOSE_MS', 2_500);
+// SIGTERM is a request a wedged interpreter can decline. Electron's exit then
+// ORPHANS it rather than killing it, which is how a stray gateway survives the
+// app that started it.
+const SHUTDOWN_KILL_MS = num('HYDO_GATEWAY_SHUTDOWN_KILL_MS', 1_500);
+
 // Bounded diagnostics ring — mirrors gatewayClient's MAX_GATEWAY_LOG_LINES /
 // MAX_LOG_LINE_BYTES so a chatty child can never grow memory without bound.
 const MAX_LOG_LINES = 200;
@@ -543,6 +555,23 @@ function startChild(rt) {
   if (!py) throw new Error(`hermes gateway not available: no python under ${HERMES_ROOT}`);
 
   const env = { ...process.env };
+  // The box CLI lives at ~/.ascii/bin/box, which is NOT on PATH — not in a
+  // login shell here, and certainly not in the environment an Electron app
+  // launched from the Dock hands down. So a teammate told "run `box exec ...`"
+  // got `command not found`, and the whole shared-machine feature was a
+  // paragraph of instructions pointing at a binary its shell could not see.
+  //
+  // Prepending rather than appending, and only when the directory is really
+  // there, so this cannot shadow a box the user has installed deliberately
+  // somewhere else.
+  const asciiBin = path.join(os.homedir(), '.ascii', 'bin');
+  try {
+    if (fs.existsSync(asciiBin) && !String(env.PATH || '').split(path.delimiter).includes(asciiBin)) {
+      env.PATH = env.PATH ? `${asciiBin}${path.delimiter}${env.PATH}` : asciiBin;
+    }
+  } catch {
+    /* no box CLI on this machine; the AGENTS.md block is gated on that too */
+  }
   env.PYTHONPATH = env.PYTHONPATH ? `${HERMES_ROOT}${path.delimiter}${env.PYTHONPATH}` : HERMES_ROOT;
   env.HERMES_PYTHON_SRC_ROOT = HERMES_ROOT;
   // THE lever. An empty pin means "leave it alone" — Hermes then resolves its
@@ -1395,22 +1424,67 @@ function shutdown() {
     })
     .map((id) => close(id).catch(() => {}));
 
-  return Promise.all(closes)
-    .catch(() => {})
-    .then(() => {
-      disposed = true;
-      for (const rt of runtimes.values()) {
-        const proc = rt.child;
-        teardown(rt, 'gateway shut down');
-        if (proc && proc.exitCode === null) {
+  // Bounded. A child that answers gets a clean close; one that does not gets
+  // reaped anyway, on a deadline the user can feel is instant.
+  const settled = Promise.all(closes).catch(() => {});
+  return Promise.race([settled, sleep(SHUTDOWN_CLOSE_MS)]).then(() => {
+    disposed = true;
+    return reapChildren();
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    // Never the reason a process stays up.
+    if (typeof t.unref === 'function') t.unref();
+  });
+}
+
+/**
+ * Kill every gateway child and WAIT for it to actually be gone.
+ *
+ * The old code fired SIGTERM and returned, so `app.exit(0)` raced it: a child
+ * that had not exited yet was orphaned to launchd, still holding its own
+ * python subprocesses. Escalating to SIGKILL and awaiting `exit` is what makes
+ * "quit" mean the process tree is gone.
+ *
+ * @returns {Promise<void>} resolves once no child of ours is alive.
+ */
+function reapChildren() {
+  const dying = [];
+  for (const rt of runtimes.values()) {
+    const proc = rt.child;
+    teardown(rt, 'gateway shut down');
+    if (!proc || proc.exitCode !== null) continue;
+    try {
+      proc.kill('SIGTERM');
+    } catch {
+      /* already gone */
+    }
+    dying.push(
+      new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          resolve();
+        };
+        proc.once('exit', finish);
+        const timer = setTimeout(() => {
           try {
-            proc.kill('SIGTERM');
+            proc.kill('SIGKILL');
           } catch {
             /* already gone */
           }
-        }
-      }
-    });
+          finish();
+        }, SHUTDOWN_KILL_MS);
+        if (typeof timer.unref === 'function') timer.unref();
+      })
+    );
+  }
+  return Promise.all(dying).then(() => undefined);
 }
 
 // ── Public: capabilities on top of the live session ──────────────────────

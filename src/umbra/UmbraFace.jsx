@@ -15,6 +15,7 @@ import matcapChrome from "../kit/images/matcap-chrome.png";
 import { SPIN_MS, spinCycle, spinStage, makeSpinState, easeYawToRest, easeInOutQuint, hash01 } from "./spin-turn.js";
 import { POKE_MS, MAX_HOPS, pokeDuration, pokeFrame } from "./poke.js";
 import { makeIdleState, idleStep } from "./idle.js";
+import { glowPaint, GLOW_GEOM } from "./glow.js";
 
 // A Grok bot's mark, drawn by Umbra's own character engine.
 //
@@ -805,6 +806,9 @@ export default function UmbraFace({
   size = 36,
   live = false,
   morph = false,
+  // Opt-in, and off everywhere it is not asked for: a face without `glow` must
+  // render the exact paths it rendered before this prop existed.
+  glow = false,
   fit = false,
   poke,
   className = "",
@@ -894,6 +898,11 @@ export default function UmbraFace({
   }
 
   const isChrome = isMetal(tint);
+  // Chrome is excluded on purpose. The matcap already contains every light in
+  // the scene, so lighting it again is the same mistake that made metal look
+  // like grey plastic (see configFor).
+  const lit = glow && !isChrome;
+  const glowInk = useMemo(() => (lit ? glowPaint(color) : null), [lit, color]);
   const cfg = useMemo(
     () => configFor(color.value, color.ink, motionId, isChrome),
     [color.value, color.ink, motionId, isChrome]
@@ -965,6 +974,8 @@ export default function UmbraFace({
     const ramp = S.ramp ? [S.ramp.light, S.ramp.mid, S.ramp.dark] : [paint.light, paint.mid, paint.dark];
     const clipId = `uf-clip-${gid}`;
     const gradId = `uf-grad-${gid}`;
+    const coreId = `uf-core-${gid}`;
+    const haloId = `uf-halo-${gid}`;
     const scaled = paint.scaleX !== 1 || paint.scaleY !== 1;
     const metal = isChrome;
     // The body's OWN radii, not a single extent. `spec.er` is what the engine
@@ -1017,6 +1028,34 @@ export default function UmbraFace({
               <stop offset="1" stopColor={ramp[2]} />
             </radialGradient>
           )}
+          {glowInk ? (
+            <>
+              {/* Two static gradients, no filter. See glow.js for why the
+                  icon's three blur passes are not reproduced literally. */}
+              <radialGradient
+                id={coreId}
+                gradientUnits="userSpaceOnUse"
+                cx={0}
+                cy={extent * GLOW_GEOM.coreY}
+                r={extent * GLOW_GEOM.coreR}
+              >
+                {glowInk.core.map((st) => (
+                  <stop key={st.offset} offset={st.offset} stopColor={st.color} stopOpacity={st.opacity} />
+                ))}
+              </radialGradient>
+              <radialGradient
+                id={haloId}
+                gradientUnits="userSpaceOnUse"
+                cx={0}
+                cy={extent * GLOW_GEOM.haloY}
+                r={extent * GLOW_GEOM.haloR}
+              >
+                {glowInk.halo.map((st) => (
+                  <stop key={st.offset} offset={st.offset} stopColor={st.color} stopOpacity={st.opacity} />
+                ))}
+              </radialGradient>
+            </>
+          ) : null}
           {S.bodyD ? (
             <clipPath id={clipId}>
               <path d={S.bodyD} />
@@ -1033,16 +1072,34 @@ export default function UmbraFace({
         <g className={dotsPhase ? `uf-body is-${dotsPhase}` : undefined}>
         <g transform={`translate(${size / 2} ${size / 2 - (S.hopY || 0) * size}) scale(${k})`}>
           <g transform={S.groupTransform}>
+            {/* The light the body throws into whatever it is sitting on. A
+                plain circle, not the silhouette: at this blur radius the shape
+                of the source is not readable anyway, and reusing `bodyD` here
+                would mean a third tessellation of a ~130KB path per frame.
+                .umbra-face is overflow:visible, so it may spill past the box. */}
+            {glowInk && !(dots && !dotsPhase) ? (
+              <circle
+                className="uf-glow-halo"
+                cx={0}
+                cy={extent * GLOW_GEOM.haloY}
+                r={extent * GLOW_GEOM.haloR}
+                fill={`url(#${haloId})`}
+              />
+            ) : null}
             {/* NONZERO winding: the depth rings union into one solid body. */}
             {S.bodyD && !(dots && !dotsPhase) ? (
-              <path d={S.bodyD} fill={`url(#${gradId})`} shapeRendering="geometricPrecision" />
+              <path
+                d={S.bodyD}
+                fill={glowInk ? glowInk.rim : `url(#${gradId})`}
+                shapeRendering="geometricPrecision"
+              />
             ) : null}
             {/* The hairline self-stroke closes the gaps between depth slices. */}
             {S.bodyD && paint.seam !== false && !(dots && !dotsPhase) ? (
               <path
                 d={S.bodyD}
                 fill="none"
-                stroke={`url(#${gradId})`}
+                stroke={glowInk ? glowInk.rim : `url(#${gradId})`}
                 strokeWidth="3"
                 strokeLinejoin="round"
                 strokeLinecap="round"
@@ -1050,6 +1107,10 @@ export default function UmbraFace({
             ) : null}
             {S.bodyD && !(dots && !dotsPhase) ? (
               <g clipPath={`url(#${clipId})`}>
+                {/* White body first, THEN the tint laid back into its middle —
+                    the icon's order, and the whole reason the rim comes out
+                    bright without anyone drawing an outline. */}
+                {glowInk ? <path d={S.bodyD} fill={`url(#${coreId})`} /> : null}
                 {metal ? null : S.texture.map((L, i) =>
                   L.d ? (
                     <path

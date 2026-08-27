@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import UmbraFace from "../umbra/UmbraFace.jsx";
-import Settings from "./Settings.jsx";
 import Sidebar from "./Sidebar.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import Composer from "./Composer.jsx";
@@ -8,21 +7,57 @@ import BotRail from "./BotRail.jsx";
 import ChannelRail from "./ChannelRail.jsx";
 import ChannelCreate from "./ChannelCreate.jsx";
 import BotCreate from "./BotCreate.jsx";
-import About from "./About.jsx";
 import Home from "./Home.jsx";
 import ComputerRail from "./ComputerRail.jsx";
-import Plugins from "./Plugins.jsx";
 import Sheet from "./Sheet.jsx";
 import Transcript from "./Transcript.jsx";
 import RoutineRail from "./RoutineRail.jsx";
-import Rollback from "./Rollback.jsx";
-import Artifact from "./Artifact.jsx";
 import ContextMenu from "./ContextMenu.jsx";
 import CommandPalette from "./CommandPalette.jsx";
 import FindInChat from "./FindInChat.jsx";
-import { matchEvent } from "../lib/shortcuts.js";
+import { matchEvent, isTypingTarget } from "../lib/shortcuts.js";
 import { botBusy, botWorks, channelWorks } from "../lib/working.js";
 import { LINGER_MS } from "../lib/presence.js";
+
+/* --------------------------------------------------------------------------
+   Overlays that are rare, and therefore not in the launch chunk.
+
+   Every one of these is already mounted conditionally below (`settingsOpen`,
+   `pluginsOpen`, `rail === "undo"`, `artifactId`, `sheet === "about"`), so a
+   session that never opens them never paid for their code — except that a
+   static import put them in the one chunk anyway. Together they were ~64 kB of
+   source parsed before the first message could paint.
+
+   The transcript, composer, sidebar and rails are deliberately NOT here: you
+   hit those within a frame of launch, and trading their bytes for a chunk
+   fetch would make the app worse, not better.
+
+   `prefetchOverlays()` below warms them once the app is idle, so the first
+   click on Settings is still instant — the load moved off the critical path
+   rather than onto the click.
+   -------------------------------------------------------------------------- */
+const Settings = lazy(() => import("./Settings.jsx"));
+const About = lazy(() => import("./About.jsx"));
+const Plugins = lazy(() => import("./Plugins.jsx"));
+const Rollback = lazy(() => import("./Rollback.jsx"));
+const Artifact = lazy(() => import("./Artifact.jsx"));
+
+// Kept in one place so the prefetch can never drift out of sync with the list
+// of lazy overlays above.
+const OVERLAY_LOADERS = [
+  () => import("./Settings.jsx"),
+  () => import("./About.jsx"),
+  () => import("./Plugins.jsx"),
+  () => import("./Rollback.jsx"),
+  () => import("./Artifact.jsx"),
+];
+
+let overlaysPrefetched = false;
+function prefetchOverlays() {
+  if (overlaysPrefetched) return;
+  overlaysPrefetched = true;
+  for (const load of OVERLAY_LOADERS) load().catch(() => {});
+}
 
 function pairKey(a, b) {
   return [a, b].sort().join(":");
@@ -43,6 +78,20 @@ const HOME_ENABLED = false;
 // `userFullName` wins, then a `userName` that already carries a surname, then
 // the account holder.
 const ACCOUNT_FULL_NAME = "Michael Knaap";
+
+// "When did they last touch a key", rounded to the second.
+//
+// The only readers are presence.js, which compares it against a 45s idle
+// window and a 49.2s leave window, and the clock that evaluates those
+// comparisons only ticks every 240ms. So sub-second precision was never
+// visible — but an exact `Date.now()` changed the `lastKeyAt` prop on every
+// single keystroke, which defeated the memo on Transcript and re-rendered the
+// whole message list per character. Rounded, it changes at most once a second
+// while you type, and the blob's fade moves by under a second in a
+// forty-five-second hysteresis, which is not a thing anyone can see.
+function keyStamp() {
+  return Math.floor(Date.now() / 1000) * 1000;
+}
 function accountName(settings) {
   const full = String(settings?.userFullName || "").trim();
   if (full) return full;
@@ -52,6 +101,8 @@ function accountName(settings) {
 }
 
 export default function Shell({ state }) {
+  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.Shell = (window.__rc.Shell || 0) + 1; }
+
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
   const [lastKeyAt, setLastKeyAt] = useState(0);
@@ -144,6 +195,55 @@ export default function Shell({ state }) {
     );
   }, [query, entries]);
 
+  /* ------------------------------------------------------------------------
+     Transcript is memoised (see Transcript.jsx). These seven handlers were
+     inline arrows, so every Shell render minted seven new functions and the
+     memo would never have held. All of them close over nothing but setState
+     setters and `window.hydo`, both of which are stable for the life of the
+     component, so `[]` is the honest dependency list.
+     ---------------------------------------------------------------------- */
+  const onChoose = useCallback((messageId, choiceId) => window.hydo.choose(messageId, choiceId), []);
+  const onCustomChoice = useCallback(
+    (messageId, text) => window.hydo.chooseCustom?.(messageId, text),
+    []
+  );
+  const onOpenDm = useCallback((id) => setDmPeerId(id), []);
+  const onReply = useCallback(
+    (msg) => setReplyTo({ id: msg.id, text: String(msg.text || ""), fromId: msg.fromId || null }),
+    []
+  );
+  const onOpenArtifact = useCallback((id) => {
+    setArtifactId(id);
+    setRail(null);
+  }, []);
+  const onOpenRoutine = useCallback((id) => {
+    setRoutineId(id);
+    setRail("routines");
+  }, []);
+  const onJumpTo = useCallback((id) => {
+    const el = document.getElementById(`msg-${id}`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    el?.classList.add("is-flash");
+    setTimeout(() => el?.classList.remove("is-flash"), 1200);
+  }, []);
+
+  // Warm the lazy overlay chunks once the app has settled. requestIdleCallback
+  // so this never competes with first paint or the first frames of the blob
+  // faces; the timeout fallback covers engines without it.
+  useEffect(() => {
+    const idle =
+      typeof requestIdleCallback === "function"
+        ? requestIdleCallback(prefetchOverlays, { timeout: 3000 })
+        : setTimeout(prefetchOverlays, 1500);
+    return () => {
+      if (typeof cancelIdleCallback === "function" && typeof requestIdleCallback === "function") {
+        cancelIdleCallback(idle);
+      } else {
+        clearTimeout(idle);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     setDraft(selected?.draft || "");
     setRoutineId(null);
@@ -153,6 +253,12 @@ export default function Shell({ state }) {
     setReplyTo(null);
     setTitleEdit(false);
   }, [selected?.id]);
+
+  // The transcript only ever asked "is the composer empty?" — presence.js reads
+  // no character of the draft (see draftIsFilled there). Handing it the string
+  // meant a new prop value on every keystroke; the boolean changes once per
+  // message, which is what lets the memo on Transcript actually hold.
+  const draftFilled = String(draft || "").trim().length > 0;
 
   // The window is a window: it gets dragged narrow, and half-screened next to
   // a browser. The rail is not a fallback, it IS the narrow layout . which is
@@ -203,13 +309,18 @@ export default function Shell({ state }) {
     return () => clearTimeout(t);
   }, [sending, workingHere]);
 
+  // `draftFilled`, not `draft`. Keyed on the string, this effect tore down and
+  // rebuilt a 240ms interval on EVERY keystroke and fired an extra
+  // `setClock` render with it — 40 interval churns and 40 surplus renders in a
+  // forty-character message, to arrive at exactly the same ticking clock. The
+  // only thing it wants to know is whether the composer has anything in it.
   useEffect(() => {
-    const needTick = String(draft || "").trim() || sending || workingHere || linger;
+    const needTick = draftFilled || sending || workingHere || linger;
     if (!needTick) return undefined;
     setClock(Date.now());
     const id = setInterval(() => setClock(Date.now()), 240);
     return () => clearInterval(id);
-  }, [draft, sending, workingHere, linger]);
+  }, [draftFilled, sending, workingHere, linger]);
 
   // Is the shared machine awake? Read on mount and after the sheet closes,
   // not on a timer: this is a CLI round-trip, and a header icon is not worth
@@ -292,10 +403,24 @@ export default function Shell({ state }) {
       case "sand.findInChat": setFindOpen((v) => !v); break;
       case "sand.newAgent": window.hydo.createAgent(); break;
       case "sand.openSettings": setSettingsOpen(true); break;
-      case "sand.toggleSidebar": setCollapsed((v) => !v); break;
+      // Same reason as Sidebar's hidden toggle button: below the breakpoint
+      // the rail is forced, so flipping `collapsed` here changes nothing on
+      // screen and only springs out later when the window is widened again.
+      case "sand.toggleSidebar": if (!tooNarrow) setCollapsed((v) => !v); break;
       case "sand.toggleInfo":
       case "sand.toggleAgentSettings":
         setRail((r) => (r ? null : isChannel ? "channel" : "bot"));
+        break;
+      // These two shipped in the palette (and in shortcuts.js's command list)
+      // with no case here at all, so they fell through `default: break` and
+      // did nothing — invisible while ⌘K was broken, three dead rows the
+      // moment it worked again. Tools live in the bot rail and routines have
+      // their own rail; both are simply "open that panel".
+      case "sand.openTools":
+        if (selected && !isChannel) setRail("bot");
+        break;
+      case "sand.openWorkflows":
+        if (selected && !isChannel) setRail("routines");
         break;
       case "sand.nextAgent": step(1); break;
       case "sand.previousAgent": step(-1); break;
@@ -311,11 +436,40 @@ export default function Shell({ state }) {
       case "sand.navigateBack": setDmPeerId(null); setRail(null); break;
       default: break;
     }
-    setPaletteOpen(false);
+    // Everything else closes the palette after running (that is the point of
+    // picking a row). The palette's OWN command must be exempt: this line ran
+    // unconditionally, so `sand.commandPalette` toggled `paletteOpen` on and
+    // then this set it straight back to false in the same batch — ⌘K, and the
+    // "Command Palette" row itself, could never open it. Fully wired end to
+    // end (KEYMAP -> matchEvent -> runCommand -> <CommandPalette open=…/>)
+    // and silently dead.
+    if (id !== "sand.commandPalette") setPaletteOpen(false);
   }
 
   useEffect(() => {
     function onKey(e) {
+      // Escape closed every modal surface (palette, find, sheets, dialogs)
+      // but NOT the right-hand rails or the artifact viewer, which are the two
+      // things that cover the transcript for the longest — the only way out
+      // was to find the small chevron in their header. `defaultPrevented`
+      // keeps the composer's own Escape (slash menu, cancel-reply) first, and
+      // the DOM check keeps a stacked modal's Escape from also collapsing the
+      // rail behind it: state names can drift, "is a dialog on screen" cannot.
+      if (e.key === "Escape") {
+        if (e.defaultPrevented) return;
+        if (isTypingTarget(e.target)) return;
+        if (document.querySelector(".hy-dialog, .hy-palette, .hy-find, .hy-sheet, [role='dialog']")) return;
+        if (artifactId) {
+          e.preventDefault();
+          setArtifactId(null);
+          return;
+        }
+        if (rail) {
+          e.preventDefault();
+          setRail(null);
+        }
+        return;
+      }
       const id = matchEvent(e);
       if (!id || id === "sand.send") return;
       e.preventDefault();
@@ -350,7 +504,7 @@ export default function Shell({ state }) {
     const wasEmpty = !String(draft || "").trim();
     const nextEmpty = !String(value || "").trim();
     setDraft(value);
-    setLastKeyAt(Date.now());
+    setLastKeyAt(keyStamp());
     if (wasEmpty && !nextEmpty) setComposeAt(Date.now());
     if (nextEmpty) setComposeAt(0);
     if (value.startsWith("/")) setComposerMenu(false);
@@ -363,7 +517,7 @@ export default function Shell({ state }) {
     const next = `@${agent.name} `;
     const wasEmpty = !String(draft || "").trim();
     setDraft(next);
-    setLastKeyAt(Date.now());
+    setLastKeyAt(keyStamp());
     if (wasEmpty) setComposeAt(Date.now());
     setComposerMenu(false);
     if (selected) window.hydo.setDraft(selected.id, next);
@@ -387,6 +541,7 @@ export default function Shell({ state }) {
         query={query}
         onQuery={setQuery}
         collapsed={collapsed || tooNarrow}
+        canToggle={!tooNarrow}
         onToggle={() => setCollapsed((v) => !v)}
         onCreate={() => setBotCreate(true)}
         onCreateBot={() => setBotCreate(true)}
@@ -566,32 +721,19 @@ export default function Shell({ state }) {
             sending={sending && !peer}
             linger={(linger || workingHere) && !peer}
             lingerSince={lingerSince}
-            draft={draft}
+            draft={draftFilled}
             lastKeyAt={lastKeyAt}
             composeAt={composeAt}
             since={since}
             clock={clock}
             dm={!!peer}
-            onChoose={(messageId, choiceId) => window.hydo.choose(messageId, choiceId)}
-            onReply={(msg) =>
-              setReplyTo({ id: msg.id, text: String(msg.text || ""), fromId: msg.fromId || null })
-            }
-            onOpenArtifact={(id) => {
-              setArtifactId(id);
-              setRail(null);
-            }}
-            onJumpTo={(id) => {
-              const el = document.getElementById(`msg-${id}`);
-              el?.scrollIntoView({ block: "center", behavior: "smooth" });
-              el?.classList.add("is-flash");
-              setTimeout(() => el?.classList.remove("is-flash"), 1200);
-            }}
-            onCustomChoice={(messageId, text) => window.hydo.chooseCustom?.(messageId, text)}
-            onOpenDm={(id) => setDmPeerId(id)}
-            onOpenRoutine={(id) => {
-              setRoutineId(id);
-              setRail("routines");
-            }}
+            onChoose={onChoose}
+            onReply={onReply}
+            onOpenArtifact={onOpenArtifact}
+            onJumpTo={onJumpTo}
+            onCustomChoice={onCustomChoice}
+            onOpenDm={onOpenDm}
+            onOpenRoutine={onOpenRoutine}
           />
         ) : (
           <Home
@@ -678,7 +820,9 @@ export default function Shell({ state }) {
       )}
 
       {artifactId ? (
-        <Artifact artifactId={artifactId} onClose={() => setArtifactId(null)} />
+        <Suspense fallback={null}>
+          <Artifact artifactId={artifactId} onClose={() => setArtifactId(null)} />
+        </Suspense>
       ) : null}
 
       {rail === "computer" && (
@@ -704,7 +848,9 @@ export default function Shell({ state }) {
       )}
 
       {rail === "undo" && selected && !isChannel && (
-        <Rollback agent={selected} onClose={() => setRail("bot")} />
+        <Suspense fallback={null}>
+          <Rollback agent={selected} onClose={() => setRail("bot")} />
+        </Suspense>
       )}
 
       {rail === "channel" && selected && isChannel && (
@@ -758,6 +904,7 @@ export default function Shell({ state }) {
         }}
       />
       {settingsOpen && (
+        <Suspense fallback={null}>
         <Settings
           settings={state.settings}
           accountName={accountName(state.settings)}
@@ -768,8 +915,13 @@ export default function Shell({ state }) {
           onChange={(patch) => window.hydo.setSettings(patch)}
           onSignOut={() => window.hydo.signOut()}
         />
+        </Suspense>
       )}
-      {pluginsOpen && <Plugins onClose={() => setPluginsOpen(false)} />}
+      {pluginsOpen && (
+        <Suspense fallback={null}>
+          <Plugins onClose={() => setPluginsOpen(false)} />
+        </Suspense>
+      )}
       {channelCreate && (
         <ChannelCreate
           agents={agents}
@@ -782,7 +934,9 @@ export default function Shell({ state }) {
       )}
       {sheet === "about" && (
         <Sheet title="About" onClose={() => setSheet(null)}>
-          <About />
+          <Suspense fallback={null}>
+            <About />
+          </Suspense>
         </Sheet>
       )}
       {sheet === "help" && (

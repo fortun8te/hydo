@@ -8,6 +8,11 @@ const autoProfile = require("./auto-profile.cjs");
 const contextMgmt = require("./context-mgmt.cjs");
 const modelPick = require("./model-pick.cjs");
 const routinesLib = require("./routines.cjs");
+// Approval-mode + allowlist IPC (see docs/SAFETY.md gaps #1/#2). Registered
+// here — not in electron/main.cjs — because this module already loads inside
+// the Electron main process before any window exists; registerIpc() no-ops
+// under plain `node` (test scripts require this file directly).
+require("./approval-settings.cjs").registerIpc();
 
 const BLOBS = [
   "black",
@@ -719,6 +724,9 @@ function createStore(opts = {}) {
   const dir = opts.dir;
   if (!dir) throw new Error("createStore requires opts.dir");
   const file = path.join(dir, "state.json");
+  // Siblings of `file`, so the rename below stays on one filesystem.
+  const tmpFile = `${file}.tmp`;
+  const backupFile = `${file}.bak`;
   const uuid = opts.uuid || randomUUID;
   const now = opts.now || nowIso;
   const complete = opts.complete || defaultComplete;
@@ -761,13 +769,51 @@ function createStore(opts = {}) {
     return list;
   }
 
+  /**
+   * Read state.json, or the last known-good copy beside it.
+   *
+   * Measured: killing the app inside `writeFileSync` leaves a TRUNCATED
+   * state.json. `JSON.parse` then throws, and the old code answered that by
+   * seeding an empty state and immediately saving it — so a crash mid-write
+   * silently deleted every teammate AND overwrote the only evidence. One
+   * blocking write is all it takes; state.json is ~470KB for a real roster.
+   *
+   * Three things stop that now, in order: `writeNow` renames into place so a
+   * half-file is never state.json at all; `.bak` holds the previous good copy
+   * for the corruption `rename` cannot prevent (bad sectors, a truncating
+   * backup tool); and anything unreadable is MOVED aside rather than
+   * clobbered, so a person can still get their roster back by hand.
+   */
   function load() {
-    try {
-      state = normalizeState(JSON.parse(fs.readFileSync(file, "utf8")));
-    } catch {
-      state = seedState(uuid, now);
-      save();
+    const readIf = (p) => {
+      try {
+        return normalizeState(JSON.parse(fs.readFileSync(p, "utf8")));
+      } catch {
+        return null;
+      }
+    };
+    const primary = readIf(file);
+    if (primary) {
+      state = primary;
+      return;
     }
+    const hasPrimary = fs.existsSync(file);
+    const backup = readIf(backupFile);
+    if (backup) {
+      state = backup;
+      // Put the good copy back at the real path before anything else writes.
+      save();
+      return;
+    }
+    if (hasPrimary) {
+      try {
+        fs.renameSync(file, `${file}.corrupt-${Date.now()}`);
+      } catch {
+        /* nothing left to preserve: seed over it rather than refuse to boot */
+      }
+    }
+    state = seedState(uuid, now);
+    save();
   }
 
   // ── persistence ────────────────────────────────────────────────────────
@@ -801,7 +847,22 @@ function createStore(opts = {}) {
       fs.mkdirSync(dir, { recursive: true });
       // Compact, not pretty. It is a machine file: 18% fewer bytes and 26%
       // less CPU per write, and `jq .` exists for the rare time anyone looks.
-      fs.writeFileSync(file, JSON.stringify(state));
+      //
+      // Written to a sibling and RENAMED in. `writeFileSync` straight onto
+      // state.json is not atomic: a quit or a crash inside it leaves a
+      // truncated file, and the loader used to answer that by seeding an empty
+      // roster over the top. rename(2) within one directory is atomic, so the
+      // file at `file` is always a complete state — the previous one until the
+      // new one is entirely on disk.
+      fs.writeFileSync(tmpFile, JSON.stringify(state));
+      // Keep the outgoing copy as the fallback the loader reaches for. Best
+      // effort: no state.json yet on the very first write.
+      try {
+        fs.copyFileSync(file, backupFile);
+      } catch {
+        /* first write, or the old one is already unreadable */
+      }
+      fs.renameSync(tmpFile, file);
     } catch {
       /* disk full or permissions: the app keeps working from memory */
     }
@@ -1731,8 +1792,39 @@ function createStore(opts = {}) {
     // new tool plumbing, because a profile with `terminal` already has a shell
     // and `box` is on this Mac.
     const boxId = String((state.settings && state.settings.boxId) || "");
+    // A shell, or none of this is true.
+    //
+    // The block below tells the teammate to run `box exec`. That needs the
+    // `terminal` toolset, which only `builder` and `full` carry — but the block
+    // was gated on `boxEnabled && boxId` alone, so a chat/writer/researcher bot
+    // with the Linux workspace switched on was handed a command it had no tool
+    // to run. The old comment here asserted "a profile with `terminal` already
+    // has a shell", which is true and was never checked.
+    //
+    // When the shell is missing, say which switch is missing instead of going
+    // quiet — that is the same contract as the "What you can reach" block.
+    const gatewayProfiles = (() => {
+      try {
+        return require("./hermes-gateway.cjs").TOOL_PROFILES || {};
+      } catch {
+        return {};
+      }
+    })();
+    const profileSets = gatewayProfiles[agent.toolProfile || "chat"];
+    const hasShell =
+      profileSets === null || // `full` pins nothing and gets Hermes' own default
+      (Array.isArray(profileSets) && profileSets.includes("terminal")) ||
+      (Array.isArray(agent.toolsets) && agent.toolsets.includes("terminal"));
     const boxBlock =
-      agent.boxEnabled && boxId
+      agent.boxEnabled && boxId && !hasShell
+        ? [
+            "",
+            "## Shared Linux machine",
+            "",
+            "The team has one, and you cannot reach it: driving it needs a shell, and this tool profile has none. If a job needs that machine, say so and name the switch — **Tool profile → Builder**, or add `terminal` under **Advanced** in this Bot's panel. Do not improvise around it.",
+            "",
+          ].join("\n")
+        : agent.boxEnabled && boxId
         ? [
             "",
             "## Shared Linux machine",

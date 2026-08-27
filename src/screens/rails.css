@@ -355,13 +355,16 @@ aside.bot-rail > .bot-rail__workspace {
   line-height: 1.5;
   color: var(--sand-text-secondary, #fcfcfc99);
   /* A real path is long and has no spaces, so it must be allowed to break
-     anywhere rather than push the rail wider than the rail. */
-  word-break: break-all;
+     anywhere rather than push the rail wider than the rail. `break-all` did
+     that, but this same <p> also carries the prose explainer shown when there
+     is no path yet — and break-all chopped ordinary English mid-word ("reads
+     and write / s", "Everyt / hing"). `anywhere` breaks only when a word
+     genuinely does not fit, so the path still wraps and the sentence does not. */
+  overflow-wrap: anywhere;
 }
 
 .bot-rail .bot-rail__workspace-note.is-bad {
   color: var(--sand-text-danger, #ff5667);
-  word-break: normal;
 }
 
 /* ---------- routines card (BotRail) ---------- */
@@ -1033,14 +1036,15 @@ aside.routine-rail .routine-rail__toolbar {
 .artifact-modal__scrim {
   position: absolute;
   inset: 0;
-  background: #000000a6;
+  background: var(--hy-scrim-heavy);
   animation: artifact-scrim-in 140ms ease-out;
 }
 
-/* Darker than the sheets' #00000073 on purpose: those sit over a form you are
-   still half reading, this one sits over a transcript you are meant to stop
-   reading. It is also what makes a transparent PNG or a pale HTML page read as
-   lit rather than as another panel. */
+/* Darker than the sheets' plain scrim on purpose: those sit over a form you
+   are still half reading, this one sits over a transcript you are meant to
+   stop reading. It is also what makes a transparent PNG or a pale HTML page
+   read as lit rather than as another panel. --hy-scrim-heavy already flips
+   warm-dark in light mode (rgba(20,20,20,x)) instead of soot-black. */
 
 .artifact {
   position: relative;
@@ -1189,7 +1193,11 @@ aside.routine-rail .routine-rail__toolbar {
   height: 7px;
   margin-top: 5px;
   border-radius: 50%;
-  background: #4a4a4a;
+  /* Muted grey was tuned to sit quietly on a black rail; the same hex on a
+     white one read as a loud dark dot instead of a not-started state.
+     --hy-text-faint flips per theme so the "not started" pip stays equally
+     recessive against either ground. */
+  background: var(--hy-text-faint, #6a6a6a);
 }
 
 /* `is-live` / `is-done` / `is-dropped`, not Hermes' own status words.
@@ -1209,12 +1217,12 @@ aside.routine-rail .routine-rail__toolbar {
 }
 
 .bot-rail .bot-rail__plan-item.is-done .bot-rail__plan-dot {
-  background: #2bb673;
+  background: var(--sand-fill-success, #00c972);
 }
 
 .bot-rail .bot-rail__plan-item.is-done span:last-child {
   text-decoration: line-through;
-  text-decoration-color: rgba(252, 252, 252, 0.3);
+  text-decoration-color: var(--sand-border-strong, #fcfcfc4d);
 }
 
 .bot-rail .bot-rail__plan-item.is-dropped {
@@ -1283,7 +1291,7 @@ aside.routine-rail .routine-rail__toolbar {
   align-items: center;
   gap: 1px;
   padding: 7px 2px 6px;
-  border: 1px solid rgba(252, 252, 252, 0.1);
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
   border-radius: 9px;
   background: transparent;
   color: var(--sand-text-secondary, #fcfcfc99);
@@ -1298,7 +1306,7 @@ aside.routine-rail .routine-rail__toolbar {
 
 .bot-rail .bot-rail__preset.is-on {
   background: var(--hy-raised);
-  border-color: rgba(252, 252, 252, 0.26);
+  border-color: var(--sand-border-strong, #fcfcfc4d);
   color: var(--sand-text-primary, #fcfcfc);
 }
 
@@ -1360,7 +1368,10 @@ aside.routine-rail .routine-rail__toolbar {
   color: var(--sand-text-primary, #fcfcfc);
 }
 .bot-rail .bot-rail__role:focus-visible {
-  outline: 2px solid var(--sand-accent, #2a92fe);
+  /* was var(--sand-accent, ...) — --sand-accent is never defined in
+     tokens.css, so this silently ran on its dark-tuned fallback in every
+     theme, same class of bug as the undefined --sand-line above. */
+  outline: 2px solid var(--sand-border-focus, #1c8bfe);
   outline-offset: 2px;
 }
 
@@ -1437,7 +1448,11 @@ aside.routine-rail .routine-rail__toolbar {
 /* Awake gets a faint accent wash so the card signals "live" before you ever
    read the state word underneath the icon. */
 .computer-rail .computer-rail__thumb.is-live {
-  background: linear-gradient(160deg, #1084fe26, var(--sand-bg-elevated, #181818) 65%);
+  background: linear-gradient(
+    160deg,
+    var(--sand-fill-accent-subtle, #1084fe2c),
+    var(--sand-bg-elevated, #181818) 65%
+  );
 }
 
 .computer-rail .computer-rail__thumb.is-live .computer-rail__thumb-face {
@@ -1452,8 +1467,14 @@ aside.routine-rail .routine-rail__toolbar {
   padding: 8px 16px;
   border: 0;
   border-radius: 999px;
-  background: #000000cc;
-  color: #fff;
+  /* A flat #000 pill read fine on the dark-only thumbnail, but the thumb's
+     own background is now a light card in light mode — an opaque black
+     circle sitting on it looked like a hole punched in the card rather than
+     a button. hy-scrim-heavy is the app's "dark overlay on unknown content"
+     token: translucent, so the thumbnail still reads through, and it's
+     already tuned per-theme (warm charcoal in light, near-black in dark). */
+  background: var(--hy-scrim-heavy);
+  color: var(--sand-text-on-color, #fcfcfc);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -1531,8 +1552,8 @@ aside.routine-rail .routine-rail__toolbar {
   font-size: 11.5px;
   line-height: 16px;
   color: var(--sand-text-primary, #fcfcfc);
-  background: rgba(228, 161, 27, 0.1);
-  border: 1px solid rgba(228, 161, 27, 0.24);
+  background: var(--sand-fill-warning-subtle, #ff98002c);
+  border: 1px solid var(--sand-border-warning-subtle, #ff980052);
 }
 
 /* -- what it is doing now ------------------------------------------------ */

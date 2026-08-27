@@ -196,6 +196,12 @@ export default function Sidebar({
   onQuery,
   collapsed,
   onToggle,
+  // False while the window is narrow enough that the rail is not a choice.
+  // Below the breakpoint Shell renders `collapsed || tooNarrow`, so the
+  // collapse/expand buttons still painted but could not change anything —
+  // a button labelled "Expand sidebar" that did nothing at all when clicked.
+  // Hiding it is the honest answer: there is nothing to expand into.
+  canToggle = true,
   onCreate,
   onCreateBot,
   onCreateChannel,
@@ -222,6 +228,8 @@ export default function Sidebar({
   onSignOut,
   sendingId,
 }) {
+  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.Sidebar = (window.__rc.Sidebar || 0) + 1; }
+
   // Shell resolves the account holder's full name and passes it down; the
   // fallback matches, so a Sidebar rendered without the prop (tests, stories)
   // shows the same row rather than a first name.
@@ -465,16 +473,18 @@ export default function Sidebar({
   return (
     <aside className="sand-sidebar" data-collapsed={collapsed ? "true" : "false"}>
       <div className="sand-titlebar sand-titlebar--side">
-        <button
-          type="button"
-          className="icon-btn"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-          onClick={onToggle}
-        >
-          <i className="gb-icon gb-icon-layout-sidebar-left" />
-        </button>
+        {canToggle ? (
+          <button
+            type="button"
+            className="icon-btn"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            onClick={onToggle}
+          >
+            <i className="gb-icon gb-icon-layout-sidebar-left" />
+          </button>
+        ) : null}
         <span className="sand-newwrap" ref={topPlus}>
           <button
             type="button"
@@ -804,16 +814,18 @@ export default function Sidebar({
             pair above does the job — the titlebar element stays mounted either
             way so the top of the sidebar keeps its window-drag region. */}
         <div className="sand-rail-controls">
-          <button
-            type="button"
-            className="icon-btn"
-            data-tip="Expand sidebar"
-            title="Expand sidebar"
-            aria-label="Expand sidebar"
-            onClick={onToggle}
-          >
-            <i className="gb-icon gb-icon-layout-sidebar-left" />
-          </button>
+          {canToggle ? (
+            <button
+              type="button"
+              className="icon-btn"
+              data-tip="Expand sidebar"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+              onClick={onToggle}
+            >
+              <i className="gb-icon gb-icon-layout-sidebar-left" />
+            </button>
+          ) : null}
           <span className="sand-newwrap" ref={railPlus}>
             <button
               type="button"

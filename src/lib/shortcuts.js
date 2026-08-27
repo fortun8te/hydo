@@ -27,7 +27,6 @@ export const KEYMAP = {
   "mod+alt+b": "sand.toggleInfo",
   "mod+shift+i": "sand.toggleInfo",
   "mod+bracketleft": "sand.navigateBack",
-  "mod+bracketright": "sand.navigateForward",
   "alt+up": "sand.previousAgent",
   "alt+down": "sand.nextAgent",
 };
@@ -55,8 +54,11 @@ const RAW_COMMANDS = [
   { id: "sand.openWorkflows", label: "Open Workflows", icon: "chart-pyramid", group: "View", keys: [] },
   { id: "sand.toggleAgentSettings", label: "Toggle Bot Settings", icon: "settings-gear", group: "View", keys: [] },
 
+  // No "Go Forward" counterpart, and there never was one: navigateBack only
+  // leaves the current sub-view (setDmPeerId(null); setRail(null)) — this app
+  // keeps no history stack to go forward INTO. It shipped as a palette row
+  // and a ⌘] binding that reached `default: break` and did nothing.
   { id: "sand.navigateBack", label: "Go Back", icon: "arrow-block-line-left", group: "Navigation", keys: ["mod+bracketleft"] },
-  { id: "sand.navigateForward", label: "Go Forward", icon: "arrow-block-line-right", group: "Navigation", keys: ["mod+bracketright"] },
   { id: "sand.previousAgent", label: "Previous Bot", icon: "chevron-up-small", group: "Navigation", keys: ["alt+up"] },
   { id: "sand.nextAgent", label: "Next Bot", icon: "chevron-down-small", group: "Navigation", keys: ["alt+down"] },
 ];
@@ -112,7 +114,10 @@ export const COMMANDS = RAW_COMMANDS.map((cmd) => ({
   chord: cmd.keys.length ? formatChord(cmd.keys[0]) : "",
 }));
 
-function isTypingTarget(target) {
+// Exported so callers that handle a key this map does not own (Shell's
+// Escape-closes-the-rail) apply exactly the same "is the caret in a field"
+// test, rather than growing a second, subtly different copy of it.
+export function isTypingTarget(target) {
   if (!target) return false;
   const tag = typeof target.tagName === "string" ? target.tagName.toLowerCase() : "";
   if (tag === "input" || tag === "textarea") return true;

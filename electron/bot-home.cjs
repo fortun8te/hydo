@@ -211,6 +211,47 @@ compression:
 `;
 
 /**
+ * Read the `mode:` scalar out of a profile config's LAST `approvals:` block
+ * (same "last block wins" rule as `withDeny` below — YAML honours the final
+ * duplicate key, so a mode set by a Settings UI must land there, not in an
+ * earlier shadowed block). Returns null when no explicit mode is written,
+ * which is the "silently inheriting Hermes' smart default" case the UI needs
+ * to tell apart from an actual choice.
+ */
+function extractApprovalsMode(text) {
+  const lines = String(text || "").split("\n");
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) if (/^approvals:/.test(lines[i])) at = i;
+  if (at < 0) return null;
+  for (let i = at + 1; i < lines.length && /^\s/.test(lines[i]); i++) {
+    const m = /^\s+mode:\s*(.+?)\s*(#.*)?$/.exec(lines[i]);
+    if (m) return m[1].replace(/^["']|["']$/, "").replace(/["']$/, "");
+  }
+  return null;
+}
+
+/**
+ * Set (or insert) `mode:` in the LAST `approvals:` block, leaving every
+ * other key in that block — timeout, cron_mode, deny, smart_policy, etc. —
+ * untouched.
+ */
+function withMode(text, mode) {
+  const lines = String(text).split("\n");
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) if (/^approvals:/.test(lines[i])) at = i;
+  if (at < 0) return `${text.replace(/\s*$/, "")}\napprovals:\n  mode: ${mode}\n`;
+  let end = at + 1;
+  for (; end < lines.length && /^\s/.test(lines[end]); end++) {
+    if (/^\s+mode:\s*/.test(lines[end])) {
+      lines[end] = `  mode: ${mode}`;
+      return lines.join("\n");
+    }
+  }
+  lines.splice(at + 1, 0, `  mode: ${mode}`);
+  return lines.join("\n");
+}
+
+/**
  * Fold the deny globs INTO whichever `approvals:` block the file ends up with.
  *
  * The first version of this emitted its own `approvals:` block, and the launch
@@ -336,15 +377,24 @@ function writeProfileConfig(home) {
     // and churn buys nothing.
     if (fs.existsSync(file)) {
       const cur = fs.readFileSync(file, "utf8");
-      if (cur === want) return;
+      // `prepare()` runs at the start of every turn, so a plain `want` here
+      // would silently overwrite an `approvals.mode` a user set for THIS bot
+      // (via Settings/BotRail) with whatever the launch config mirrors in —
+      // the exact "runs every turn, clobbers a per-bot choice" trap this repo
+      // keeps finding. Carrying the CURRENT file's mode forward makes this a
+      // no-op when nobody has overridden it (mirrored value === mirrored
+      // value) and a real preservation when they have.
+      const keepMode = extractApprovalsMode(cur);
+      const finalWant = keepMode ? withMode(want, keepMode) : want;
+      if (cur === finalWant) return;
       // Only ours is replaced. A profile someone edited by hand keeps what
       // they wrote; the mirrored blocks are appended to it instead.
       if (cur.startsWith("# Written by Hydo.")) {
-        fs.writeFileSync(file, want);
+        fs.writeFileSync(file, finalWant);
         return;
       }
       if (cur.includes("tail_mode")) return;
-      fs.writeFileSync(file, `${cur.replace(/\s*$/, "")}\n${want}`);
+      fs.writeFileSync(file, `${cur.replace(/\s*$/, "")}\n${finalWant}`);
       return;
     }
     fs.writeFileSync(file, want);
@@ -477,11 +527,130 @@ function readSharedMemory(hydoDir) {
   }
 }
 
+/**
+ * Hermes' own code default (config_defaults.py: `"approvals": {"mode": "smart"}`).
+ * Used only to LABEL an inherited value honestly — never written as a
+ * "choice" on a bot that has none, and never widened past what Hermes itself
+ * ships with.
+ */
+const DEFAULT_APPROVAL_MODE = "smart";
+
+/**
+ * The effective `approvals.mode` for one bot's own profile — never the
+ * launch home. `isDefault: true` means the profile's config.yaml has no
+ * explicit `mode:` line, i.e. this bot is silently inheriting Hermes' smart
+ * default rather than running on a choice anyone made. That distinction is
+ * the whole point: docs/SAFETY.md's gap #1 is that this was invisible.
+ */
+function getApprovalMode(botId) {
+  const file = path.join(profileDir(botId), "config.yaml");
+  let text = "";
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return { mode: DEFAULT_APPROVAL_MODE, isDefault: true };
+  }
+  const mode = extractApprovalsMode(text);
+  return mode ? { mode, isDefault: false } : { mode: DEFAULT_APPROVAL_MODE, isDefault: true };
+}
+
+/**
+ * Write `approvals.mode` into THIS bot's own profile config.yaml — never
+ * `~/.hermes/config.yaml` (the launch home), which is exactly the class of
+ * bug `docs/HERMES-GAPS.md` documents for `learning.frames`. Only `smart`
+ * and `manual` are accepted: `off` is Hermes' own no-prompts knob, and this
+ * app is never the one that turns it on for someone.
+ */
+function setApprovalMode(botId, mode) {
+  if (mode !== "smart" && mode !== "manual") {
+    throw new Error(`refusing to set approvals.mode to "${mode}" — only smart/manual are offered here`);
+  }
+  const home = profileDir(botId);
+  ensureDir(home);
+  const file = path.join(home, "config.yaml");
+  let text = "";
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    text = "";
+  }
+  fs.writeFileSync(file, withMode(text || "approvals:\n", mode));
+  return getApprovalMode(botId);
+}
+
+/**
+ * The permanent "always" allowlist Hermes accumulates per profile
+ * (`tools/approval.py:save_permanent_allowlist` writes `command_allowlist`
+ * as a top-level YAML list). Read-only text parse, same reasoning as
+ * `yamlBlocks` above: no YAML dependency for four lines of format.
+ */
+function readAllowlist(botId) {
+  const file = path.join(profileDir(botId), "config.yaml");
+  let text = "";
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  const lines = text.split("\n");
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) if (/^command_allowlist:/.test(lines[i])) at = i;
+  if (at < 0) return [];
+  const out = [];
+  for (let i = at + 1; i < lines.length && /^\s/.test(lines[i]); i++) {
+    const m = /^\s*-\s*(.+?)\s*$/.exec(lines[i]);
+    if (m) out.push(m[1].replace(/^["']|["']$/g, ""));
+  }
+  return out;
+}
+
+function writeAllowlist(botId, patterns) {
+  const file = path.join(profileDir(botId), "config.yaml");
+  let text = "";
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch {
+    text = "";
+  }
+  const lines = text.split("\n");
+  const body = patterns.length
+    ? [`command_allowlist:`, ...patterns.map((p) => `  - ${JSON.stringify(p)}`)]
+    : [`command_allowlist: []`];
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) if (/^command_allowlist:/.test(lines[i])) at = i;
+  if (at < 0) {
+    fs.writeFileSync(file, `${text.replace(/\s*$/, "")}\n${body.join("\n")}\n`);
+    return;
+  }
+  let end = at + 1;
+  while (end < lines.length && /^\s/.test(lines[end])) end++;
+  lines.splice(at, end - at, ...body);
+  fs.writeFileSync(file, lines.join("\n"));
+}
+
+/**
+ * Revoke one entry from a bot's own permanent allowlist. Additive UI (a
+ * button that removes something) never gets to write an allowlist longer
+ * than what was already there — `patterns` here can only shrink.
+ */
+function revokeAllowlistEntry(botId, pattern) {
+  const current = readAllowlist(botId);
+  const next = current.filter((p) => p !== pattern);
+  if (next.length === current.length) return { changed: false, allowlist: current };
+  writeAllowlist(botId, next);
+  return { changed: true, allowlist: next };
+}
+
 module.exports = {
   profileName,
   profileDir,
   workspaceDir,
   sharedMemoryFile,
+  DEFAULT_APPROVAL_MODE,
+  getApprovalMode,
+  setApprovalMode,
+  readAllowlist,
+  revokeAllowlistEntry,
   prepare,
   appendSubagentLog,
   readSharedMemory,

@@ -1428,3 +1428,15 @@ textarea {
   background: var(--sand-ok, #2bb673);
   box-shadow: 0 0 0 2px var(--sand-bg-base, #070707);
 }
+
+/* The glow's outer bloom, dimmed for the light theme.
+   Tuned against the dark ground the app shipped with, a bloom this wide reads
+   as a dirty smudge on a white sidebar — the same halo, at half strength, is
+   still a glow there and no longer a stain. Opacity only: the geometry and the
+   per-tint stops (src/umbra/glow.js) stay identical in both themes. */
+.umbra-face .uf-glow-halo {
+  opacity: 1;
+}
+[data-theme="cursor-light"] .umbra-face .uf-glow-halo {
+  opacity: 0.5;
+}

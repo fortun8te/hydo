@@ -11,12 +11,11 @@ const path = require("path");
 
 const ROOT = path.join(__dirname, "..", "src");
 
-// Files intentionally out of scope for this sweep: other agents own these
-// (plugins/rails/computer/umbra), and umbra paints its own SVG system.
-const SKIP = new Set([
-  "screens/plugins.css",
-  "screens/rails.css",
-]);
+// plugins.css and rails.css were fenced off while other agents held them;
+// both got their own light-mode pass in this session (see the "Job 1"
+// section of the session's task) and are swept like everything else now.
+// umbra paints its own SVG system and stays out of scope.
+const SKIP = new Set([]);
 const SKIP_DIRS = ["umbra"];
 
 // Dark-surface literals that were the actual bug: near-black/near-white greys

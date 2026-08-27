@@ -106,8 +106,28 @@ export function pipLabelOf(agent, conversationId) {
   return String(at) === String(conv) ? "Working here" : "Working in another conversation";
 }
 
+/**
+ * Is there anything in the composer?
+ *
+ * `draft` arrives here either as the composer's text (from the composer
+ * itself) or as a bare boolean (from the transcript). Only its emptiness has
+ * ever mattered to presence — nothing below reads a character of it — and
+ * threading the *string* through the transcript meant every keystroke changed
+ * a Transcript prop and re-rendered the entire message list to move one
+ * presence dot. The boolean form is what lets Transcript memo through a
+ * keystroke.
+ *
+ * The boolean has to be handled before the coercion: `String(false)` is
+ * "false", which is very much truthy, so a false draft would otherwise read as
+ * a full one.
+ */
+function draftIsFilled(draft) {
+  if (typeof draft === "boolean") return draft;
+  return String(draft || "").trim().length > 0;
+}
+
 export function userTypingOf(draft, lastKeyAt, now, idleMs = USER_IDLE_MS) {
-  if (!String(draft || "").trim()) return false;
+  if (!draftIsFilled(draft)) return false;
   const t = Number(lastKeyAt) || 0;
   const n = Number(now) || 0;
   const windowMs = Number(idleMs) > 0 ? Number(idleMs) : USER_IDLE_MS;
@@ -145,7 +165,7 @@ export function presenceOf(input = {}) {
   const leaveMs = num(input.leaveMs) > 0 ? num(input.leaveMs) : USER_LEAVE_MS;
   const readMs = num(input.readMs) > 0 ? num(input.readMs) : READ_HOLD_MS;
 
-  const draftOn = String(input.draft || "").trim().length > 0;
+  const draftOn = draftIsFilled(input.draft);
   const typing = userTypingOf(input.draft, lastKeyAt, now, idleMs);
   const joined = typing && now - composeAt >= joinMs;
   const leaving = draftOn && !typing && now - lastKeyAt < idleMs + leaveMs;
@@ -196,7 +216,7 @@ export function composerExtrasForMember(agentId, waitId, extras = {}) {
   return {
     sending: isWait ? !!extras.sending : false,
     linger: isWait ? !!extras.linger : false,
-    draft: isWait ? extras.draft : "",
+    draft: isWait ? extras.draft : false,
     lastKeyAt: extras.lastKeyAt,
     composeAt: extras.composeAt,
     since: extras.since,

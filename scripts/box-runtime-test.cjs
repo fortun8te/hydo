@@ -512,7 +512,24 @@ console.log("box-runtime-test (presets) ok");
   const m = /const boxBlock =([\s\S]*?)\n        : "";/.exec(store);
   if (!m) throw new Error("boxBlock not found");
   const block = m[1];
-  if (block.length > 2000) throw new Error(`boxBlock is taxed every turn; keep it short (${block.length})`);
+  // Measure the PROSE, per branch, not the source region.
+  //
+  // This used to cap the whole `const boxBlock = ...` source at 2000 chars as a
+  // stand-in for "the model pays for this every turn". That broke the moment a
+  // second branch was added for teammates with no shell — two mutually
+  // exclusive branches, only ever one of which ships, counted as one long one.
+  // The source is not what is taxed; the emitted string is.
+  const branches = block.split(/\n\s*: agent\.boxEnabled/).map((b) => b.match(/"[^"]{20,}"/g) || []);
+  if (branches.length < 2) throw new Error("expected a no-shell branch and a shell branch");
+  for (const strings of branches) {
+    const prose = strings.join(" ");
+    if (prose.length > 2000) {
+      throw new Error(`a boxBlock branch is taxed every turn; keep it short (${prose.length})`);
+    }
+  }
+  // A teammate without `terminal` cannot run `box exec` at all, so it must be
+  // told which switch to ask for rather than handed a command it cannot run.
+  if (!/hasShell/.test(store)) throw new Error("boxBlock must check for a shell before naming box exec");
   // The expensive default, named before the model reaches for it. A 1280x800
   // screenshot is ~1,400 tokens and a twenty-step look-and-click loop is
   // ~28,000; `lux` runs that loop inside the box and answers in text.

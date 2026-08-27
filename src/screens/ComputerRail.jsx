@@ -48,11 +48,26 @@ export default function ComputerRail({ agent, onClose, onOpenRoutines, onCreateR
   // separate fucking starts." Opening this panel must never resume anything —
   // it only ever reads. Waking is the button below, and nothing else.
   const refresh = useCallback(async () => {
-    const s = await window.hydo?.boxStatus?.();
+    // Every one of these is an IPC round-trip to a CLI that can be missing,
+    // hung, or answering from a dead gateway — and a REJECTED promise is not
+    // the same as `{ok:false}`. Unguarded, a throw here escaped as an
+    // unhandled rejection and `loading` was never cleared, so the whole panel
+    // sat on "Checking…" forever and looked like it was still working.
+    let s = null;
+    try {
+      s = await window.hydo?.boxStatus?.();
+    } catch {
+      s = null;
+    }
     setSt({ loading: false, ...(s || {}) });
     if (s && s.signedIn) {
-      const l = await window.hydo?.boxLimits?.();
-      if (l && l.ok) setLim(l);
+      try {
+        const l = await window.hydo?.boxLimits?.();
+        if (l && l.ok) setLim(l);
+      } catch {
+        // Limits are decoration behind the gear. Losing them must not take
+        // the machine controls down with them.
+      }
     }
   }, []);
 
@@ -63,7 +78,15 @@ export default function ComputerRail({ agent, onClose, onOpenRoutines, onCreateR
   async function wake() {
     setBusy("wake");
     setErr("");
-    const res = await window.hydo?.boxEnsure?.({});
+    // A throw is a real outcome here (gateway down, CLI gone). It used to
+    // escape the handler, which meant `setBusy("")` never ran: the button
+    // stayed disabled on "Starting…" with no error under it, forever.
+    let res = null;
+    try {
+      res = await window.hydo?.boxEnsure?.({});
+    } catch (e) {
+      res = { ok: false, reason: (e && e.message) || "Could not start it." };
+    }
     setBusy("");
     // The trial's start budget, refused locally before the wire. Create,
     // resume and fork each spend one of 5/min, 25/hour, 75/day, so a doomed
@@ -77,7 +100,13 @@ export default function ComputerRail({ agent, onClose, onOpenRoutines, onCreateR
   async function sleep() {
     setBusy("stop");
     setErr("");
-    const res = await window.hydo?.boxStop?.();
+    // Same as wake(): a rejection left the button stuck on "Stopping…".
+    let res = null;
+    try {
+      res = await window.hydo?.boxStop?.();
+    } catch (e) {
+      res = { ok: false, reason: (e && e.message) || "Could not stop it." };
+    }
     setBusy("");
     // "busy" is a real answer, not a failure: another teammate is mid-job.
     if (res && !res.ok && res.reason === "busy") {

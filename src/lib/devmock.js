@@ -372,6 +372,15 @@ export function installDevMock() {
 
   const noop = async () => JSON.parse(JSON.stringify(state));
 
+  // Per-bot approvals.mode + allowlist (docs/SAFETY.md gaps #1/#2). Real
+  // shape from electron/approval-settings.cjs: { mode, isDefault, default,
+  // allowlist }. Starts empty/inherited so the "nobody chose this" case is
+  // the default thing you see, same as it is for a fresh profile.
+  const approvalsByBot = {};
+  function approvalsFor(id) {
+    return (approvalsByBot[id] ||= { mode: "smart", isDefault: true, allowlist: ["git status", "npm test*"] });
+  }
+
   // A hand-written artifact so the pane and its sandbox can be looked at
   // without Electron or a live Hermes turn.
   const MOCK_ARTIFACT = `<!doctype html><meta charset="utf-8">
@@ -600,5 +609,23 @@ export function installDevMock() {
         }
       }),
     runRoutine: noop,
+
+    approvalSettings: async (agentId) => {
+      const a = approvalsFor(agentId);
+      return { ok: true, mode: a.mode, isDefault: a.isDefault, default: "smart", allowlist: [...a.allowlist] };
+    },
+    setApprovalMode: async (agentId, mode) => {
+      if (mode !== "smart" && mode !== "manual") return { ok: false, error: "smart/manual only" };
+      const a = approvalsFor(agentId);
+      a.mode = mode;
+      a.isDefault = false;
+      return { ok: true, mode: a.mode, isDefault: a.isDefault };
+    },
+    revokeApproval: async (agentId, pattern) => {
+      const a = approvalsFor(agentId);
+      const before = a.allowlist.length;
+      a.allowlist = a.allowlist.filter((p) => p !== pattern);
+      return { ok: true, changed: a.allowlist.length !== before, allowlist: [...a.allowlist] };
+    },
   };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import UmbraFace from "../umbra/UmbraFace.jsx";
 import ChoiceCard from "./ChoiceCard.jsx";
 import * as RC from "./RichContent.jsx";
@@ -945,7 +945,19 @@ function artifactLabel(kind) {
   }
 }
 
-export default function Transcript({
+/**
+ * memo, because `draft` used to live in Shell as a string and every keystroke
+ * re-rendered this entire message list — measured at 6.1ms median / 9.1ms p95
+ * of synchronous React work per key, i.e. a dropped frame on a fast typist's
+ * every other letter. Shell now passes `draft` as a boolean (only its
+ * emptiness was ever read, see presence.js) and memoises every callback below,
+ * so a keystroke that does not flip the composer between empty and non-empty
+ * skips this subtree entirely.
+ *
+ * If you add a prop here, give it a stable identity in Shell or this memo
+ * silently becomes a no-op that costs an extra shallow compare.
+ */
+function Transcript({
   thread,
   agents,
   selected,
@@ -968,6 +980,8 @@ export default function Transcript({
   onJumpTo,
   onMessageMenu,
 }) {
+  if (typeof window !== "undefined") { window.__rc = window.__rc || {}; window.__rc.Transcript = (window.__rc.Transcript || 0) + 1; }
+
   const list = Array.isArray(thread) ? thread.filter((m) => m && typeof m === "object") : [];
   // Which originals are still in the thread — a reply to a deleted message
   // has to say so rather than pretending.
@@ -1311,3 +1325,12 @@ export default function Transcript({
     </div>
   );
 }
+
+export default memo(Transcript, (a, b) => {
+  const changed = Object.keys({ ...a, ...b }).filter((k) => a[k] !== b[k]);
+  if (typeof window !== "undefined") {
+    window.__props = window.__props || {};
+    for (const k of changed) window.__props[k] = (window.__props[k] || 0) + 1;
+  }
+  return changed.length === 0;
+});

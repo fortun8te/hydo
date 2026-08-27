@@ -9,12 +9,22 @@ const preload = fs.readFileSync(path.join(ROOT, "electron/preload.cjs"), "utf8")
 const main = fs.readFileSync(path.join(ROOT, "electron/main.cjs"), "utf8");
 const gateway = fs.readFileSync(path.join(ROOT, "electron/hermes-gateway.cjs"), "utf8");
 const store = fs.readFileSync(path.join(ROOT, "electron/store.cjs"), "utf8");
+// Almost every handler lives in main.cjs (excluded from this pass), but
+// approval-settings.cjs registers its own three via ipcMain.handle directly —
+// see its header comment for why (registered from store.cjs's own module
+// load instead, guarded on process.versions.electron). A preload call is
+// "wired" if the literal channel string reaches ipcMain.handle ANYWHERE in
+// the main process, not specifically in main.cjs.
+const approvalSettings = fs.readFileSync(path.join(ROOT, "electron/approval-settings.cjs"), "utf8");
 
 const ipc = [...preload.matchAll(/invoke\("hydo:([^"]+)"/g)].map((m) => m[1]);
 assert.ok(ipc.length > 20, "preload hydo API too small");
 for (const name of ipc) {
   const needle = `"hydo:${name}"`;
-  assert.ok(main.includes(needle), `main missing handler hydo:${name}`);
+  assert.ok(
+    main.includes(needle) || approvalSettings.includes(needle),
+    `main missing handler hydo:${name}`
+  );
 }
 
 const must = [
