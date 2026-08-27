@@ -1,15 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { initialOf } from "../lib/marks.js";
 import { fileToAvatar } from "../lib/avatar.js";
-import {
-  Dialog,
-  DialogNav,
-  SectionLabel,
-  RowGroup,
-  Row,
-  Select,
-  Button,
-} from "../kit/ui.jsx";
+import { Dialog, DialogNav, SectionLabel, RowGroup, Row, Select, Button } from "../kit/ui.jsx";
 
 const PANES = [
   { id: "general", label: "General", icon: "settings-gear" },
@@ -37,7 +29,6 @@ const THEME_OPTIONS = [
 
 const ACCENT_OPTIONS = ["Black", "Blue", "Purple"];
 const LANGUAGE_OPTIONS = ["Follow System", "English"];
-
 
 function detectedZone() {
   try {
@@ -85,18 +76,18 @@ function UsageMeter({ usage }) {
       ? usage && usage.available === false
         ? usage.reason || "Hermes is not measuring this yet."
         : "Take a turn and Hermes will report the window."
-      : [used != null && max != null ? `${used} / ${max} tokens` : null, model, compressions ? `${compressions} compressions` : null]
+      : [
+          used != null && max != null ? `${used} / ${max} tokens` : null,
+          model,
+          compressions ? `${compressions} compressions` : null,
+        ]
           .filter(Boolean)
           .join(" · ");
 
   return (
     <>
       <RowGroup>
-        <Row
-          strong
-          label="Context window"
-          description={desc}
-        >
+        <Row strong label="Context window" description={desc}>
           <span className="settings__pct">{pct == null ? "—" : `${Math.round(pct)}%`}</span>
         </Row>
       </RowGroup>
@@ -104,9 +95,8 @@ function UsageMeter({ usage }) {
         <div className="settings__meter-fill" style={{ width: `${width}%` }} />
       </div>
       <p className="settings__note">
-        Hermes compacts history automatically in a turn, and Hydo asks it to
-        compress between turns at 70%. This is the model window, not a Hydo plan
-        meter.
+        Hermes compacts history automatically in a turn, and Hydo asks it to compress between turns at 70%. This is the
+        model window, not a Hydo plan meter.
       </p>
     </>
   );
@@ -218,7 +208,20 @@ function modelSelectOptions(current, ids) {
   return out;
 }
 
-export default function Settings({ settings, selectedId, selectedKind, members, onClose, onChange, onSignOut }) {
+// `accountName` is resolved by Shell, which owns the one definition of the
+// account holder's full name — the sidebar's account row and this dialog's
+// account row must not disagree about who is signed in. Falls back to the
+// stored `userName` so Settings rendered on its own still shows something.
+export default function Settings({
+  settings,
+  accountName,
+  selectedId,
+  selectedKind,
+  members,
+  onClose,
+  onChange,
+  onSignOut,
+}) {
   const pane = settings._pane || "general";
   const appearance = settings.appearance || "dark";
   const accent = settings.accent || "Black";
@@ -244,10 +247,7 @@ export default function Settings({ settings, selectedId, selectedKind, members, 
     const load = window.hydo?.usage;
     if (typeof load !== "function") return undefined;
     // session.usage is per-bot. A selected channel id is not a Hermes session.
-    const agentId =
-      selectedKind === "channel"
-        ? (Array.isArray(members) && members[0]) || undefined
-        : selectedId;
+    const agentId = selectedKind === "channel" ? (Array.isArray(members) && members[0]) || undefined : selectedId;
     Promise.resolve(load(agentId))
       .then((res) => {
         if (!gone) setUsage(res);
@@ -294,12 +294,7 @@ export default function Settings({ settings, selectedId, selectedKind, members, 
       />
 
       <section className="settings__panel">
-        <button
-          type="button"
-          className="settings__close"
-          onClick={onClose}
-          aria-label="Close settings"
-        >
+        <button type="button" className="settings__close" onClick={onClose} aria-label="Close settings">
           <i className="gb-icon gb-icon-remove-close" aria-hidden="true" />
         </button>
 
@@ -309,128 +304,108 @@ export default function Settings({ settings, selectedId, selectedKind, members, 
 
         <div className="settings__scroll">
           <div className="settings__body">
+            {/* One card, not five.
+                General used to be a stack of labelled RowGroups — Account,
+                Appearance, Models, Bot — each its own rounded fill with a
+                heading above it, so the pane read as a pile of separate
+                objects you had to re-orient inside of every time. The
+                reference is a single container: every setting is one row, and
+                a 1px hairline inset from the container's edges is all that
+                separates them. The rows are still in the same order, so the
+                grouping survives as adjacency instead of as chrome. */}
             {pane === "general" && (
-              <>
-                <section className="settings__section">
-                  <SectionLabel>Account</SectionLabel>
-                  <RowGroup>
-                    <AccountRow
-                      name={settings.userName}
-                      email={settings.userEmail}
-                      avatarUrl={settings.userAvatar}
-                      onSignOut={onSignOut}
-                      onAvatar={(userAvatar) => onChange({ userAvatar })}
+              <section className="settings__section">
+                <RowGroup>
+                  <AccountRow
+                    name={accountName || settings.userName}
+                    email={settings.userEmail}
+                    avatarUrl={settings.userAvatar}
+                    onSignOut={onSignOut}
+                    onAvatar={(userAvatar) => onChange({ userAvatar })}
+                  />
+                  <Row divided label="Theme">
+                    <Select
+                      ariaLabel="Theme"
+                      value={appearance}
+                      options={THEME_OPTIONS}
+                      onChange={(v) => onChange({ appearance: v })}
                     />
-                  </RowGroup>
-                </section>
-
-                <section className="settings__section">
-                  <SectionLabel>Appearance</SectionLabel>
-                  <RowGroup>
-                    <Row label="Theme">
-                      <Select
-                        ariaLabel="Theme"
-                        value={appearance}
-                        options={THEME_OPTIONS}
-                        onChange={(v) => onChange({ appearance: v })}
-                      />
-                    </Row>
-                    <Row divided label="Accent">
-                      <Select
-                        ariaLabel="Accent"
-                        value={accent}
-                        options={ACCENT_OPTIONS}
-                        onChange={(v) => onChange({ accent: v })}
-                      />
-                    </Row>
-                    <Row divided label="Language">
-                      <Select
-                        ariaLabel="Language"
-                        value={language}
-                        options={LANGUAGE_OPTIONS}
-                        onChange={(v) => onChange({ language: v })}
-                      />
-                    </Row>
-                  </RowGroup>
-                </section>
-
-
-
-                <section className="settings__section">
-                  <SectionLabel>Models</SectionLabel>
-                  <RowGroup>
-                    <Row
-                      label="Chat model"
-                      description="Hermes uses this for turns. Default is grok-4.6."
-                    >
-                      <Select
-                        ariaLabel="Chat model"
-                        value={chatModel}
-                        options={modelSelectOptions(chatModel, modelOpts)}
-                        onChange={(v) => {
-                          const patch = { model: v };
-                          if (/muse/i.test(v)) patch.provider = "meta-ai";
-                          else if (/grok/i.test(v)) patch.provider = "xai-oauth";
-                          onChange(patch);
-                        }}
-                      />
-                    </Row>
-                    <Row
-                      divided
-                      label="Coding harness"
-                      description="Heavy coding goes here. The working row says Connecting to this when it runs."
-                    >
-                      <Select
-                        ariaLabel="Coding harness"
-                        value={settings.codingHarness || "grok-build"}
-                        options={[
-                          { value: "grok-build", label: "Grok Build" },
-                          { value: "opencode", label: "OpenCode" },
-                          { value: "cursor", label: "Cursor" },
-                          { value: "shell", label: "Workspace shell" },
-                        ]}
-                        onChange={(v) => onChange({ codingHarness: v })}
-                      />
-                    </Row>
-                    <Row
-                      divided
-                      label="Coding / Grok Build"
-                      description="Model flag for grok -p when the harness is Grok Build."
-                    >
-                      <Select
-                        ariaLabel="Coding model"
-                        value={settings.codingModel || ""}
-                        options={[
-                          { value: "", label: "Same as chat" },
-                          { value: "grok-4.6", label: "grok-4.6" },
-                          { value: "grok-4.5", label: "grok-4.5" },
-                          ...modelSelectOptions(settings.codingModel, modelOpts).filter(
-                            (o) => o.value && o.value !== "grok-4.6" && o.value !== "grok-4.5"
-                          ),
-                        ]}
-                        onChange={(v) => onChange({ codingModel: v })}
-                      />
-                    </Row>
-                  </RowGroup>
-                </section>
-
-                <section className="settings__section">
-                  <SectionLabel>Bot</SectionLabel>
-                  <RowGroup>
-                    <Row
-                      label="Timezone"
-                      description="Bots use this timezone for routines and scheduled work."
-                    >
-                      <Select
-                        ariaLabel="Timezone"
-                        value={timezone}
-                        options={[{ value: "auto", label: `Auto-detect (${zone})` }]}
-                        onChange={(v) => onChange({ timezone: v })}
-                      />
-                    </Row>
-                  </RowGroup>
-                </section>
-              </>
+                  </Row>
+                  <Row divided label="Accent">
+                    <Select
+                      ariaLabel="Accent"
+                      value={accent}
+                      options={ACCENT_OPTIONS}
+                      onChange={(v) => onChange({ accent: v })}
+                    />
+                  </Row>
+                  <Row divided label="Language">
+                    <Select
+                      ariaLabel="Language"
+                      value={language}
+                      options={LANGUAGE_OPTIONS}
+                      onChange={(v) => onChange({ language: v })}
+                    />
+                  </Row>
+                  <Row divided label="Chat model" description="Hermes uses this for turns. Default is grok-4.6.">
+                    <Select
+                      ariaLabel="Chat model"
+                      value={chatModel}
+                      options={modelSelectOptions(chatModel, modelOpts)}
+                      onChange={(v) => {
+                        const patch = { model: v };
+                        if (/muse/i.test(v)) patch.provider = "meta-ai";
+                        else if (/grok/i.test(v)) patch.provider = "xai-oauth";
+                        onChange(patch);
+                      }}
+                    />
+                  </Row>
+                  <Row
+                    divided
+                    label="Coding harness"
+                    description="Heavy coding goes here. The working row says Connecting to this when it runs."
+                  >
+                    <Select
+                      ariaLabel="Coding harness"
+                      value={settings.codingHarness || "grok-build"}
+                      options={[
+                        { value: "grok-build", label: "Grok Build" },
+                        { value: "opencode", label: "OpenCode" },
+                        { value: "cursor", label: "Cursor" },
+                        { value: "shell", label: "Workspace shell" },
+                      ]}
+                      onChange={(v) => onChange({ codingHarness: v })}
+                    />
+                  </Row>
+                  <Row
+                    divided
+                    label="Coding / Grok Build"
+                    description="Model flag for grok -p when the harness is Grok Build."
+                  >
+                    <Select
+                      ariaLabel="Coding model"
+                      value={settings.codingModel || ""}
+                      options={[
+                        { value: "", label: "Same as chat" },
+                        { value: "grok-4.6", label: "grok-4.6" },
+                        { value: "grok-4.5", label: "grok-4.5" },
+                        ...modelSelectOptions(settings.codingModel, modelOpts).filter(
+                          (o) => o.value && o.value !== "grok-4.6" && o.value !== "grok-4.5",
+                        ),
+                      ]}
+                      onChange={(v) => onChange({ codingModel: v })}
+                    />
+                  </Row>
+                  <Row divided label="Timezone" description="Bots use this timezone for routines and scheduled work.">
+                    <Select
+                      ariaLabel="Timezone"
+                      value={timezone}
+                      options={[{ value: "auto", label: `Auto-detect (${zone})` }]}
+                      onChange={(v) => onChange({ timezone: v })}
+                    />
+                  </Row>
+                </RowGroup>
+              </section>
             )}
 
             {pane === "usage" && (
@@ -439,8 +414,7 @@ export default function Settings({ settings, selectedId, selectedKind, members, 
                   <SectionLabel>This teammate</SectionLabel>
                   <UsageMeter usage={usage} />
                   <p className="settings__note">
-                    Hydo does not bill. There is no plan meter — only this Hermes
-                    context window.
+                    Hydo does not bill. There is no plan meter — only this Hermes context window.
                   </p>
                 </section>
               </>

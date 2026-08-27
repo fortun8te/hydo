@@ -444,14 +444,22 @@
   flex-direction: column;
 }
 
+/* Explicitly flex. These are bare <button>s, and a button is inline-block by
+   default — the `gap` below did nothing and the mark and its label sat on a
+   shared text baseline instead of centred against each other, which is why
+   the pair never quite matched the reference. */
 .sand-sidebar .sand-plugins,
 .sand-sidebar .sand-account {
+  display: flex;
+  align-items: center;
+  width: 100%;
   gap: 12px;
   padding: 6px 8px;
   border-radius: 10px;
+  text-align: left;
   color: var(--sand-text-primary, #fcfcfc);
   font-family: var(--sand-font-family-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.2;
@@ -463,20 +471,29 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* 40px, and a circle. In the reference both foot rows carry a proper icon
+   well the size of an avatar — the same weight as a person in the roster,
+   because that is what they are: the machine's plugins, and you. At 32 with a
+   15px label they read as a footnote under the list rather than two rows of
+   it. */
 .sand-sidebar .sand-foot__mark {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   flex: none;
   border-radius: 50%;
+  overflow: hidden;
   display: grid;
   place-items: center;
   font-size: 14px;
   color: var(--sand-text-primary, #fcfcfc);
 }
 
+/* Filled, not outlined: the reference's plug sits in a dark disc, so the well
+   is an object next to the avatar below it rather than an empty ring. */
 .sand-sidebar .sand-plugins .sand-foot__mark {
-  border: 1px solid #4a4a4a;
-  background: transparent;
+  border: 0;
+  background: #1c1c1c;
+  box-shadow: inset 0 0 0 1px rgba(252, 252, 252, 0.1);
   color: var(--sand-text-primary, #fcfcfc);
 }
 
@@ -485,12 +502,12 @@
 }
 
 .sand-sidebar .sand-account .sand-initial {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border: 0;
   background: var(--hy-raised-hover);
   color: var(--sand-text-primary, #fcfcfc);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -500,11 +517,13 @@
 }
 
 .sand-sidebar .sand-foot__label {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--sand-text-primary, #fcfcfc);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
   letter-spacing: -0.01em;
 }

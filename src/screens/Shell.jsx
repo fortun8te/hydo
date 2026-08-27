@@ -28,6 +28,29 @@ function pairKey(a, b) {
   return [a, b].sort().join(":");
 }
 
+// Home is switched off, not removed. The dashboard is a second front door and
+// right now it competes with the roster for the same job — you land on it,
+// look at cards about your teammates, and then click through to the teammate
+// you were going to open anyway. Home.jsx stays whole (its empty state is
+// still the landing when you have nobody yet), the CSS stays, and flipping
+// this one constant back to `true` restores the row and the destination.
+const HOME_ENABLED = false;
+
+// The account row in the sidebar wants the person's full name. The store still
+// seeds `settings.userName` with a bare first name from an early default, and
+// a first name alone reads like a nickname sitting under "Plugins". Until
+// settings grows a real full-name field, resolve it here: an explicit
+// `userFullName` wins, then a `userName` that already carries a surname, then
+// the account holder.
+const ACCOUNT_FULL_NAME = "Michael Knaap";
+function accountName(settings) {
+  const full = String(settings?.userFullName || "").trim();
+  if (full) return full;
+  const named = String(settings?.userName || "").trim();
+  if (named.includes(" ")) return named;
+  return ACCOUNT_FULL_NAME;
+}
+
 export default function Shell({ state }) {
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState("");
@@ -90,8 +113,11 @@ export default function Shell({ state }) {
 
   // Home is chosen, not fallen back to. `entries[0]` is still the default on a
   // fresh launch; "home" is the one value that means "show me the dashboard
-  // even though I have teammates".
-  const atHome = state.selectedId === "home";
+  // even though I have teammates". With HOME_ENABLED off that choice cannot be
+  // made — a persisted `selectedId: "home"` from before the flag flipped falls
+  // through to the first conversation instead of stranding you on a screen
+  // there is no longer a row for.
+  const atHome = HOME_ENABLED && state.selectedId === "home";
   const selected = atHome
     ? null
     : entries.find((e) => e.id === state.selectedId) || entries[0] || null;
@@ -372,8 +398,8 @@ export default function Shell({ state }) {
         }}
         onCopyId={(entry) => navigator.clipboard?.writeText(entry.id)}
         onPlugins={() => setPluginsOpen(true)}
-        userName={state.settings.userName}
-        userAvatar={state.settings.userAvatar}
+        showHome={HOME_ENABLED}
+        userName={accountName(state.settings)}
         userAvatar={state.settings.userAvatar}
         accountOpen={accountOpen}
         onAccountToggle={setAccountOpen}
@@ -494,7 +520,14 @@ export default function Shell({ state }) {
             </div>
           )}
           <span className="grow" />
-          {/* The computer, in the header.
+          {/* The computer, and nothing beside it.
+              This is the single top-right affordance now. A gear used to sit
+              here too, and two icons in a corner is one icon too many: the
+              gear was a duplicate of a door you already have in two places
+              (the account menu at the foot of the sidebar, and the command
+              palette), while the computer has no other entrance at all.
+
+              The computer, in the header.
               It was in the sidebar footer next to Plugins, which reads as a
               settings page you go and configure. It is not . it is the machine
               your teammates are working on, so it belongs where you already
@@ -509,15 +542,12 @@ export default function Shell({ state }) {
             aria-label="Computer"
             onClick={() => setSheet("computer")}
           >
-            <i className="gb-icon gb-icon-desktop" />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            title="Settings"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <i className="gb-icon gb-icon-settings-gear" />
+            {/* `device-desktop`, not `desktop`. The icon kit ships 523 named
+                glyphs and `gb-icon-desktop` is not one of them, so this
+                button has been rendering an empty 0x0 box in the corner for
+                as long as it has existed — the class matched no ::before
+                rule at all. `gb-icon-device-desktop` is the real monitor. */}
+            <i className="gb-icon gb-icon-device-desktop" />
           </button>
         </header>
 
@@ -701,6 +731,7 @@ export default function Shell({ state }) {
       {settingsOpen && (
         <Settings
           settings={state.settings}
+          accountName={accountName(state.settings)}
           selectedId={selected?.id}
           selectedKind={selected?.kind}
           members={isChannel ? selected?.members : null}

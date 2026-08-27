@@ -1148,9 +1148,17 @@
 .hy-card__plus { font-size: 22px; line-height: 1; }
 
 /* -- rows: channels, routines, files ------------------------------------ */
+/* Every selector below is scoped to .hy-home on purpose. `.hy-row` and
+   `.hy-row__copy` are ALSO the shared kit's names (src/kit/ui.jsx — the Row
+   inside a RowGroup), and unscoped these rules reached straight into every
+   settings sheet in the app: each kit Row picked up this 13px radius, this
+   opaque #1c1c1c fill and this 1px border, which is precisely why Settings
+   read as a stack of separate rounded cards instead of one grouped card with
+   hairlines. Home is the only place that wants a row to look like a card, so
+   Home is where the rule lives. */
 .hy-home__rows { display: flex; flex-direction: column; gap: 6px; }
 
-.hy-row {
+.hy-home .hy-row {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1163,11 +1171,11 @@
   text-align: left;
   color: inherit;
 }
-.hy-row:hover { background: var(--hy-raised, #2e2e2e); }
-.hy-row:focus-visible { outline: 2px solid var(--sand-accent, #2a92fe); outline-offset: 2px; }
-.hy-row.is-off { opacity: 0.55; }
+.hy-home .hy-row:hover { background: var(--hy-raised, #2e2e2e); }
+.hy-home .hy-row:focus-visible { outline: 2px solid var(--sand-accent, #2a92fe); outline-offset: 2px; }
+.hy-home .hy-row.is-off { opacity: 0.55; }
 
-.hy-row__icon {
+.hy-home .hy-row__icon {
   flex: none;
   display: grid;
   place-items: center;
@@ -1175,13 +1183,13 @@
   height: 26px;
   color: var(--sand-text-secondary, #fcfcfc99);
 }
-.hy-row__copy { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
-.hy-row__name {
+.hy-home .hy-row__copy { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.hy-home .hy-row__name {
   font-size: 13.5px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.hy-row__sub { font-size: 11.5px; color: var(--sand-text-tertiary, #8d8d8d); }
-.hy-row > .gb-icon { flex: none; font-size: 12px; color: var(--sand-text-tertiary, #8d8d8d); }
+.hy-home .hy-row__sub { font-size: 11.5px; color: var(--sand-text-tertiary, #8d8d8d); }
+.hy-home .hy-row > .gb-icon { flex: none; font-size: 12px; color: var(--sand-text-tertiary, #8d8d8d); }

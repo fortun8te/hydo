@@ -55,7 +55,7 @@ function BotGlyph() {
 
 function PlugGlyph() {
   return (
-    <svg className="sand-plug" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+    <svg className="sand-plug" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
       <path
         fill="none"
         stroke="currentColor"
@@ -213,6 +213,7 @@ export default function Sidebar({
   accountOpen,
   onAccountToggle,
   onPlugins,
+  showHome = true,
   onSettings,
   onAbout,
   onHelp,
@@ -220,7 +221,10 @@ export default function Sidebar({
   onSignOut,
   sendingId,
 }) {
-  const name = userName || "Michael";
+  // Shell resolves the account holder's full name and passes it down; the
+  // fallback matches, so a Sidebar rendered without the prop (tests, stories)
+  // shows the same row rather than a first name.
+  const name = userName || "Michael Knaap";
   const [newOpen, setNewOpen] = useState(null);
   const [picked, setPicked] = useState([]);
   const [naming, setNaming] = useState(null);
@@ -494,7 +498,12 @@ export default function Sidebar({
 
       {/* Home. A row, not a button in a corner: it is a destination like any
           conversation, so it lives where the destinations live and shows the
-          same selected state they do. */}
+          same selected state they do.
+
+          Off by default right now — Shell owns the switch (HOME_ENABLED) and
+          passes it down as `showHome`. The row is gated rather than deleted so
+          turning the dashboard back on is one constant, not a rewrite. */}
+      {showHome ? (
       <button
         type="button"
         className={`sand-row sand-row--home${selectedId === "home" ? " is-on" : ""}`}
@@ -516,6 +525,7 @@ export default function Sidebar({
           <span className="sand-row__name">Home</span>
         </span>
       </button>
+      ) : null}
 
       <div className="sand-search">
         <i className="gb-icon gb-icon-magnifying-glass" />

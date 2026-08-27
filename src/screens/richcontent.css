@@ -332,9 +332,14 @@
   color: var(--sand-data-purple-5, #c5a7fe);
 }
 
+/* A word processor document is BLUE, the same blue as markdown.
+   Not because doc and markdown are the same thing, but because "a document"
+   is one idea to the person reading the thread: the tile colour is a category
+   cue, not a format taxonomy. Teal here (the old value) made a .docx read as
+   its own third species sitting between markdown and a spreadsheet. */
 .hy-rc .hy-rc-file-tile--doc {
-  background: var(--sand-data-cyan-1, #006055);
-  color: var(--sand-data-cyan-5, #78dbd0);
+  background: var(--sand-data-blue-1, #084382);
+  color: var(--sand-data-blue-5, #80befe);
 }
 
 .hy-rc .hy-rc-file-tile--code {
