@@ -98,6 +98,32 @@ export const BOT_PRESETS = [
   },
 ];
 
+/**
+ * The fields to apply to a bot that ALREADY EXISTS.
+ *
+ * Deliberately narrower than `presetPatch`. A bot you already have has a name
+ * you chose and, if it has been working, a description it wrote for itself
+ * once it learned what it actually does here . overwriting either with a
+ * preset's guess is a worse bot, not a better one.
+ *
+ * So this sets capability, not identity: the profile floor, the extra
+ * toolsets, whether it may use the shared machine. The label and description
+ * fill in only when they are empty, because an empty one helps nobody.
+ */
+export function roleFor(preset, agent = {}) {
+  if (!preset) return {};
+  const patch = {
+    toolProfile: preset.profile || "chat",
+    toolsets: Array.isArray(preset.toolsets) ? preset.toolsets : [],
+    boxEnabled: preset.boxEnabled === true,
+    // A role is a floor, not a pin. Auto still climbs from here.
+    profilePinned: false,
+  };
+  if (!String(agent.label || "").trim()) patch.label = preset.label || "";
+  if (!String(agent.description || "").trim()) patch.description = preset.description || "";
+  return patch;
+}
+
 /** The fields `createAgent` takes, for a chosen preset. */
 export function presetPatch(preset) {
   if (!preset) return {};

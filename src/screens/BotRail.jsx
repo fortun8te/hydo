@@ -5,6 +5,7 @@ import { COLORS, SHAPES, isCustomHex } from "../lib/marks.js";
 import { botWorks } from "../lib/working.js";
 import { pipOf } from "../lib/presence.js";
 import { pluginPrettyName } from "../lib/plugin-icons.js";
+import { BOT_PRESETS, roleFor } from "../lib/bot-presets.js";
 
 const FALLBACK_PROFILES = [
   { name: "chat", tokens: 5100 },
@@ -309,6 +310,32 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           onChange={(e) => onChange({ description: e.target.value })}
         />
       </label>
+      {/* Point an existing bot at a use case.
+          Every teammate made before presets existed has a default profile and
+          an empty description, and re-making it to get one is absurd. This
+          sets CAPABILITY only . the name you chose and any description the bot
+          wrote for itself are left alone, because a preset's guess at those is
+          a worse bot, not a better one. */}
+      <div className="bot-rail__field">
+        <span className="bot-rail__field-label">Role</span>
+        <div className="bot-rail__roles">
+          {BOT_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="bot-rail__role"
+              title={p.blurb}
+              onClick={() => onChange(roleFor(p, agent))}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+        <p className="bot-rail__cost">
+          Sets what it can reach. Leaves its name alone, and its description
+          unless that is still empty.
+        </p>
+      </div>
       <div className="bot-rail__field">
         <span className="bot-rail__field-label">Mode</span>
         <div className="bot-rail__presets" role="group" aria-label="Mode">

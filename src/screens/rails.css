@@ -1219,3 +1219,30 @@ aside.routine-rail .routine-rail__toolbar {
   white-space: nowrap;
 }
 .bot-rail .bot-rail__proc-stop { flex: none; padding: 2px 9px; font-size: 11.5px; }
+
+/* Point an existing bot at a use case. Chips rather than rows: the blurb
+   already lives in the create dialog, and by the time you are in the rail you
+   are adjusting a bot you know. */
+.bot-rail .bot-rail__roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.bot-rail .bot-rail__role {
+  padding: 4px 10px;
+  border: 1px solid var(--sand-line, #ffffff12);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.bot-rail .bot-rail__role:hover {
+  background: var(--hy-raised, #2e2e2e);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+.bot-rail .bot-rail__role:focus-visible {
+  outline: 2px solid var(--sand-accent, #2a92fe);
+  outline-offset: 2px;
+}
