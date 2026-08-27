@@ -74,8 +74,26 @@ Wiring it needs a `profile` param on the RPC, which is a Hermes-side change.
   prompt or a reference photo, hatch, name, scale, export. Sitting next to an
   app whose defining visual is an avatar.
 
-## Known coherence gap
+## Corrected: attached images DO reach the teammate
 
-`vision` is in no profile, so a user can attach an image and the teammate
-cannot look at it. The gateway comments call this a deliberate deferral pending
-a VLM. It is still the most surprising thing in the app.
+This file used to say that `vision` is in no profile, so a user could attach an
+image and the teammate could not look at it — and called it the most surprising
+thing in the app. That was wrong, and acting on it would have meant adding a
+toolset to every profile and paying its tokens on every turn for nothing.
+
+The `vision` TOOLSET is tools. An attached image is CONTENT. They are different
+paths. `tui_gateway/methods_prompt.py:1020` (`image.attach_bytes`) queues bytes
+onto `session["attached_images"]`, and `prompt.submit` turns that queue into
+vision tiles in the prompt itself — no toolset involved. Hydo's own end of it is
+live: `Composer.jsx` reads the file, `store.cjs:1686` calls
+`gateway.attachImageBytes`, and `main.cjs:567` covers the by-path case.
+
+Worth knowing, because it is the trap this file exists to document: Hermes had
+the launch-home bug here too and already fixed it. `_session_images_dir`
+(`server.py:12440`) anchors the write on the session's `profile_home` because
+attach RPCs run BEFORE `prompt.submit` installs the profile override — so
+`get_hermes_home()` there would return the gateway's launch home and the agent
+would look for the upload somewhere it was never written. Their issue #69575.
+
+Read, not run: no live turn with an image was sent from Hydo to confirm the
+model describes the picture. The wiring is traced end to end on both sides.
