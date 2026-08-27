@@ -372,7 +372,6 @@ export default function Shell({ state }) {
         }}
         onCopyId={(entry) => navigator.clipboard?.writeText(entry.id)}
         onPlugins={() => setPluginsOpen(true)}
-        onComputer={() => setSheet("computer")}
         userName={state.settings.userName}
         userAvatar={state.settings.userAvatar}
         userAvatar={state.settings.userAvatar}
@@ -495,22 +494,23 @@ export default function Shell({ state }) {
             </div>
           )}
           <span className="grow" />
-          {/* Watch this teammate's screen, from its name in the header . the
-              place you already are when you are wondering what it is doing.
-              Only for a teammate allowed on the machine, and only while the
-              machine is actually up: an icon that opens nothing is worse than
-              no icon. */}
-          {!isChannel && !peer && selected?.boxEnabled && boxUp ? (
-            <button
-              type="button"
-              className="icon-btn"
-              title={`Watch ${selected.name}'s screen`}
-              aria-label={`Watch ${selected.name}'s screen`}
-              onClick={() => setSheet("computer")}
-            >
-              <i className="gb-icon gb-icon-desktop" />
-            </button>
-          ) : null}
+          {/* The computer, in the header.
+              It was in the sidebar footer next to Plugins, which reads as a
+              settings page you go and configure. It is not . it is the machine
+              your teammates are working on, so it belongs where you already
+              are when you wonder what one of them is doing. Always present:
+              the screen it opens explains the machine whether or not it
+              happens to be awake, and an icon that appears and disappears is
+              one you never learn the position of. */}
+          <button
+            type="button"
+            className={boxUp ? "icon-btn is-live" : "icon-btn"}
+            title={boxUp ? "The computer is awake" : "Computer"}
+            aria-label="Computer"
+            onClick={() => setSheet("computer")}
+          >
+            <i className="gb-icon gb-icon-desktop" />
+          </button>
           <button
             type="button"
             className="icon-btn"

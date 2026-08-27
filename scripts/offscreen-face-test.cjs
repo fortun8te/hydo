@@ -40,7 +40,14 @@ const ROOT = path.join(__dirname, "..");
 const face = fs.readFileSync(path.join(ROOT, "src/umbra/UmbraFace.jsx"), "utf8");
 
 // ---- the gate exists and feeds the loop -----------------------------------
-assert.ok(/function useOnScreen\(ref\)/.test(face), "there is an on-screen gate");
+assert.ok(/function useOnScreen\(\)/.test(face), "there is an on-screen gate");
+// The gate hands back a CALLBACK ref, not an object ref. UmbraFace renders two
+// different <svg> roots and an object ref with a stable `[ref]` dep kept
+// observing whichever one committed first, long after it left the DOM.
+assert.ok(
+  /const \[el, setEl\] = useState\(null\);[\s\S]{0,200}watchSeen\(el, setSeen\), \[el\]\)/.test(face),
+  "the gate re-observes when the observed element is swapped"
+);
 assert.ok(
   /!still && onScreen,/.test(face),
   "the rAF loop only runs when the face is both animating AND on screen"
@@ -87,3 +94,26 @@ assert.equal(
 );
 
 console.log("offscreen-face-test OK");
+
+// ---- the frame loop is given every value it reads --------------------------
+//
+// `useLiveFrame` calls `detailFor(size)`, and for a while `size` was not one of
+// its parameters and not module scope. That is a ReferenceError thrown into the
+// effect's own `try`, whose `catch` answers by setting the frame to null — so
+// every animating face in the app fell back to its rest frame, with no error in
+// any console. Measured in a real Electron window: 0 of 5 Home faces moved
+// before the fix, 5 of 5 after.
+//
+// The lesson is not about `size`. It is that a `catch` around a whole animation
+// setup turns a typo into a silent, app-wide freeze, so the inputs to that
+// block are worth asserting by name.
+const sig = /function useLiveFrame\(([^)]*)\)/.exec(face);
+assert.ok(sig, "useLiveFrame exists");
+assert.ok(
+  /\bsize\b/.test(sig[1]),
+  "useLiveFrame takes `size` — it calls detailFor(size), and a free `size` freezes every face"
+);
+assert.ok(
+  /\}, \[active, shapeId, stagger, idleSeed, size\]\);/.test(face),
+  "the frame effect re-runs when size changes, or a resized face keeps the wrong tessellation"
+);

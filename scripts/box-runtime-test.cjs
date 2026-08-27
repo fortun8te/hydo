@@ -35,7 +35,7 @@ function harness({ boxId = "", trial = true, existing = null } = {}) {
     exec: async (args) => {
       calls.push(args.join(" "));
       const cmd = args[0];
-      if (cmd === "status") return { ok: true, json: { account: { loginState: "signed in" } } };
+      if (cmd === "status") return { ok: true, json: { account: { loginState: "active", identifier: "t@example.com" } } };
       if (cmd === "limits") {
         return { ok: true, json: { accessTier: trial ? "trial" : "user", creditBalanceHours: 555 } };
       }
@@ -184,7 +184,7 @@ async function main() {
         h.adopted = id;
       },
       exec: async (args) => {
-        if (args[0] === "status") return { ok: true, json: { account: { loginState: "signed in" } } };
+        if (args[0] === "status") return { ok: true, json: { account: { loginState: "active", identifier: "t@example.com" } } };
         if (args[0] === "limits") return { ok: true, json: { accessTier: "trial" } };
         // The fake mirrors the real CLI: the default filter is RUNNING only,
         // so a stopped box is only visible with --all. Without this the test
@@ -213,7 +213,7 @@ async function main() {
       getBoxId: () => "",
       setBoxId: () => {},
       exec: async (args) => {
-        if (args[0] === "status") return { ok: true, json: { account: { loginState: "signed in" } } };
+        if (args[0] === "status") return { ok: true, json: { account: { loginState: "active", identifier: "t@example.com" } } };
         if (args[0] === "limits") return { ok: true, json: { accessTier: "trial" } };
         if (args[0] === "list") {
           return { ok: true, json: { boxes: [{ id: "bx_a", state: "idle" }, { id: "bx_b", state: "idle" }] } };

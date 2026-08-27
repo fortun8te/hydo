@@ -422,10 +422,16 @@ function watchSeen(el, fn) {
  * frames; being wrong in the other direction freezes a mark the user is
  * looking at.
  */
-function useOnScreen(ref) {
+function useOnScreen() {
   const [seen, setSeen] = useState(true);
-  useEffect(() => watchSeen(ref.current, setSeen), [ref]);
-  return seen;
+  const [el, setEl] = useState(null);
+  useEffect(() => watchSeen(el, setSeen), [el]);
+  // A callback ref, not an object ref: this component renders TWO different
+  // <svg> roots (the blank one and the real one) and an object ref with a
+  // `[ref]` effect keeps observing whichever element happened to commit first,
+  // even after that element is gone from the DOM. The callback fires on every
+  // swap, so the observer always watches the node actually on screen.
+  return [seen, setEl];
 }
 
 // -------------------------------------------------------------- reduced motion
@@ -552,7 +558,7 @@ function pickMorph(from, to) {
   };
 }
 
-function useLiveFrame(shapeId, motionId, cfg, active, stagger, morphRef, pokeRef, idleSeed = 0) {
+function useLiveFrame(shapeId, motionId, cfg, active, stagger, morphRef, pokeRef, idleSeed = 0, size = 64) {
   const [frame, setFrame] = useState(null);
   const avatarRef = useRef(null);
   const inputRef = useRef(null);
@@ -768,7 +774,7 @@ function useLiveFrame(shapeId, motionId, cfg, active, stagger, morphRef, pokeRef
       setFrame(null);
     }
     return () => stop();
-  }, [active, shapeId, stagger, idleSeed]);
+  }, [active, shapeId, stagger, idleSeed, size]);
 
   return frame;
 }
@@ -901,8 +907,7 @@ export default function UmbraFace({
   // for the life of the app, which is exactly the artificial regularity the
   // aperiodic scheduler exists to kill.
   const [idleSeed] = useState(() => Math.random() * 1000);
-  const hostRef = useRef(null);
-  const onScreen = useOnScreen(hostRef);
+  const [onScreen, hostRef] = useOnScreen();
   const liveFrame = useLiveFrame(
     shapeId,
     motionId,
@@ -911,7 +916,13 @@ export default function UmbraFace({
     stagger,
     morphRef,
     pokeRef,
-    idleSeed
+    idleSeed,
+    // `size` picks the tessellation detail. It used to be read here as a free
+    // variable that did not exist, so `detailFor(size)` threw a ReferenceError
+    // into the effect's own `catch`, which answered by setting the frame to
+    // null. Every face fell back to its rest frame and the whole app's
+    // animation was off, with no error anywhere. Passing it is the fix.
+    size
   );
   // NOT useId(): two React roots on one page both start their ids at r0, and a
   // duplicate <radialGradient id> means url(#...) resolves to whichever face

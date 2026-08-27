@@ -213,7 +213,6 @@ export default function Sidebar({
   accountOpen,
   onAccountToggle,
   onPlugins,
-  onComputer,
   onSettings,
   onAbout,
   onHelp,
@@ -824,16 +823,7 @@ export default function Sidebar({
           <span className="sand-foot__label">Plugins</span>
         </button>
 
-        {/* The team computer. Next to Plugins because it is the same kind of
-          thing: a capability the whole roster shares, not a per-bot setting. */}
-      <button type="button" className="sand-plugins" onClick={onComputer} data-tip="Computer">
-        <span className="sand-foot__mark">
-          <i className="gb-icon gb-icon-desktop" />
-        </span>
-        <span className="sand-foot__label">Computer</span>
-      </button>
-
-      <div className="sand-account-wrap">
+        <div className="sand-account-wrap">
           {accountOpen && (
             <AccountMenu
               userName={name}

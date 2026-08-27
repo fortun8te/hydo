@@ -1412,3 +1412,19 @@ textarea {
     animation: none;
   }
 }
+
+/* The computer icon while the machine is awake. A dot rather than a colour
+   change: the icon must stay legible, and "there is something running" is a
+   different claim from "this button is active". */
+.icon-btn.is-live { position: relative; }
+.icon-btn.is-live::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sand-ok, #2bb673);
+  box-shadow: 0 0 0 2px var(--sand-bg-base, #070707);
+}

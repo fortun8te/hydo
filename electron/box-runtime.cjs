@@ -124,7 +124,15 @@ function createBoxRuntime(opts = {}) {
     if (!isInstalled()) return { ok: true, installed: false, signedIn: false };
     const st = await exec(["status"], { timeout: 20_000 });
     const acct = (st.ok && st.json && st.json.account) || {};
-    const signedIn = String(acct.loginState || "").toLowerCase() === "signed in";
+    // Signed in is "not signed out", not a guess at the positive word.
+    //
+    // This was `=== "signed in"`, written from the signed-OUT value and a
+    // guess at its opposite. The real one is "active", so a signed-in account
+    // on a paid trial was told to run `box onboard`. An identifier plus the
+    // absence of a signed-out marker is the check that survives the vendor
+    // renaming its vocabulary, which it evidently does.
+    const loginState = String(acct.loginState || acct.status || "").toLowerCase();
+    const signedIn = !!acct.identifier && !!loginState && !/signed[\s_-]?out|logged[\s_-]?out/.test(loginState);
     const id = getBoxId();
     const box = signedIn && id ? await info(id) : null;
     return {
