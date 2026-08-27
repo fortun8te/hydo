@@ -432,6 +432,10 @@ function makeSettle() {
 }
 
 const MORPH_MS = 1080;
+// The body/dots trade. Shorter than a shape morph on purpose: this one fires
+// every time a teammate starts and stops writing, so it has to read as a beat
+// rather than an event.
+const DOTS_MS = 340;
 const MORPH_TURNS = 720;
 const WIND_MS = 420;
 const POKE_KINDS = ["bounce", "excited", "wink", "peek", "nod", "curious"];
@@ -718,6 +722,7 @@ export default function UmbraFace({
   const prevShape = useRef(shapeId);
   const wasDots = useRef(dots);
   const [morphing, setMorphing] = useState(false);
+  const [dotsPhase, setDotsPhase] = useState(null);
   const [poking, setPoking] = useState(false);
 
   useEffect(() => {
@@ -732,13 +737,27 @@ export default function UmbraFace({
     return () => clearTimeout(t);
   }, [shapeId, morph, reduced]);
 
+  // Body <-> dots, both directions.
+  //
+  // This used to bail on `!dots`, so becoming the dots was animated and coming
+  // back was a hard cut: the dots blinked out and the body popped in at full
+  // size. And the dots were mounted the moment `dots` went true, on top of a
+  // body that was still there for the whole morph, so the two overlapped
+  // instead of trading places.
+  //
+  // `dotsPhase` is what both halves key off: it outlives `dots` going false,
+  // which is what keeps the body's return animatable at all.
   useEffect(() => {
     if (dots === wasDots.current) return undefined;
     wasDots.current = dots;
-    if (!dots || reduced) return undefined;
+    if (reduced) return undefined;
     morphRef.current = pickMorph(shapeId, shapeId);
     setMorphing(true);
-    const t = setTimeout(() => setMorphing(false), MORPH_MS + 40);
+    setDotsPhase(dots ? "in" : "out");
+    const t = setTimeout(() => {
+      setMorphing(false);
+      setDotsPhase(null);
+    }, DOTS_MS);
     return () => clearTimeout(t);
   }, [dots, reduced, shapeId]);
 
@@ -892,14 +911,15 @@ export default function UmbraFace({
             ) : null
           )}
         </defs>
+        <g className={dotsPhase ? `uf-body is-${dotsPhase}` : undefined}>
         <g transform={`translate(${size / 2} ${size / 2 - (S.hopY || 0) * size}) scale(${k})`}>
           <g transform={S.groupTransform}>
             {/* NONZERO winding: the depth rings union into one solid body. */}
-            {S.bodyD && !(dots && !morphing) ? (
+            {S.bodyD && !(dots && !dotsPhase) ? (
               <path d={S.bodyD} fill={`url(#${gradId})`} shapeRendering="geometricPrecision" />
             ) : null}
             {/* The hairline self-stroke closes the gaps between depth slices. */}
-            {S.bodyD && paint.seam !== false && !(dots && !morphing) ? (
+            {S.bodyD && paint.seam !== false && !(dots && !dotsPhase) ? (
               <path
                 d={S.bodyD}
                 fill="none"
@@ -909,7 +929,7 @@ export default function UmbraFace({
                 strokeLinecap="round"
               />
             ) : null}
-            {S.bodyD && !(dots && !morphing) ? (
+            {S.bodyD && !(dots && !dotsPhase) ? (
               <g clipPath={`url(#${clipId})`}>
                 {metal ? null : S.texture.map((L, i) =>
                   L.d ? (
@@ -956,7 +976,10 @@ export default function UmbraFace({
             ) : null}
           </g>
         </g>
-        {dots ? <Dots size={size} fill={color.value} still={reduced} /> : null}
+        </g>
+        {dots || dotsPhase === "out" ? (
+          <Dots size={size} fill={color.value} still={reduced} phase={dotsPhase} />
+        ) : null}
       </svg>
     );
   } catch {
@@ -966,14 +989,23 @@ export default function UmbraFace({
 
 // Writing. Three dots where the eyes were, bobbing in turn — declarative SMIL,
 // so a room full of typing bots still schedules no animation frames.
-function Dots({ size, fill, still }) {
+function Dots({ size, fill, still, phase }) {
   const r = size * 0.09;
   const gap = size * 0.26;
   const cy = size * 0.5;
   return (
-    <g fill={fill}>
+    <g fill={fill} className={phase ? `uf-dots is-${phase}` : undefined}>
       {[-1, 0, 1].map((i) => (
-        <circle key={i} cx={size / 2 + i * gap} cy={cy} r={r} opacity={still ? 0.75 : 0.35}>
+        <circle
+          key={i}
+          cx={size / 2 + i * gap}
+          cy={cy}
+          r={r}
+          opacity={still ? 0.75 : 0.35}
+          // Left to right on the way in, right to left on the way out, so the
+          // pair reads as one gesture reversing rather than two animations.
+          style={phase ? { animationDelay: `${(phase === "in" ? i + 1 : 1 - i) * 42}ms` } : undefined}
+        >
           {still ? null : (
             <>
               <animate
