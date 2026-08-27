@@ -35,7 +35,13 @@ try {
   // Narrow on purpose: only the keys where the code default is wrong for a
   // long-lived teammate. Everything else stays Hermes' business, so an upgrade
   // that improves a default still reaches us.
-  assert.ok(!/model:|provider:|toolsets:/.test(body), "it does not restate what Hydo already sends per session");
+  // TOP-LEVEL only. `delegation.model` is a different thing from the session
+  // model . one routes a delegated child, the other is what Hydo already sends
+  // on session.create . and an unanchored /model:/ conflates them.
+  assert.ok(
+    !/^(model|provider|toolsets):/m.test(body),
+    "it does not restate what Hydo already sends per session"
+  );
 
   // Hand-edited settings survive. Rewriting a profile on every launch would
   // silently undo anything the user or the bot put there.
@@ -70,7 +76,7 @@ try {
     fs.rmSync(file, { force: true });
     botHome.prepare(dir, id, "soul");
     const body = fs.readFileSync(file, "utf8");
-    for (const key of ["mcp_servers", "timezone", "web", "skills"]) {
+    for (const key of ["mcp_servers", "timezone", "web", "skills", "delegation", "approvals"]) {
       if (new RegExp(`^${key}:`, "m").test(src)) {
         assert.ok(
           new RegExp(`^${key}:`, "m").test(body),
@@ -86,6 +92,14 @@ try {
     }
     // Still narrow: a profile is meant to be its own thing.
     assert.ok(!/^model:/m.test(body), "not a blind copy of the launch config");
+
+    // `delegation.model` is resolved by Hermes AT EVERY DISPATCH and empty
+    // means "inherit the parent", so without this block a teammate pinned to
+    // an expensive model spends it on every piece of work it fans out . the
+    // opposite of why you fan work out.
+    if (/^delegation:/m.test(src)) {
+      assert.ok(/^delegation:/m.test(body), "subagent routing reaches the bot");
+    }
   }
 
   // ---- adding a plugin reaches EXISTING teammates -------------------------

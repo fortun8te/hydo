@@ -200,7 +200,29 @@ compression:
  * An ALLOWLIST, not a copy of the file: a profile is meant to be its own
  * thing, and blindly inheriting everything would undo that on purpose.
  */
-const MIRROR_KEYS = ["mcp_servers", "timezone", "web", "skills"];
+const MIRROR_KEYS = [
+  "mcp_servers",
+  "timezone",
+  "web",
+  "skills",
+  // Subagent routing. Hermes resolves a delegated child's model from
+  // `delegation.model` AT EVERY DISPATCH, and empty means "inherit the
+  // parent" (config_defaults.py, the delegation block). So a teammate pinned
+  // to an expensive model spends that model on every piece of grunt work it
+  // fans out . which is the opposite of why you fan work out. Mirroring the
+  // block means the choice Michael makes once in his own Hermes config is the
+  // choice his teammates' subagents actually run on.
+  //
+  // Note: `reasoning_effort` is NOT part of this block in this version of
+  // Hermes, whatever third-party guides say. Only model, provider, base_url,
+  // api_key and api_mode are.
+  "delegation",
+  // Approvals. His own config says timeout 90 and cron_mode deny; the code
+  // default is 300 and the profile was silently getting that instead. An
+  // approval prompt that waits five minutes when he chose ninety seconds is
+  // a teammate that looks hung.
+  "approvals",
+];
 
 /**
  * Lift whole top-level blocks out of a YAML file, as text.
