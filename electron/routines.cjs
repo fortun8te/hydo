@@ -125,13 +125,35 @@ function labelTrigger(tr) {
   return cad || "On a schedule";
 }
 
+/** The hour and minute the trigger actually asked for, as cron fields. */
+function hhmm(tr) {
+  const d = new Date((tr && tr.at) || "");
+  if (!Number.isFinite(d.getTime())) return { h: 9, m: 0 };
+  return { h: d.getHours(), m: d.getMinutes() };
+}
+
 function hermesSchedule(tr) {
   if (!tr || tr.kind !== "schedule") return "";
   if (tr.cadence === "hourly") return "every 1h";
   if (tr.cadence === "daily") return "every 1d";
-  if (tr.cadence === "weekdays") return "0 9 * * 1-5";
+  // `weekdays` and `monthly` hardcoded 09:00 and threw the trigger's own time
+  // away, so a routine set for 7am was registered with Hermes for nine . the
+  // app and the cron record disagreed about when it ran. Masked so far only
+  // because these register as `deliver: "local"` and Hydo's own poll is what
+  // posts, which stops being true the moment they run anywhere else.
+  if (tr.cadence === "weekdays") {
+    const { h, m } = hhmm(tr);
+    return `${m} ${h} * * 1-5`;
+  }
   if (tr.cadence === "weekly") return "every 7d";
-  if (tr.cadence === "monthly") return "0 9 1 * *";
+  if (tr.cadence === "monthly") {
+    const { h, m } = hhmm(tr);
+    const day = (() => {
+      const d = new Date(tr.at || "");
+      return Number.isFinite(d.getTime()) ? d.getDate() : 1;
+    })();
+    return `${m} ${h} ${day} * *`;
+  }
   if (tr.cadence === "interval") return `every ${Math.max(1, tr.intervalMin || 30)}m`;
   if (tr.cadence === "once" && tr.at) return String(tr.at);
   if (tr.cadence === "once") return "1m";

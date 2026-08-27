@@ -250,6 +250,138 @@ async function ensureBotDir(id, botId) {
   return res.ok ? { ok: true, dir } : res;
 }
 
+// ── routines that survive the laptop being shut ──────────────────────────
+//
+// Hydo fires routines from a 15s poll in the Electron main process. No Hydo
+// running, no routines . which is the entire problem. The fix is not a better
+// poll: it is to put the trigger somewhere that is awake, and the only such
+// place is the box itself.
+//
+// systemd timers rather than crontab, for one reason that matters here:
+// stop/resume behaves like a reboot, and an ENABLED timer comes back on its
+// own. A crontab entry would too, but a timer also survives `Persistent=true`
+// . it fires a run it slept through instead of silently skipping the morning.
+
+/** A unit name that cannot collide or escape. */
+function unitName(routineId) {
+  return `hydo-${String(routineId || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 32)}`;
+}
+
+/**
+ * systemd OnCalendar for one of Hydo's cadences.
+ *
+ * Returns "" for anything that should NOT live on the box: a one-shot is
+ * better handled by whichever machine is awake when it comes due, and an
+ * unknown cadence must fail loudly here rather than silently register a timer
+ * that fires at the wrong time.
+ */
+function onCalendar(tr) {
+  if (!tr || tr.kind !== "schedule") return "";
+  const at = new Date(tr.at || "");
+  const h = Number.isFinite(at.getTime()) ? at.getHours() : 9;
+  const m = Number.isFinite(at.getTime()) ? at.getMinutes() : 0;
+  const hm = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+  switch (tr.cadence) {
+    case "hourly":
+      return `*-*-* *:${String(m).padStart(2, "0")}:00`;
+    case "daily":
+      return `*-*-* ${hm}`;
+    case "weekdays":
+      return `Mon..Fri *-*-* ${hm}`;
+    case "weekly": {
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const d = Number.isFinite(at.getTime()) ? days[at.getDay()] : "Mon";
+      return `${d} *-*-* ${hm}`;
+    }
+    case "monthly": {
+      const day = Number.isFinite(at.getTime()) ? at.getDate() : 1;
+      return `*-*-${String(day).padStart(2, "0")} ${hm}`;
+    }
+    case "interval": {
+      const mins = Math.max(1, Number(tr.intervalMin) || 30);
+      return `*:0/${mins}`;
+    }
+    default:
+      return "";
+  }
+}
+
+/**
+ * Mirror one routine onto the box as a timer.
+ *
+ * The instruction is written to a FILE and the service reads it, rather than
+ * being interpolated into the unit: a routine is user prose and will contain
+ * quotes, newlines and dollar signs, and a unit file is not a place to find
+ * that out.
+ */
+async function syncRoutine(id, botId, routine) {
+  if (!installed()) return { ok: false, reason: "not-installed" };
+  const trigger = (routine.triggers || []).find((t) => t && t.kind === "schedule");
+  const cal = onCalendar(trigger);
+  if (!cal) return { ok: false, reason: "not-schedulable" };
+
+  const unit = unitName(routine.id);
+  const dir = botDir(botId);
+  const promptFile = `${dir}/routines/${unit}.txt`;
+  // base64 over the wire, so no quoting rule in any of the three shells this
+  // crosses can corrupt somebody's routine.
+  const b64 = Buffer.from(String(routine.instruction || routine.name || ""), "utf8").toString("base64");
+
+  const script = [
+    `mkdir -p ${dir}/routines`,
+    `printf %s '${b64}' | base64 -d > ${promptFile}`,
+    `sudo tee /etc/systemd/system/${unit}.service >/dev/null <<'UNIT'
+[Unit]
+Description=Hydo routine ${unit}
+
+[Service]
+Type=oneshot
+User=box
+WorkingDirectory=${dir}
+ExecStart=/bin/sh -lc 'hermes run --prompt-file ${promptFile}'
+UNIT`,
+    `sudo tee /etc/systemd/system/${unit}.timer >/dev/null <<'UNIT'
+[Unit]
+Description=Hydo routine ${unit}
+
+[Timer]
+OnCalendar=${cal}
+# Fire a run it slept through rather than skipping the morning entirely.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT`,
+    "sudo systemctl daemon-reload",
+    `sudo systemctl enable --now ${unit}.timer`,
+  ].join("\n");
+
+  const res = await exec(id, script, { timeout: 90_000 });
+  return res.ok ? { ok: true, unit, onCalendar: cal } : res;
+}
+
+/** Take a routine off the box when it is paused or deleted. */
+async function unsyncRoutine(id, routineId) {
+  if (!installed()) return { ok: false, reason: "not-installed" };
+  const unit = unitName(routineId);
+  return exec(
+    id,
+    `sudo systemctl disable --now ${unit}.timer 2>/dev/null; ` +
+      `sudo rm -f /etc/systemd/system/${unit}.timer /etc/systemd/system/${unit}.service; ` +
+      `sudo systemctl daemon-reload`,
+    { timeout: 60_000 }
+  );
+}
+
+/** What the box thinks it is going to run, and when. The source of truth. */
+async function listRoutineTimers(id) {
+  if (!installed()) return { ok: false, reason: "not-installed" };
+  const res = await exec(id, "systemctl list-timers 'hydo-*' --all --no-pager", {
+    timeout: 45_000,
+  });
+  return res.ok ? { ok: true, out: res.out } : res;
+}
+
 /**
  * Put the machine to sleep.
  *
@@ -278,5 +410,10 @@ module.exports = {
   exec,
   botDir,
   ensureBotDir,
+  onCalendar,
+  unitName,
+  syncRoutine,
+  unsyncRoutine,
+  listRoutineTimers,
   stop,
 };
