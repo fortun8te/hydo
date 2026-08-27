@@ -492,6 +492,31 @@ export default function Sidebar({
         </span>
       </div>
 
+      {/* Home. A row, not a button in a corner: it is a destination like any
+          conversation, so it lives where the destinations live and shows the
+          same selected state they do. */}
+      <button
+        type="button"
+        className={`sand-row sand-row--home${selectedId === "home" ? " is-on" : ""}`}
+        onClick={() => window.hydo?.select?.("home")}
+        data-tip="Home"
+      >
+        <span className="sand-row__mark sand-home-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15">
+            <path
+              d="M3.6 10.4 12 4l8.4 6.4V19a1.4 1.4 0 0 1-1.4 1.4h-3.6v-5.2H8.6v5.2H5A1.4 1.4 0 0 1 3.6 19z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+        <span className="sand-row__copy">
+          <span className="sand-row__name">Home</span>
+        </span>
+      </button>
+
       <div className="sand-search">
         <i className="gb-icon gb-icon-magnifying-glass" />
         <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Search" />

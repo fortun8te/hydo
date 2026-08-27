@@ -851,3 +851,19 @@
   object-fit: cover;
   display: block;
 }
+
+/* The Home row. Sits above search, because it is where you go, not something
+   you look for. */
+.sand-sidebar .sand-row--home {
+  margin: 0 8px 2px;
+  width: calc(100% - 16px);
+}
+.sand-sidebar .sand-home-icon {
+  display: grid;
+  place-items: center;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  background: transparent;
+}
+.sand-sidebar .sand-row--home.is-on .sand-home-icon {
+  color: var(--sand-text-primary, #fcfcfc);
+}

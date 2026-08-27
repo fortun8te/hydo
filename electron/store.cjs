@@ -2388,6 +2388,15 @@ function createStore(opts = {}) {
       return publicState();
     },
     select(id) {
+      // "home" is a DESTINATION, not the absence of a selection. Without an
+      // explicit value the shell falls back to the first bot, so Home was only
+      // ever reachable by having no bots at all . which is the one moment you
+      // least need a dashboard.
+      if (id === "home") {
+        state.selectedId = "home";
+        save();
+        return publicState();
+      }
       const entry = entryById(id);
       if (entry) {
         state.selectedId = id;

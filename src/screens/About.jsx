@@ -39,7 +39,11 @@ export default function About() {
       <img className="hy-about__icon" src={APP_ICON} alt="" width="92" height="92" />
       <h2 className="hy-about__name">Hydo</h2>
       <p className="hy-about__version">Version {version}</p>
-      <p className="hy-about__legal">Teammates that run on Hermes Agent.</p>
+      <p className="hy-about__legal">
+        Teammates that run on Hermes Agent.
+        <br />
+        {`\u00A9 ${new Date().getFullYear()} Michael Knaap`}
+      </p>
       <button type="button" className="hy-about__copy" onClick={copy}>
         {copied ? "Copied" : "Copy version info"}
       </button>

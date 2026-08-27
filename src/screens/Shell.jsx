@@ -9,6 +9,7 @@ import ChannelRail from "./ChannelRail.jsx";
 import ChannelCreate from "./ChannelCreate.jsx";
 import BotCreate from "./BotCreate.jsx";
 import About from "./About.jsx";
+import Home from "./Home.jsx";
 import Plugins from "./Plugins.jsx";
 import Sheet from "./Sheet.jsx";
 import Transcript from "./Transcript.jsx";
@@ -80,7 +81,13 @@ export default function Shell({ state }) {
     [agents, channels]
   );
 
-  const selected = entries.find((e) => e.id === state.selectedId) || entries[0] || null;
+  // Home is chosen, not fallen back to. `entries[0]` is still the default on a
+  // fresh launch; "home" is the one value that means "show me the dashboard
+  // even though I have teammates".
+  const atHome = state.selectedId === "home";
+  const selected = atHome
+    ? null
+    : entries.find((e) => e.id === state.selectedId) || entries[0] || null;
   const isChannel = selected?.kind === "channel";
   const peer = dmPeerId ? agents.find((a) => a.id === dmPeerId) || null : null;
 
@@ -300,7 +307,7 @@ export default function Shell({ state }) {
         entries={roster}
         agents={agents}
         sections={state.sections || []}
-        selectedId={selected?.id}
+        selectedId={atHome ? "home" : selected?.id}
         query={query}
         onQuery={setQuery}
         collapsed={collapsed}
@@ -490,56 +497,22 @@ export default function Shell({ state }) {
             }}
           />
         ) : (
-          <div
-            className="sand-home"
-            /* The glow follows the pointer. A fixed pool is wallpaper; one
-               that leans toward you is the only cheap way a static screen
-               feels like it noticed you arrive. Written as CSS vars so the
-               move handler never triggers a React render. */
-            onPointerMove={(e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              const x = ((e.clientX - r.left) / r.width - 0.5) * 2;
-              const y = (e.clientY - r.top) / r.height;
-              e.currentTarget.style.setProperty("--glow-x", `${x * 46}px`);
-              e.currentTarget.style.setProperty("--glow-lift", `${(1 - y) * 26}px`);
-              e.currentTarget.style.setProperty("--glow-boost", String(1 + (1 - y) * 0.5));
+          <Home
+            agents={agents}
+            channels={state.channels || []}
+            routines={state.routines || {}}
+            artifacts={state.artifacts || []}
+            userName={state.settings?.userName}
+            onOpen={(id) => window.hydo?.select?.(id)}
+            onNewBot={() => setBotCreate(true)}
+            onNewChannel={() => setChannelCreate(true)}
+            onOpenRoutine={(botId, routineId) => {
+              window.hydo?.select?.(botId);
+              setRoutineId(routineId);
+              setRail("routines");
             }}
-            onPointerLeave={(e) => {
-              e.currentTarget.style.setProperty("--glow-x", "0px");
-              e.currentTarget.style.setProperty("--glow-lift", "0px");
-              e.currentTarget.style.setProperty("--glow-boost", "1");
-            }}
-          >
-            {/* An empty app should show you the thing it makes, not a sentence
-                pointing at a button in the corner. */}
-            <div className="sand-home__marks" aria-hidden="true">
-              {["cyan", "purple", "orange"].map((tint, i) => (
-                <UmbraFace
-                  key={tint}
-                  className={`sand-home__mark sand-home__mark--${i}`}
-                  tint={tint}
-                  shape={["squircle", "blob", "hex"][i]}
-                  size={i === 0 ? 92 : 62}
-                  live
-                  mood="fidget"
-                  poke
-                />
-              ))}
-            </div>
-            <h1 className="sand-home__title">No teammates yet</h1>
-            <p className="sand-home__sub">
-              A teammate is a person-shaped thing with its own memory, its own
-              workspace and its own tools. Make one and tell it what it is for.
-            </p>
-            <div className="sand-home__actions">
-              <button type="button" className="ghost ghost--solid" onClick={() => setBotCreate(true)}>
-                New teammate
-              </button>
-              <button type="button" className="ghost" onClick={() => setChannelCreate(true)}>
-                New channel
-              </button>
-            </div>
-          </div>
+            onOpenArtifact={(id) => setArtifactId(id)}
+          />
         )}
 
         {/* No teammate, nothing to message. A composer on the home screen is a

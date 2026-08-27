@@ -236,7 +236,24 @@ function prepare(hydoDir, botId, soulText) {
   const skillsDest = path.join(home, "skills");
   for (const src of SKILL_SOURCES) linkSkillTree(src, skillsDest);
 
-  fs.writeFileSync(path.join(cwd, "AGENTS.md"), AGENTS_STAMP);
+  // AGENTS.md sits at the FRONT of the prompt, and xAI's cache keys on a
+  // reused prefix — so rewriting it is not free, it costs the 75%
+  // cached-input discount on everything behind it. store.cjs already guards
+  // its own write with a read-and-compare ("rewritten only when it CHANGES"),
+  // but that guard could never hold: `prepare()` runs first on every turn and
+  // clobbered the file back down to the bare stamp, so the compare always
+  // mismatched and the file was rewritten twice per turn, forever.
+  //
+  // The stamp is a floor, not the whole file. If it is already there, whoever
+  // wrote the rest owns the file.
+  const agentsFile = path.join(cwd, "AGENTS.md");
+  let agentsCur = "";
+  try {
+    agentsCur = fs.readFileSync(agentsFile, "utf8");
+  } catch {
+    agentsCur = "";
+  }
+  if (!agentsCur.startsWith(AGENTS_STAMP)) fs.writeFileSync(agentsFile, AGENTS_STAMP);
 
   const hydoMemory = path.join(hydoDir, "bots", botId, "MEMORY.md");
   const hydoUser = path.join(hydoDir, "bots", botId, "USER.md");

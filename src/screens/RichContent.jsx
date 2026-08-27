@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 import { createPortal } from "react-dom";
@@ -798,7 +798,7 @@ function MdBlock({ block, idx, caret }) {
  *   caret — optional boolean; appends the blinking streaming caret to the
  *           last block (matches the transcript's existing `hy-caret`).
  */
-export function Markdown({ text, caret }) {
+export const Markdown = memo(function Markdown({ text, caret }) {
   let blocks;
   try {
     blocks = parseBlocks(text);
@@ -822,7 +822,7 @@ export function Markdown({ text, caret }) {
       </div>
     )
   );
-}
+});
 
 /* --------------------------------------------------------------------------
    File chips
