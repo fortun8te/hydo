@@ -284,7 +284,14 @@ textarea {
   background: var(--sand-fill-ghost-selected, #77777752);
 }
 
-.sand-account img,
+/* The small mark in the account row — but NOT the profile picture.
+   
+   This was `.sand-account img`, which at (0,1,1) outranks the avatar's own
+   `.sand-foot__avatar` (0,1,0). So a real photo was squeezed to 22px with
+   square corners and left floating inside its 40px circle: the picture visibly
+   not filling the ring, which is what "it's glitching weird" looked like.
+   Excluding the avatar by name keeps this rule for what it was written for. */
+.sand-account img:not(.sand-foot__avatar),
 .sand-account .umbra-face {
   width: 22px;
   height: 22px;
