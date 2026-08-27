@@ -326,15 +326,27 @@ function useReducedMotion() {
 // tight stops: the sharp transitions are what the eye reads as polish, and
 // softening them turns it back into plastic.
 const CHROME_RAMP = [
-  [0.0, "#F2F5F8"],  // sky, blown out at the very top
-  [0.16, "#C3CAD2"], // sky falling off
-  [0.34, "#7E868F"], // approaching the horizon
-  [0.44, "#2E3339"], // the horizon band. The dark line is the whole trick.
-  [0.52, "#464C54"],
-  [0.62, "#9BA3AC"], // floor bounce coming back up
-  [0.78, "#D9DEE4"], // bright bounce
-  [0.9, "#8E959D"],
-  [1.0, "#5A6068"],  // shadow terminator at the bottom
+  // Grazing angle at the very top: the sky compresses and goes slightly dim
+  // before it blows out. Without this the top edge looks cut off.
+  [0.0, "#AEB7C2"],
+  [0.05, "#F7FAFD"],  // sky, blown out
+  [0.2, "#CBD3DC"],
+  [0.33, "#8B939D"],  // sky falling toward the horizon
+  [0.4, "#4A515A"],
+  // The horizon. Two stops 3% apart, not one: a real horizon in polished
+  // metal is a LINE, and the sharpness of that line is the entire difference
+  // between chrome and grey plastic.
+  [0.445, "#171A1E"],
+  [0.475, "#20242A"],
+  [0.53, "#3E4550"],
+  // Floor bounce, warmed. Real chrome indoors picks up wood, skin and
+  // tungsten off the floor, so the lower half is never neutral grey.
+  [0.6, "#7E8590"],
+  [0.68, "#B9BCC0"],
+  [0.76, "#E6E3DF"],  // warm bounce, the brightest thing below the horizon
+  [0.84, "#A9A9AA"],
+  [0.93, "#6E7178"],
+  [1.0, "#484D56"],   // terminator
 ];
 
 function isMetal(colorId) {
@@ -807,16 +819,45 @@ export default function UmbraFace({
               </linearGradient>
               {/* The specular hit: a small blown-out highlight up and to the
                   left, where the light actually is (cfg.lightX/lightY). */}
+              {/* Broad key: the soft wrap of the light source. */}
               <radialGradient
                 id={`${gradId}-spec`}
                 gradientUnits="userSpaceOnUse"
                 cx={-paint.r * 0.3}
                 cy={-paint.r * 0.52}
-                r={paint.r * 0.62}
+                r={paint.r * 0.72}
               >
-                <stop offset="0" stopColor="#ffffff" stopOpacity="0.92" />
-                <stop offset="0.45" stopColor="#ffffff" stopOpacity="0.22" />
+                <stop offset="0" stopColor="#ffffff" stopOpacity="0.55" />
+                <stop offset="0.5" stopColor="#ffffff" stopOpacity="0.16" />
                 <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+              </radialGradient>
+              {/* Hot core: small and nearly opaque. Polished metal returns the
+                  light source almost undiffused, so the highlight has a hard
+                  little centre. One broad glow alone reads as satin. */}
+              <radialGradient
+                id={`${gradId}-hot`}
+                gradientUnits="userSpaceOnUse"
+                cx={-paint.r * 0.34}
+                cy={-paint.r * 0.6}
+                r={paint.r * 0.22}
+              >
+                <stop offset="0" stopColor="#ffffff" stopOpacity="1" />
+                <stop offset="0.55" stopColor="#ffffff" stopOpacity="0.5" />
+                <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+              </radialGradient>
+              {/* Rim light along the lower edge: the floor bounce catching the
+                  silhouette. It is what stops the bottom dissolving into the
+                  dark background. */}
+              <radialGradient
+                id={`${gradId}-rim`}
+                gradientUnits="userSpaceOnUse"
+                cx={paint.r * 0.16}
+                cy={paint.r * 0.86}
+                r={paint.r * 0.72}
+              >
+                <stop offset="0.55" stopColor="#ffffff" stopOpacity="0" />
+                <stop offset="0.9" stopColor="#E8EDF4" stopOpacity="0.42" />
+                <stop offset="1" stopColor="#E8EDF4" stopOpacity="0" />
               </radialGradient>
             </>
           ) : (
@@ -856,7 +897,9 @@ export default function UmbraFace({
                 the silhouette, and drawn after the fill so it sits on top. */}
             {metal && S.bodyD && !(dots && !morphing) ? (
               <g clipPath={`url(#${clipId})`}>
+                <path d={S.bodyD} fill={`url(#${gradId}-rim)`} />
                 <path d={S.bodyD} fill={`url(#${gradId}-spec)`} />
+                <path d={S.bodyD} fill={`url(#${gradId}-hot)`} />
               </g>
             ) : null}
             {/* The hairline self-stroke closes the gaps between depth slices. */}

@@ -764,6 +764,41 @@
   justify-content: center;
   gap: 14px;
   margin-bottom: 26px;
+  isolation: isolate;
+}
+
+/* The glow, ported from the MetalForge shader's colour stack: a white rim
+   core falling through #6994FF and #2365FF into a deep #144CCD. Skia does it
+   with a runtime effect; in a DOM app the honest equivalent is stacked radial
+   gradients under a blur, which costs one composited layer instead of a
+   shader pipeline.
+   `screen` so it ADDS light to the dark ground rather than painting a lighter
+   grey disc on it — that difference is most of why it reads as glow. */
+.sand-home__marks::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 460px;
+  height: 320px;
+  transform: translate(-50%, -46%);
+  pointer-events: none;
+  mix-blend-mode: screen;
+  filter: blur(26px) saturate(1.15);
+  background:
+    radial-gradient(38% 46% at 50% 44%, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 62%),
+    radial-gradient(46% 54% at 50% 48%, rgba(105, 148, 255, 0.55) 0%, rgba(105, 148, 255, 0) 70%),
+    radial-gradient(62% 70% at 50% 54%, rgba(35, 101, 255, 0.42) 0%, rgba(35, 101, 255, 0) 72%),
+    radial-gradient(86% 96% at 50% 60%, rgba(20, 76, 205, 0.34) 0%, rgba(20, 76, 205, 0) 76%);
+  animation: sand-home-glow 7.5s ease-in-out infinite;
+}
+
+/* Breathing, not pulsing. The scale is tiny on purpose: you should notice it
+   only if you look for it. */
+@keyframes sand-home-glow {
+  0%, 100% { opacity: 0.85; transform: translate(-50%, -46%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -46%) scale(1.055); }
 }
 
 .sand-home__mark {
@@ -810,5 +845,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sand-home__mark { animation: none; }
+  .sand-home__mark,
+  .sand-home__marks::before {
+    animation: none;
+  }
 }

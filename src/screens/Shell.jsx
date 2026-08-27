@@ -465,7 +465,10 @@ export default function Shell({ state }) {
           </div>
         )}
 
-        {peer ? (
+        {/* No teammate, nothing to message. A composer on the home screen is a
+            box that cannot send, sitting under a screen whose whole job is to
+            get you to make the thing it would send to. */}
+        {!selected ? null : peer ? (
           <div className="sand-viewonly">
             <span className="mute">This chat is view-only</span>
             <button type="button" className="ghost" onClick={() => setDmPeerId(null)}>
