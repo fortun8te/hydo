@@ -682,6 +682,49 @@ app.whenReady().then(() => {
   ipcMain.handle("hydo:boxEnsure", (_e, reason) => boxes.ensureRunning(reason || {}));
   ipcMain.handle("hydo:boxStop", () => boxes.stop());
 
+  /**
+   * Watch the machine's screen inside Hydo, not in Safari.
+   *
+   * The button used to hand `desktopUrl` to the system browser, which meant
+   * leaving the app to look at your own teammate — and landing on the Moonlight
+   * stream, which hangs forever on any network that blocks its UDP. Both of
+   * those were the same click.
+   *
+   * A Hydo-owned BrowserWindow, and the VNC URL, which tunnels over HTTPS and
+   * connects. Verified from a cold window: "Connected (encrypted)", a live
+   * canvas, the real desktop.
+   *
+   * One window, reused. A desktop stream is a live connection to a machine
+   * billed by the second, and stacking three of them is three of those.
+   */
+  let desktopWin = null;
+  ipcMain.handle("hydo:boxDesktop", async () => {
+    const got = await boxes.desktopUrl({ vnc: true });
+    if (!got.ok) return got;
+    if (desktopWin && !desktopWin.isDestroyed()) {
+      desktopWin.show();
+      desktopWin.focus();
+      // Re-navigate: the token in the previous URL may be spent, and a blank
+      // screen with no explanation is worse than a reconnect.
+      desktopWin.loadURL(got.url);
+      return { ok: true, reused: true, mode: got.mode };
+    }
+    desktopWin = new BrowserWindow({
+      width: 1280,
+      height: 820,
+      title: "Computer",
+      backgroundColor: "#141414",
+      // Nothing of Hydo's is exposed to it: this renders a remote machine's
+      // screen and must never reach the store, the gateway, or the box CLI.
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
+    desktopWin.on("closed", () => {
+      desktopWin = null;
+    });
+    await desktopWin.loadURL(got.url);
+    return { ok: true, mode: got.mode };
+  });
+
   // Idle sweep, in Electron main rather than inside the VM . a machine cannot
   // be trusted to switch itself off. Stopping early costs a few seconds of
   // resume; not stopping costs the month's hours.

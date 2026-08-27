@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { RowGroup, Row } from "../kit/ui.jsx";
 
 /**
  * The shared Linux workspace, as a rail panel instead of a modal.
@@ -115,6 +116,32 @@ export default function ComputerRail({ agent, onClose, onOpenRoutines, onCreateR
     refresh();
   }
 
+  // The plain WebRTC `desktopUrl` from `box list`/`box info` hung on
+  // "Connecting to desktop stream..." against a box that was verifiably up —
+  // the vendor's own docs say WebRTC "can be choppy or fail to connect" on
+  // restrictive networks, which is exactly what happened. It also threw the
+  // user out of Hydo into a browser tab to look at their own teammate's
+  // screen, which they explicitly did not want. `boxDesktop` (main.cjs's
+  // `hydo:boxDesktop` handler, box-runtime.cjs's `desktopUrl({vnc:true})`)
+  // fetches a fresh VNC URL — VNC connects where WebRTC didn't, verified in a
+  // cold BrowserWindow — and opens it in a Hydo-owned window instead.
+  async function openDesktop() {
+    setErr("");
+    let res = null;
+    try {
+      res = await window.hydo?.boxDesktop?.();
+    } catch (e) {
+      // A rejection here is a real outcome (gateway down, CLI gone) — not
+      // handling it is the exact bug that once froze this rail's wake/sleep
+      // buttons on "Starting…"/"Stopping…" forever.
+      res = { ok: false, reason: (e && e.message) || "Could not open the desktop." };
+    }
+    // `openWorkspace` once returned `{ok, path}` and the renderer discarded
+    // it outright — a bot with no workspace got a button that did nothing
+    // and said nothing. Same shape here: a false `ok` must reach the DOM.
+    if (!res || !res.ok) setErr((res && res.reason) || "Could not open the desktop.");
+  }
+
   const running = st.state === "running";
   const botName = (agent?.name || "").trim() || "This Bot";
   const size = st.type && st.type !== "small" ? costOf(st.type) : null;
@@ -154,61 +181,84 @@ export default function ComputerRail({ agent, onClose, onOpenRoutines, onCreateR
       ) : (
         <>
           <div className="computer-rail__body">
-            {/* The card itself. `is-live` only paints a wash; the "Open" pill
-                is a real button rendered only while running, not a disabled
-                one hidden by CSS — a disabled element does not reliably take
-                :hover in every engine, and this pill has to. */}
-            <div className={running ? "computer-rail__thumb is-live" : "computer-rail__thumb"}>
-              <div className="computer-rail__thumb-face">
-                <i
-                  className={`gb-icon ${
-                    running
-                      ? "gb-icon-device-desktop"
-                      : st.state === "missing"
-                      ? "gb-icon-exclamation-triangle"
-                      : "gb-icon-moon-z"
-                  }`}
-                />
-                <span>{STATE_LABEL[st.state] || st.state || "Asleep"}</span>
+            {/* The 16:10 preview card only earns its keep when there is
+                something to reach — the "Open" pill. Asleep/gone/none had
+                nothing behind that shape but an icon and a word, which read
+                as a big empty void rather than a status. Those states now
+                live in the row below instead, at row height, not card
+                height. `is-live` paints the wash; the pill is a real button
+                rendered only while running, never a disabled one hidden by
+                CSS — a disabled element does not reliably take :hover in
+                every engine, and this pill has to. */}
+            {running ? (
+              <div className="computer-rail__thumb is-live">
+                <div className="computer-rail__thumb-face">
+                  <i className="gb-icon gb-icon-device-desktop" />
+                  <span>Awake</span>
+                </div>
+                {st.desktopUrl ? (
+                  <button type="button" className="computer-rail__open" onClick={openDesktop}>
+                    <span aria-hidden="true">⤢</span> Open
+                  </button>
+                ) : null}
               </div>
-              {running && st.desktopUrl ? (
-                <button
-                  type="button"
-                  className="computer-rail__open"
-                  onClick={() => window.hydo?.openExternal?.(st.desktopUrl)}
-                >
-                  <span aria-hidden="true">⤢</span> Open
-                </button>
-              ) : null}
-            </div>
-            {/* NOT "<Bot>'s screen", which is what this said and what it could
-                not deliver. Verified against the CLI and docs on 2026-08-27: a
-                Box has exactly ONE desktop. `box info --json` returns a single
-                `desktopUrl` with one Moonlight hostId/appId, `box desktop <ID>`
-                takes no display or session flag, and the streaming docs say
-                outright that "Lux controls the Box's single shared desktop, so
-                run only one Lux session at a time". Per-bot screens would mean
-                one box per bot — the exact bill box-runtime.cjs's header exists
-                to prevent. So the caption names the shared thing, and the line
-                under it says the consequence out loud rather than letting the
-                user discover it by watching another bot move their mouse. */}
-            <p className="computer-rail__caption">Shared screen — one desktop, all bots</p>
-            <p className="computer-rail__sub">
-              {botName} shares this desktop with every other bot you switch on — they see the same windows
-              and take turns.
-            </p>
+            ) : null}
 
-            <div className="computer-rail__actions">
-              {running ? (
-                <button type="button" className="ghost" onClick={sleep} disabled={!!busy}>
-                  {busy === "stop" ? "Stopping…" : "Stop now"}
-                </button>
-              ) : (
-                <button type="button" className="ghost ghost--solid" onClick={wake} disabled={!!busy}>
-                  {busy === "wake" ? "Starting…" : st.id ? "Wake it up" : "Create the workspace"}
-                </button>
-              )}
-            </div>
+            {/* One row instead of a centred icon + two centred paragraphs +
+                a left-aligned button — the mismatch was the complaint. Label,
+                the shared-desktop fact (see note below) and the action all
+                sit on the same baseline, in the app's own row vocabulary
+                (kit/ui.jsx RowGroup/Row — same shape as Settings.jsx). */}
+            <RowGroup>
+              {/* Row's control column is sized for a short pill (a Select, a
+                 toggle) — trying to also cram a full-sentence description in
+                 next to a text button squeezed the copy column down to one
+                 word per line. So the row stays short: icon, state word,
+                 button. The sentence moves to its own line below, at the
+                 same 24px gutter every other block in this rail uses. */}
+              <Row
+                leading={
+                  running ? null : (
+                    <span className="computer-rail__state-icon">
+                      <i
+                        className={`gb-icon ${
+                          st.state === "missing" ? "gb-icon-exclamation-triangle" : "gb-icon-moon-z"
+                        }`}
+                      />
+                    </span>
+                  )
+                }
+                strong
+                label={running ? "Shared desktop" : STATE_LABEL[st.state] || st.state || "Asleep"}
+              >
+                {running ? (
+                  <button type="button" className="ghost" onClick={sleep} disabled={!!busy}>
+                    {busy === "stop" ? "Stopping…" : "Stop now"}
+                  </button>
+                ) : (
+                  <button type="button" className="ghost ghost--solid" onClick={wake} disabled={!!busy}>
+                    {busy === "wake" ? "Starting…" : st.id ? "Wake it up" : "Create it"}
+                  </button>
+                )}
+              </Row>
+            </RowGroup>
+            {/* NOT "<Bot>'s screen", which is what this said and what it
+                could not deliver. Verified against the CLI and docs on
+                2026-08-27: a Box has exactly ONE desktop. `box info --json`
+                returns a single `desktopUrl` with one Moonlight hostId/appId,
+                `box desktop <ID>` takes no display or session flag, and the
+                streaming docs say outright that "Lux controls the Box's
+                single shared desktop, so run only one Lux session at a
+                time". Per-bot screens would mean one box per bot — the exact
+                bill box-runtime.cjs's header exists to prevent. So this line
+                names the shared thing and the consequence in one breath,
+                instead of letting the user discover it by watching another
+                bot move their mouse. */}
+            <p className="computer-rail__note">
+              {running
+                ? `${botName} shares this screen with every other bot — same windows, taking turns.`
+                : "Shared screen — every bot you switch on sees the same windows and takes turns."}
+            </p>
             {err ? <p className="hy-computer__err">{err}</p> : null}
           </div>
 

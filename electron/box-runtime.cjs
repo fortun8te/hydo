@@ -577,6 +577,36 @@ function createBoxRuntime(opts = {}) {
     return plainExec(["stop", String(id)], { timeout: 120_000 });
   }
 
+  /**
+   * A desktop URL that actually connects.
+   *
+   * `box list`/`box info` hand back a Moonlight/WebRTC stream, and the vendor's
+   * own docs say WebRTC "relies on UDP and peer connectivity, so on
+   * restrictive, corporate, or low-bandwidth networks it can be choppy or fail
+   * to connect". Observed here exactly: the browser sat on "Connecting to
+   * desktop stream..." forever against a box that was up, with a matching
+   * hostId and an IP.
+   *
+   * `--vnc` tunnels over plain HTTPS instead. Lower frame rate, and it connects
+   * — measured from a cold Electron window: "Connected (encrypted)", a live
+   * 1280x788 canvas, the real Ubuntu desktop. That trade is the right way round
+   * for a panel whose job is "let me see what my teammate is doing".
+   *
+   * Asked for fresh each time rather than cached: the URL carries a session
+   * token, and a stale one is a blank screen with no explanation.
+   */
+  async function desktopUrl({ vnc = true } = {}) {
+    const id = getBoxId();
+    if (!id) return { ok: false, reason: "no-box" };
+    const args = ["desktop", String(id)];
+    if (vnc) args.push("--vnc");
+    const res = await exec(args, { timeout: 30_000 });
+    if (!res.ok) return res;
+    const url = res.json && (res.json.desktopUrl || res.json.url);
+    if (!url) return { ok: false, reason: "no desktop url" };
+    return { ok: true, url, mode: (res.json && res.json.mode) || (vnc ? "vnc" : "stream") };
+  }
+
   /** True when nothing is running and nothing has used it for a while. */
   function idleFor(ms = IDLE_STOP_MS) {
     return inFlight.size === 0 && lastUsedAt > 0 && now() - lastUsedAt >= ms;
@@ -585,6 +615,7 @@ function createBoxRuntime(opts = {}) {
   return {
     status,
     limits,
+    desktopUrl,
     ensureRunning,
     hold,
     stop,

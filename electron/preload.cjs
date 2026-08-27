@@ -107,6 +107,7 @@ contextBridge.exposeInMainWorld("hydo", {
   boxLimits: () => ipcRenderer.invoke("hydo:boxLimits"),
   boxEnsure: (reason) => ipcRenderer.invoke("hydo:boxEnsure", reason),
   boxStop: () => ipcRenderer.invoke("hydo:boxStop"),
+  boxDesktop: () => ipcRenderer.invoke("hydo:boxDesktop"),
   pickFiles: () => ipcRenderer.invoke("hydo:pickFiles"),
   attachAny: (agentId, filePath) => ipcRenderer.invoke("hydo:attachAny", agentId, filePath),
   openExternal: (url) => ipcRenderer.invoke("hydo:openExternal", url),

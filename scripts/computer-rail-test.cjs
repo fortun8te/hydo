@@ -82,4 +82,23 @@ for (const cls of usedClasses) {
   assert.ok(css.includes(`.${cls}`), `class ${cls} used in ComputerRail.jsx has no rule in rails.css`);
 }
 
+// The Open pill must drive the VNC path (electron/main.cjs's hydo:boxDesktop
+// handler, box-runtime.cjs's desktopUrl({vnc:true})), not the raw WebRTC
+// `desktopUrl` from `box list`/`box info` via openExternal. That URL hung on
+// "Connecting to desktop stream..." on a box that was verifiably up — the
+// vendor's own docs say WebRTC "can be choppy or fail to connect" on
+// restrictive networks — and openExternal also threw the user out of Hydo
+// into a browser tab to look at their own teammate's screen, which they
+// explicitly did not want.
+assert.ok(rail.includes("window.hydo?.boxDesktop?.()"), "the Open pill must call window.hydo.boxDesktop()");
+assert.ok(!rail.includes("openExternal"), "ComputerRail must not fall back to openExternal for the desktop");
+
+// boxDesktop can answer {ok:false, reason} or reject outright — both must
+// reach the DOM. openWorkspace once returned {ok, path} and the renderer
+// discarded it outright, so a bot with no workspace got a button that did
+// nothing and said nothing; the same shape bug here would be silent too.
+const openFn = rail.slice(rail.indexOf("async function openDesktop"), rail.indexOf("const running ="));
+assert.ok(/catch\s*\(e\)/.test(openFn), "openDesktop must catch a rejected boxDesktop() call");
+assert.ok(/setErr\(/.test(openFn), "openDesktop must surface a failure reason via setErr, not swallow it");
+
 console.log("computer-rail-test ok");

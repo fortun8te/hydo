@@ -1486,27 +1486,53 @@ aside.routine-rail .routine-rail__toolbar {
   opacity: 1;
 }
 
-.computer-rail .computer-rail__caption {
-  margin: 0;
-  font-size: 12px;
-  text-align: center;
+/* The icon that used to sit centred inside the giant empty thumb now leads
+   the status row instead — a small filled circle, same shape language as
+   Settings' 44px account avatar (settings.css .settings__avatar) but sized
+   for a row rather than a page head. */
+.computer-rail .computer-rail__state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--sand-fill-secondary, #7777772c);
   color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 15px;
 }
 
-/* The honest small print under the caption: one box has one desktop, so the
-   screen above is shared by every box-enabled teammate. Dimmer and tighter
-   than the caption because it is a caveat, not a title. */
-.computer-rail .computer-rail__sub {
-  margin: 4px 0 0;
-  font-size: 11px;
-  line-height: 1.4;
+/* Safety net for the status row above: a 320px rail has very little spare
+   width once a leading icon and a text button both sit on the same line as
+   the state word. Verified: "Create the workspace" (the original copy for
+   the id-less state) squeezed .hy-row__copy down to ~10px and the label
+   wrapped one character per line, visually colliding with the button next to
+   it. Fixed at the source by shortening that one button label to "Create
+   it" (see the wake() button below) rather than by fighting the kit's row
+   layout here — an earlier version of this rule forced control onto its own
+   line whenever .hy-row__copy asked for more than 96px, which wrapped even
+   the short "Wake it up" row that had room to stay on one line. A max-width
+   cap on the control is the narrow, verified fix: it stops a future long
+   button label from choking the label column again, without changing
+   anything for the short labels this rail actually uses. */
+.computer-rail .hy-row__control {
+  max-width: 55%;
+}
+
+.computer-rail .hy-row__control button {
+  white-space: normal;
   text-align: center;
-  color: var(--sand-text-tertiary, #fcfcfc66);
 }
 
-.computer-rail .computer-rail__actions {
-  display: flex;
-  gap: 8px;
+/* Scoped to this rail only — .bot-rail__routines is shared with BotRail's
+   own Routines section (src/styles.css / production.css) and that file is
+   off-limits here. This just drops the outer border so the card reads as a
+   filled row-group like the status block above it, instead of a second
+   bordered container competing for the same visual weight. Fill token
+   borrowed from .hy-row-group (kit/ui.css) — no new colour invented. */
+.computer-rail .bot-rail__routines {
+  border-color: transparent;
+  background: var(--sand-fill-neutral-subtle, #7777772c);
 }
 
 .computer-rail .computer-rail__settings {
