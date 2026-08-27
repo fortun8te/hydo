@@ -149,6 +149,37 @@ export default function Shell({ state }) {
     return () => clearInterval(id);
   }, [draft, sending, workingHere, linger]);
 
+  /**
+   * Hand files to the selected teammate through the native picker.
+   *
+   * The IPC for this (`pickFiles` + `attachAny`) was written and then never
+   * called from anywhere. The only way to attach was to RIGHT-CLICK the plus
+   * button, which opened a hidden `<input accept="image/*">` . so it was both
+   * undiscoverable and images-only, while Hydo can preview around 222 types
+   * and Hermes takes pdfs and documents as first-class turn content.
+   */
+  async function attachFiles() {
+    if (!selected) return;
+    setComposerMenu(false);
+    const picked = await window.hydo?.pickFiles?.();
+    const files = (picked && picked.files) || [];
+    if (!files.length) return;
+    const failed = [];
+    for (const f of files) {
+      const res = await window.hydo?.attachAny?.(selected.id, f.path);
+      if (!res || !res.ok) failed.push(f.name);
+    }
+    // Say so in the composer rather than failing silently: an attachment that
+    // did not arrive is invisible, and the user would go on to ask about a
+    // file the teammate never received.
+    if (failed.length) {
+      setDraft((d) => `${d ? `${d} ` : ""}(couldn't attach ${failed.join(", ")})`);
+      return;
+    }
+    const names = files.map((f) => f.name).join(", ");
+    setDraft((d) => (d ? `${d} ${names}` : names));
+  }
+
   // One command table drives both the keyboard and the palette, so a chord and
   // a palette row can never drift apart.
   function runCommand(id, payload) {
@@ -525,6 +556,7 @@ export default function Shell({ state }) {
               setComposerMenu(false);
               setChannelCreate(true);
             }}
+            onAttach={attachFiles}
             onSlashAction={(id) => runCommand(id)}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}

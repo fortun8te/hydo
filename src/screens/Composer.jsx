@@ -107,6 +107,7 @@ export default function Composer({
   onPickMention,
   onNewBot,
   onNewChannel,
+  onAttach,
   onSlashAction,
   busy,
   onStop,
@@ -235,6 +236,10 @@ export default function Composer({
       for (const a of mentionables) {
         if (hit(a.name)) out.push({ key: `bot:${a.id}`, kind: "bot", agent: a, label: a.name, type: "Bot" });
       }
+      // Attaching anything was reachable only by RIGHT-CLICKING the plus, and
+      // the input behind it is accept="image/*", so every other type Hydo can
+      // preview . pdf, docx, csv, obj, ttf . could not be handed over at all.
+      out.push({ key: "attach", kind: "attach", label: "Attach file", type: "Add", icon: "paperclip", sep: true });
       out.push({ key: "new-bot", kind: "new-bot", label: "New Bot", type: "Create", sep: true });
       out.push({ key: "new-channel", kind: "new-channel", label: "New Channel", type: "Create", icon: "people-3" });
       return out;
@@ -257,6 +262,11 @@ export default function Composer({
       onDraft("");
       onMenuToggle(false);
       onSlashAction?.(row.actionId);
+      return;
+    }
+    if (row.kind === "attach") {
+      onMenuToggle(false);
+      onAttach?.();
       return;
     }
     if (row.kind === "new-bot") return onNewBot?.();
