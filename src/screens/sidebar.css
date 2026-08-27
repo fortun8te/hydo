@@ -824,3 +824,32 @@
     transition: none;
   }
 }
+
+/* ── a teammate arriving ──────────────────────────────────────────────────
+   Plays once, on the roster row, when a bot is created . by you or by another
+   teammate hiring one. Subtle on purpose: someone joined, the app did not do
+   a trick. The row settles down into place and its mark catches up a beat
+   later, so the eye lands on the face rather than on the motion.
+
+   Not `forwards`: the row must end on its own untouched styles, or every
+   later hover and selection state is fighting an animation's final frame. */
+.sand-row.is-born {
+  animation: sand-born-row 520ms cubic-bezier(0.2, 0.85, 0.3, 1);
+}
+.sand-row.is-born .umbra-face {
+  animation: sand-born-mark 620ms cubic-bezier(0.24, 1.2, 0.4, 1) 90ms backwards;
+}
+@keyframes sand-born-row {
+  from { opacity: 0; transform: translateY(-7px); }
+  60%  { opacity: 1; }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sand-born-mark {
+  from { transform: scale(0.34); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sand-row.is-born,
+  .sand-row.is-born .umbra-face { animation: none; }
+}

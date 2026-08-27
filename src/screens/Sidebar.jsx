@@ -173,6 +173,20 @@ function NewMenu({ open, onClose, onBot, onChannel, anchorRef }) {
   );
 }
 
+// Was this teammate created just now, in this session?
+//
+// Deliberately a wall-clock window rather than a flag the store clears: the
+// roster re-renders constantly, and a flag would need someone to own turning
+// it off. A timestamp answers "is this new" without anybody having to
+// remember. Six seconds covers the mount plus the opening turn; after that a
+// reload must NOT replay the arrival, which is the failure this guards.
+const BORN_MS = 6000;
+function bornNow(entry) {
+  if (!entry || !entry.bornAt) return false;
+  const t = new Date(entry.bornAt).getTime();
+  return Number.isFinite(t) && Date.now() - t < BORN_MS;
+}
+
 export default function Sidebar({
   entries,
   agents,
@@ -642,7 +656,7 @@ export default function Sidebar({
               key={entry.id}
               type={renaming ? undefined : "button"}
               data-tip={entry.name}
-              className={`sand-row${on ? " is-on" : ""}${pick ? " is-pick" : ""}${unread ? " is-unread" : ""}`}
+              className={`sand-row${on ? " is-on" : ""}${pick ? " is-pick" : ""}${unread ? " is-unread" : ""}${bornNow(entry) ? " is-born" : ""}`}
               onClick={renaming ? undefined : (e) => onRowClick(e, entry, visible)}
               onDoubleClick={(e) => {
                 e.preventDefault();

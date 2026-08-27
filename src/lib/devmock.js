@@ -416,6 +416,9 @@ export function installDevMock() {
           id, name: "New Bot", label: "", description: "", notifications: false,
           blob: "green", shape: "capsule", status: "idle", activity: "", draft: "",
           updatedAt: new Date().toISOString(), last: "Just landed.",
+          // The real store stamps this; the mock must too, or the arrival
+          // animation is unreachable in the only place it can be eyeballed.
+          bornAt: new Date().toISOString(),
         });
         state.messages[id] = [];
         state.selectedId = id;

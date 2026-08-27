@@ -1484,6 +1484,7 @@ function createStore(opts = {}) {
       draft: "",
       updatedAt: t,
       last: "",
+      bornAt: t,
       hiredBy: hirer.id,
     });
     state.messages[id] = [];
@@ -2443,6 +2444,9 @@ function createStore(opts = {}) {
         draft: "",
         updatedAt: t,
         last: "",
+        // When this teammate came into existence. The roster plays a short
+        // arrival on it once; see `.is-born` in sidebar.css.
+        bornAt: t,
       });
       state.messages[copyId] = [];
       state.routines[copyId] = [];
@@ -2477,6 +2481,9 @@ function createStore(opts = {}) {
         mcp: [],
         draft: "",
         updatedAt: t,
+        // When this teammate came into existence. The roster plays a short
+        // arrival on it, once; see `.is-born` in sidebar.css.
+        bornAt: t,
         // Filled by the bot's own opening bubble (see landNewBot). A literal
         // "New bot is working." was the roster preview for every fresh bot.
         last: "",
