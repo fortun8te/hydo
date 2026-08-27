@@ -2045,12 +2045,41 @@ function createStore(opts = {}) {
       }
     }
 
+    const carefulProvider = modelPick.sessionProvider(agent, state.settings);
+    const turnModel = modelPick.sessionModel(agent, state.settings);
+    // ── the fast lane ────────────────────────────────────────────────────
+    //
+    // A local model's hidden scratchpad is not slow-per-token: measured on the
+    // user's box, generation runs ~15.5 tok/s with thinking on and ~15.5 with
+    // it off (15.2/17.6/15.4 vs 14.8/16.0/14.5 on three clean samples each).
+    // What it costs is ~35% MORE TOKENS for the same answer — 105 vs 75 — which
+    // at that rate is about two seconds on a greeting.
+    //
+    // Which is why this is the landing turn and NOTHING else. The same
+    // measurement pair says thinking off gets bat-and-ball wrong (0.10 instead
+    // of 0.05, in 1.1s instead of 10.4s): three times faster and wrong is the
+    // worst trade on the table. A turn is only routed here when it is one
+    // Hydo WROTE — the "say hello" brief, which carries no tools, no user
+    // question and nothing to get wrong — never one the user typed.
+    //
+    // `fastLaneFor` returns "" unless the user has added a second `providers:`
+    // entry against the same endpoint with `enable_thinking: false`, so this
+    // whole block is inert on every existing config and on every hosted model.
+    // Adding that entry is the opt-in; deleting it is the opt-out.
+    // `typeof` because the careful lane is the default in every sense: an
+    // older or stubbed gateway without this function must fall through to a
+    // thinking turn, never fail one.
+    const fastLane =
+      flags.lean && typeof gateway.fastLaneFor === "function"
+        ? gateway.fastLaneFor(carefulProvider, turnModel)
+        : "";
+    if (fastLane) logAction(agent.id, "model", `fast lane: ${fastLane} (landing turn)`);
     const sessionOpts = {
       cwd,
       title: agent.name,
       hermesProfile: home.profile,
-      model: modelPick.sessionModel(agent, state.settings),
-      provider: modelPick.sessionProvider(agent, state.settings),
+      model: turnModel,
+      provider: fastLane || carefulProvider,
       // Channel turns force low when unpinned. 1:1 also defaults to low unless
       // the bot is pinned higher.
       //
@@ -2067,6 +2096,31 @@ function createStore(opts = {}) {
       extraToolsets: Array.isArray(agent.toolsets) ? agent.toolsets : [],
       mcp: Array.isArray(agent.mcp) ? agent.mcp : [],
     };
+
+    // Carry the greeting across the one rebuild the fast lane costs.
+    //
+    // A changed provider is a different session to `sessionFor`: it closes the
+    // old one and creates a new one, and a new Hermes session starts with no
+    // history. So a teammate that greeted on the fast lane would answer the
+    // user's first reply having forgotten the question it had just asked —
+    // paying for two seconds of scratchpad with a bot that does not know what
+    // it said. `session.create` takes a seed history, so it does not have to.
+    //
+    // Seeded as `system`, not as a fake `user` turn: what happened is that
+    // this teammate opened the conversation, and inventing a user message that
+    // was never typed would be a lie the model then reasons from.
+    if (!flags.lean && agent.fastLanded) {
+      const said = (state.messages[convId || agent.id] || [])
+        .filter((m) => m && m.role === "bot" && m.kind !== "event" && String(m.text || "").trim())
+        .slice(0, 4)
+        .map((m) => String(m.text).trim())
+        .join("\n");
+      if (said) {
+        sessionOpts.messages = [
+          { role: "system", content: `You opened this conversation by saying:\n\n${said}` },
+        ];
+      }
+    }
 
     // Say what is ACTUALLY happening while a cold turn boots, instead of one
     // flat "Coming online" for a stretch that measured 135s on this machine
@@ -2106,6 +2160,16 @@ function createStore(opts = {}) {
       }
     }
     persistHermesIds();
+    // The lane the LAST session was built on, so the next non-lean turn knows
+    // it has a rebuild to seed. Set after the session exists, cleared once the
+    // careful session has been built and seeded.
+    if (fastLane) {
+      agent.fastLanded = true;
+      save();
+    } else if (agent.fastLanded) {
+      delete agent.fastLanded;
+      save();
+    }
     // User turns submit as prompt.background so bot.turn yields. Do NOT arm
     // backgroundTurn until a worker (or a long tool) actually starts — a short
     // question must not look like a live job.

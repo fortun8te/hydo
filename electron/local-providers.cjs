@@ -31,7 +31,18 @@ const PLACEHOLDER = /REPLACE-WITH|YOUR-PC|<[^>]+>|x\.x\.x\.x/i;
 
 const PROBE_TIMEOUT_MS = 2500;
 
-/** Parse the top-level `providers:` map. Values are scalars, two levels deep. */
+/**
+ * Parse the top-level `providers:` map.
+ *
+ * Nested maps are kept, not flattened. That matters for exactly one key:
+ * `extra_body.chat_template_kwargs.enable_thinking`, which is the ONLY lever
+ * that turns a Qwen3-class server's hidden scratchpad off (docs/LOCAL-MODEL.md)
+ * — a flat parser reported such an entry as `{extra_body: ""}` and the fast
+ * lane below could never see it.
+ *
+ * Scalars are strings except `true`/`false`, which come back as booleans so a
+ * caller can compare against `false` rather than the string "false".
+ */
 function parseProviders(text) {
   const lines = String(text == null ? "" : text).split(/\r?\n/);
   let start = -1;
@@ -43,27 +54,42 @@ function parseProviders(text) {
   }
   if (start < 0) return {};
   const out = {};
-  let current = null;
+  // Stack of open maps, innermost last, each with the indent its KEYS sit at.
+  let stack = [];
   for (let i = start; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim() || line.trim().startsWith("#")) continue;
     const indent = line.match(/^[ ]*/)[0].length;
     if (indent === 0) break;
     const t = line.trim();
-    if (indent === 2 && /:\s*$/.test(t) && !t.startsWith("-")) {
-      current = t.replace(/:$/, "");
-      out[current] = {};
-      continue;
-    }
-    if (!current || indent < 4) continue;
+    if (t.startsWith("-")) continue; // sequences are not part of this shape
     const colon = t.indexOf(":");
     if (colon <= 0) continue;
     const key = t.slice(0, colon).trim();
     let val = t.slice(colon + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
+    if (indent === 2) {
+      stack = [{ indent: 4, node: (out[key] = {}) }];
+      continue;
     }
-    out[current][key] = val;
+    while (stack.length && indent < stack[stack.length - 1].indent) stack.pop();
+    if (!stack.length) continue;
+    const node = stack[stack.length - 1].node;
+    if (!val) {
+      // `key:` with nothing after it opens a nested map.
+      const child = {};
+      node[key] = child;
+      stack.push({ indent: indent + 2, node: child });
+      continue;
+    }
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      node[key] = val.slice(1, -1);
+      continue;
+    }
+    if (val === "true" || val === "false") {
+      node[key] = val === "true";
+      continue;
+    }
+    node[key] = val;
   }
   return out;
 }
@@ -112,9 +138,98 @@ function list(file = CONFIG) {
       transport: String(cfg.transport || "").trim(),
       hasKey: Boolean(String(cfg.api_key || "").trim()),
       placeholder: isPlaceholder(api),
+      // Whether this entry hands the server `enable_thinking: false`. See
+      // `fastLaneFor` — it is what makes an entry the fast twin of another.
+      thinkingOff: thinkingOff(cfg),
     });
   }
   return out;
+}
+
+/**
+ * Does this entry tell the server to skip the hidden scratchpad?
+ *
+ * `chat_template_kwargs.enable_thinking` is applied by the SERVER when it
+ * renders the chat template, so it is the one thinking control that exists for
+ * a plain OpenAI-compatible box. Measured on the user's endpoint
+ * (docs/LOCAL-MODEL.md): with it false, `reasoning_content` came back empty and
+ * the same prompt finished in 3.82s instead of 13.42s.
+ */
+function thinkingOff(cfg) {
+  const eb = cfg && cfg.extra_body;
+  const kw = eb && eb.chat_template_kwargs;
+  return !!kw && kw.enable_thinking === false;
+}
+
+/** api urls compare without a trailing slash, the way Hermes normalizes them. */
+function sameApi(a, b) {
+  const norm = (x) => String(x || "").trim().replace(/\/+$/, "").toLowerCase();
+  const s = norm(a);
+  return !!s && s === norm(b);
+}
+
+/**
+ * The no-thinking twin of a provider, addressed the ONE way Hermes will honour.
+ *
+ * Two things had to be true before this could be built, and both were read out
+ * of `~/.hermes/hermes-agent` rather than assumed:
+ *
+ *   1. `agent_init.py:429` `_custom_provider_extra_body_for_agent` merges a
+ *      provider's `extra_body` into the main turn ONLY when the session's
+ *      provider string is literally `custom` or `custom:<name>`. Hydo has
+ *      always sent the bare key (`unsloth`), so an `extra_body` on a
+ *      `providers:` entry was inert — which is why one was deleted from this
+ *      user's config rather than left there looking load-bearing.
+ *   2. `custom:<name>` still resolves to that same entry's api/key/model
+ *      (`hermes_cli/runtime_provider.py` `_get_named_custom_provider`, via
+ *      `custom_provider_aliases`), so the prefix changes what is merged, not
+ *      where the request goes.
+ *
+ * Run here, against the user's own Hermes install, with a two-entry temp
+ * config: `custom:boxfast` -> `{chat_template_kwargs:{enable_thinking:false}}`,
+ * `custom:box` -> None, and the bare `boxfast` -> None.
+ *
+ * A twin qualifies when it is a DIFFERENT entry pointing at the SAME api, has
+ * thinking off, and either names no model or names the one this turn will run.
+ * The model check mirrors `_custom_provider_model_matches`: an entry whose
+ * `model`/`default_model` disagrees with the session model has its extra_body
+ * dropped on the floor, so routing to it would look like a fast lane and be a
+ * plain slow turn.
+ *
+ * Returns "" — i.e. no fast lane — for anything hosted, anything missing, and
+ * any config without such a twin. Nothing here writes config: the user opts in
+ * by adding the second entry, and deleting it turns the lane off.
+ */
+function fastLaneFor(id, model, file = CONFIG) {
+  const want = String(id || "").trim().toLowerCase();
+  if (!want) return "";
+  let parsed;
+  try {
+    parsed = parseProviders(fs.readFileSync(file, "utf8"));
+  } catch {
+    return "";
+  }
+  const entries = Object.entries(parsed);
+  const self = entries.find(([key]) => String(key).toLowerCase() === want);
+  if (!self) return "";
+  const [, selfCfg] = self;
+  const api = String(selfCfg.api || selfCfg.base_url || "").trim();
+  // Only ever on the user's own hardware. A hosted provider must be untouched:
+  // the whole trade below is priced in local tokens per second.
+  if (!api || isPlaceholder(api) || !isLocalHost(hostOf(api))) return "";
+  // An entry that already has thinking off is not the careful lane, and giving
+  // it a "faster" twin would be a lie.
+  if (thinkingOff(selfCfg)) return "";
+  const selfModel = String(model || selfCfg.default_model || "").trim().toLowerCase();
+  for (const [key, cfg] of entries) {
+    if (String(key).toLowerCase() === want) continue;
+    if (!thinkingOff(cfg)) continue;
+    if (!sameApi(cfg.api || cfg.base_url, api)) continue;
+    const twinModel = String(cfg.default_model || "").trim().toLowerCase();
+    if (twinModel && selfModel && twinModel !== selfModel) continue;
+    return `custom:${String(key).trim().toLowerCase().replace(/ /g, "-")}`;
+  }
+  return "";
 }
 
 /**
@@ -318,4 +433,4 @@ async function status(file = CONFIG, opts = {}) {
   return probed;
 }
 
-module.exports = { CONFIG, parseProviders, list, keyFor, probe, probeUrl, isPlaceholder, hostOf, status, isLocalHost, paceOf, paceFor, models };
+module.exports = { CONFIG, parseProviders, thinkingOff, fastLaneFor, list, keyFor, probe, probeUrl, isPlaceholder, hostOf, status, isLocalHost, paceOf, paceFor, models };

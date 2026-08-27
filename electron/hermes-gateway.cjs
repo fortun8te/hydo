@@ -55,6 +55,24 @@ function paceFor(provider) {
   return pace;
 }
 
+// Provider name + model → the `custom:<name>` twin that runs with the model's
+// hidden scratchpad off, or "" when the config has no such entry. Cached on the
+// same reasoning as paceFor, and total in the same way: any doubt returns "",
+// which is today's behaviour (thinking on) rather than a wrong answer fast.
+const fastLaneCache = new Map();
+function fastLaneFor(provider, model) {
+  const key = `${String(provider || '')}\u0000${String(model || '')}`;
+  if (fastLaneCache.has(key)) return fastLaneCache.get(key);
+  let lane;
+  try {
+    lane = localProviders.fastLaneFor(String(provider || ''), String(model || ''));
+  } catch {
+    lane = '';
+  }
+  fastLaneCache.set(key, lane);
+  return lane;
+}
+
 // ── Tunables ─────────────────────────────────────────────────────────────
 //
 // Reference values come from Hermes' own client, ui-tui/src/gatewayClient.ts:
@@ -960,6 +978,70 @@ const PROFILE_COST = {
   full: 24700,
 };
 
+/**
+ * The TOOL-SCHEMA half of the number above, measured exactly — and the half a
+ * local model waits on before it says anything.
+ *
+ * Taken from Hermes' own `model_tools.get_tool_definitions(enabled_toolsets=…)`
+ * for each profile's toolset list, serialised as the JSON that goes on the
+ * wire, on this machine (2026-08-27). Tools per profile / bytes of schema:
+ *
+ *   chat        3 tools     6,177 chars
+ *   writer     10 tools    16,516 chars
+ *   researcher 24 tools    34,244 chars
+ *   builder    29 tools    51,698 chars
+ *   full       41 tools    66,482 chars   (no MCP server connected)
+ *
+ * `builder` measured 29 tools, and 29 tool schemas is the profile whose prompt
+ * cost was measured against the real endpoint: 3,338 prompt tokens, 9.4s of
+ * prefill before the first output token (docs/LOCAL-MODEL.md). That one
+ * anchored pair converts the other four:
+ *
+ *   51,698 chars / 3,338 tokens = 15.49 chars per token
+ *   3,338 tokens / 9.4s         = 355 prompt tokens per second
+ *
+ * So the seconds below are one MEASURED point and four measured byte counts
+ * scaled through it — not five measurements, and not a guess either.
+ *
+ * PROFILE_COST above is a different quantity (whole-prompt tokens on a hosted
+ * model, tools + system prompt + MCP) and could not be re-taken offline. It is
+ * left alone rather than quietly overwritten with numbers that do not mean the
+ * same thing. Where the two can be compared they disagree in the direction the
+ * comment already admits: `researcher` and `builder` both gained `desktop_ui`
+ * (12 tools, 15,868 chars, 1,025 tokens) after PROFILE_COST was taken, so
+ * PROFILE_COST understates those two.
+ */
+const PROFILE_TOOL_CHARS = {
+  chat: 6177,
+  writer: 16516,
+  researcher: 34244,
+  builder: 51698,
+  full: 66482,
+};
+
+/** Chars of tool JSON per prompt token: builder's 51,698 chars = 3,338 tokens. */
+const CHARS_PER_TOKEN = 51698 / 3338;
+
+/** Prompt tokens per second of prefill: builder's 3,338 tokens took 9.4s cold. */
+const PREFILL_TOKENS_PER_SEC = 3338 / 9.4;
+
+/** Tool-definition tokens a profile puts in front of the model. */
+function profileToolTokens(name) {
+  const chars = PROFILE_TOOL_CHARS[name];
+  return chars ? Math.round(chars / CHARS_PER_TOKEN) : null;
+}
+
+/**
+ * Seconds of silence a LOCAL model spends reading this profile's tools on a
+ * cold session. Warm it is ~1.5s: the server caches the prefix, so this is
+ * paid once per session and again on every cache miss — which is exactly why
+ * `scripts/prefix-cache-test.cjs` exists.
+ */
+function profileColdSeconds(name) {
+  const tok = profileToolTokens(name);
+  return tok === null ? null : Math.round((tok / PREFILL_TOKENS_PER_SEC) * 10) / 10;
+}
+
 /** The profile names a UI may offer. */
 function toolProfiles() {
   return Object.keys(TOOL_PROFILES).map((name) => ({
@@ -967,6 +1049,11 @@ function toolProfiles() {
     toolsets: TOOL_PROFILES[name],
     isDefault: name === DEFAULT_PROFILE,
     tokens: PROFILE_COST[name] ?? null,
+    // What the tool schema alone costs, and what that is in seconds on your
+    // own hardware. The picker says so, because picking `builder` for a local
+    // teammate is choosing to wait ~9s before every cold turn.
+    toolTokens: profileToolTokens(name),
+    coldSeconds: profileColdSeconds(name),
   }));
 }
 
@@ -1002,6 +1089,19 @@ function createParams(cwd, title, opts) {
   if (effort) p.reasoning_effort = effort;
   // Presence is part of the contract — see methods_session.py:70-74.
   if (typeof opts.fast === 'boolean') p.fast = opts.fast;
+  // Seed history. `session.create` accepts it (`_coerce_seed_history`,
+  // server.py:9204 — role must be user/assistant/system and content a
+  // non-empty string) and it is the only way a REBUILT session can start
+  // knowing what the previous one said. The fast lane below rebuilds exactly
+  // once per teammate, between its greeting and its first real turn, and
+  // without this the bot would not remember the question it had just asked.
+  if (Array.isArray(opts.messages) && opts.messages.length) {
+    const seed = opts.messages
+      .filter((m) => m && typeof m.content === 'string' && m.content.trim())
+      .filter((m) => m.role === 'user' || m.role === 'assistant' || m.role === 'system')
+      .map((m) => ({ role: m.role, content: m.content }));
+    if (seed.length) p.messages = seed;
+  }
   // Hermes *identity* profile (per-bot HERMES_HOME). Not the tool-pin name.
   const hermesProfile = String(opts.hermesProfile || '').trim();
   if (hermesProfile) p.profile = hermesProfile;
@@ -2190,6 +2290,9 @@ module.exports = {
   // tool profiles — the context-cost lever
   TOOL_PROFILES,
   PROFILE_COST,
+  PROFILE_TOOL_CHARS,
+  profileToolTokens,
+  profileColdSeconds,
   listToolsets,
   DEFAULT_PROFILE,
   toolProfiles,
@@ -2262,4 +2365,9 @@ module.exports = {
   // Exposed for tests: which ceiling a provider name earns, and why.
   turnCeilingFor: (provider) => (paceFor(provider).local ? LOCAL_TURN_TIMEOUT_MS : TURN_TIMEOUT_MS),
   paceFor,
+  // Which provider a trivially easy local turn may be answered on, if the user
+  // has configured one. "" everywhere else.
+  fastLaneFor,
+  // Exposed for tests: the exact `session.create` payload a set of opts builds.
+  createParams,
 };

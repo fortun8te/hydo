@@ -362,3 +362,53 @@ This also re-prices a bug already fixed. The `reasoning_effort` churn — where 
 changed effort counted as a different session and rebuilt it before every first
 real turn — was not merely wasteful. It threw the cache away each time, so it
 was costing ~8 seconds, not a few hundred milliseconds.
+
+### The per-profile price, in seconds
+
+The 3,338 tokens / 9.4s above is one profile: `builder`. The other four were
+never measured, and "smaller" is not a number, so the tool schema for every
+profile was dumped from Hermes' own
+`model_tools.get_tool_definitions(enabled_toolsets=…)` on this machine and
+scaled through that one anchored pair (51,698 chars = 3,338 tokens =
+15.49 chars/token; 3,338 tokens in 9.4s = 355 prompt tokens/second):
+
+| profile | tools | chars of schema | tokens | cold prefill |
+| --- | --- | --- | --- | --- |
+| chat | 3 | 6,177 | 399 | **1.1s** |
+| writer | 10 | 16,516 | 1,066 | 3.0s |
+| researcher | 24 | 34,244 | 2,211 | 6.2s |
+| builder | 29 | 51,698 | 3,338 | **9.4s** (measured) |
+| full | 41 | 66,482 | 4,293 | 12.1s |
+
+So the default a local teammate is born on — `chat`, since auto climbs — is
+**1.1s of cold start instead of 9.4s: 2,939 tokens and 8.3 seconds saved on
+every cold turn that never needed a shell**, and nothing is lost, because the
+turn that does need one climbs to it (`electron/auto-profile.cjs`).
+
+Two things this measurement decided, and one it did not:
+
+- **`desktop_ui` is the single biggest line item after `file`**: 12 tools,
+  15,868 chars, **1,025 tokens = 2.9s**. That is 31% of `builder` and 46% of
+  `researcher`, which carries it for exactly one tool (`open_preview`). It is
+  NOT removable: Hermes pins by toolset, never by tool
+  (`tui_gateway/server.py::_load_enabled_toolsets` validates names against
+  `toolsets.validate_toolset`), so dropping it to save 2.9s would take
+  `open_preview` with it and a researcher would lose the ability to show its
+  work. Left in.
+- **There is no dead weight to delete.** Every toolset named by every profile
+  resolves to a non-empty, non-overlapping tool list, and each rung is a strict
+  superset of the one below (asserted in `scripts/profile-cost-test.cjs`). The
+  free win this task went looking for does not exist; the climb is the win.
+- **`PROFILE_COST` was NOT re-derived.** It is a different quantity — whole
+  prompt tokens on a hosted model, tools plus system prompt plus MCP — and it
+  cannot be re-taken without a turn. Where the two can be compared they
+  disagree in the direction its own comment admits: `researcher` and `builder`
+  both gained `desktop_ui` after it was taken, so it understates those two.
+  Overwriting it with local tool-schema numbers would have made the picker
+  print a figure that means neither thing.
+
+**Run here:** the chars/tools column (Hermes' own tool definitions, this
+machine, 2026-08-27) and the whole test file. **Not re-run:** the 3,338 / 9.4s
+anchor and the 15.5 tok/s generation rate — those are the earlier endpoint
+measurements recorded above, and the endpoint was deliberately not touched
+again.

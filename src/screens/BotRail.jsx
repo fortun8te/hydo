@@ -8,13 +8,23 @@ import { pluginPrettyName } from "../lib/plugin-icons.js";
 import { liveStateOf } from "./PlanCard.jsx";
 import ActivityMark from "./ActivityMark.jsx";
 
+// `coldSeconds` is the wait a LOCAL model spends reading this profile's tool
+// schema before its first word on a cold session — measured, see
+// PROFILE_TOOL_CHARS in electron/hermes-gateway.cjs. It is the real number
+// behind "pick builder and wait 9 seconds", and it is only shown when the bot
+// is actually running on the user's own hardware.
 const FALLBACK_PROFILES = [
-  { name: "chat", tokens: 5100 },
-  { name: "writer", tokens: 9800 },
-  { name: "researcher", tokens: 11800 },
-  { name: "builder", isDefault: true, tokens: 16600 },
-  { name: "full", tokens: 24700 },
+  { name: "chat", tokens: 5100, toolTokens: 399, coldSeconds: 1.1 },
+  { name: "writer", tokens: 9800, toolTokens: 1066, coldSeconds: 3 },
+  { name: "researcher", tokens: 11800, toolTokens: 2211, coldSeconds: 6.2 },
+  { name: "builder", isDefault: true, tokens: 16600, toolTokens: 3338, coldSeconds: 9.4 },
+  { name: "full", tokens: 24700, toolTokens: 4293, coldSeconds: 12.1 },
 ];
+
+/** "9.4s" / "3s". Empty when the number is not known, so nothing invents one. */
+function coldLabel(sec) {
+  return sec ? `${Math.round(sec * 10) / 10}s` : "";
+}
 
 // One action instead of two dropdowns and the knowledge of what they cost.
 //
@@ -99,6 +109,10 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   const boxEnabled = !!agent?.boxEnabled;
   const [wheelOpen, setWheelOpen] = useState(false);
   const [profiles, setProfiles] = useState(FALLBACK_PROFILES);
+  // Is THIS teammate answering from the user's own hardware? Only then does
+  // the cold-start second count mean anything: on a hosted model prefill is
+  // not the wait, and a seconds figure next to every profile would be noise.
+  const [onLocal, setOnLocal] = useState(false);
   const [connections, setConnections] = useState([]);
   const [toolsets, setToolsets] = useState([]);
   const [abilitiesOpen, setAbilitiesOpen] = useState(false);
@@ -137,6 +151,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   // zone that throws at render and blanks the whole app. `vite build` cannot
   // see it, and no test renders this component, so it reached the browser.
   const profileTokens = profiles.find((p) => p.name === toolProfile)?.tokens || 0;
+  const profileCold = profiles.find((p) => p.name === toolProfile)?.coldSeconds || 0;
   const activePreset = presetOf(toolProfile, reasoningEffort);
   const pinned = !!agent?.profilePinned;
   const pinnedMcp = useMemo(
@@ -171,6 +186,26 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
       .then((res) => {
         const list = Array.isArray(res?.toolsets) ? res.toolsets : [];
         if (!gone) setToolsets(list);
+      })
+      .catch(() => {});
+    // Same test Settings uses (`runningLocal`): the PROVIDER decides, with the
+    // model string as the fallback, because two providers can serve the same
+    // model id and only one of them is the box in the next room. Read once
+    // while the rail is open — an endpoint does not move mid-panel.
+    Promise.all([
+      Promise.resolve(window.hydo?.localProviders?.()).catch(() => null),
+      Promise.resolve(window.hydo?.getState?.()).catch(() => null),
+    ])
+      .then(([local, state]) => {
+        if (gone) return;
+        const list = Array.isArray(local?.providers) ? local.providers : [];
+        if (!list.length) return setOnLocal(false);
+        const settings = state?.settings || {};
+        const provider = String(agent?.provider || settings.provider || "");
+        const model = String(agent?.model || settings.model || "");
+        setOnLocal(
+          list.some((p) => (provider && p.id === provider) || (model && p.model === model))
+        );
       })
       .catch(() => {});
     return () => {
@@ -457,12 +492,17 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             {/* The RUNG, not just a number. "Auto 16.6k" reads as "auto costs
                 16.6k always", when it means "auto has climbed to Work". */}
             <span className="bot-rail__preset-cost">
-              {pinned ? "off" : `${profileLabel(toolProfile)} ${tokenLabel(profileTokens)}`}
+              {pinned
+                ? "off"
+                : `${profileLabel(toolProfile)} ${
+                    (onLocal && coldLabel(profileCold)) || tokenLabel(profileTokens)
+                  }`}
             </span>
           </button>
           {PRESETS.map((p) => {
             const on = pinned && activePreset === p.id;
             const cost = profiles.find((x) => x.name === p.profile)?.tokens;
+            const cold = profiles.find((x) => x.name === p.profile)?.coldSeconds;
             return (
               <button
                 key={p.id}
@@ -484,8 +524,11 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
                 {/* The arrow is the whole distinction between Work and Deep,
                     which share a profile and so share a number. A word does
                     not fit in a fifth of the rail; a caret does. */}
+                {/* On your own hardware the honest unit is seconds, not
+                    tokens: 3.3k of schema is 9.4s of silence before the first
+                    word of a cold turn (docs/LOCAL-MODEL.md). */}
                 <span className="bot-rail__preset-cost">
-                  {tokenLabel(cost)}
+                  {onLocal ? coldLabel(cold) || tokenLabel(cost) : tokenLabel(cost)}
                   {p.effort === "high" || p.effort === "medium" ? "\u2191" : ""}
                 </span>
               </button>
@@ -498,6 +541,13 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             : activePreset
             ? PRESETS.find((p) => p.id === activePreset).hint
             : "Custom. Tools and Reason are set individually below."}
+          {/* Naming the trade where it is made. Auto is the no-loss answer:
+              every tool is still reachable, they are just not all loaded up
+              front. Pinning a big profile is a choice to pay for them on every
+              cold turn, and the user should be told the price in seconds. */}
+          {onLocal && profileCold
+            ? ` On your hardware that is ~${coldLabel(profileCold)} of tool schema before the first word of a cold turn.`
+            : ""}
         </p>
       </div>
       {todos.length ? (
@@ -563,6 +613,7 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             {profileTokens > 12000
               ? " Each delegated worker inherits it too."
               : ""}
+            {onLocal && profileCold ? ` ~${coldLabel(profileCold)} of it is read before a cold turn answers.` : ""}
           </p>
         ) : null}
       </label>
