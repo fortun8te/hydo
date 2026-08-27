@@ -422,7 +422,11 @@
   border-radius: 13px;
   background: var(--hy-menu);
   border: 1px solid var(--hy-menu-border, rgba(252, 252, 252, 0.1));
-  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.72);
+  /* Much shallower than the slash menu's lift. Same ground colour, but this
+     panel is ATTACHED to the composer rather than floating over it, and the
+     menu's 56px shadow made an identical #1c1c1c read as a lighter, raised
+     surface than the menu itself. */
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
 
@@ -440,7 +444,7 @@
   text-align: left;
   cursor: pointer;
 }
-.hy-plan__bar:hover { background: var(--hy-menu-hover, rgba(252, 252, 252, 0.06)); }
+.hy-plan__bar:hover { background: var(--hy-menu-hover, rgba(252, 252, 252, 0.035)); }
 .hy-plan__bar:focus-visible { outline: 2px solid var(--sand-accent, #2a92fe); outline-offset: -2px; }
 
 /* One tick per step. A progress bar would say how far along without saying how
