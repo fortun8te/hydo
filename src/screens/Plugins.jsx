@@ -644,9 +644,12 @@ function PluginRow({ row, live, busy, test, error, auth, onAdd, onRemove, onTest
       <span className="hy-plugins__badge hy-plugins__badge--ok">
         <span className="hy-plugins__dot" aria-hidden="true" />
         Connected
-        {row.toolCount != null && (
+        {/* Only a real count. `0 tools` on eight connected rows reads as
+            eight broken plugins, and it usually just means nobody has run
+            Test yet — the server is connected, the schema is not fetched. */}
+        {row.toolCount ? (
           <span className="hy-plugins__tools">· {toolLabel(row.toolCount)}</span>
-        )}
+        ) : null}
       </span>
     );
   } else if (row.needsAuth) {

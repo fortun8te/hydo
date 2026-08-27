@@ -336,14 +336,18 @@
 
 /* -- one plugin row --------------------------------------------------------- */
 
+/* The actions column used to be `auto`, so Test + Remove + every badge took
+   whatever they wanted and the NAME column got what was left — which on a
+   narrow panel was one letter and an ellipsis. Actions are capped, and they
+   only appear on hover or focus, so a quiet list stays quiet. */
 .hy-plugins__row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+  grid-template-columns: 30px minmax(0, 1fr) minmax(0, auto);
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: 11px;
+  min-height: 50px;
+  padding: 7px 9px;
+  border-radius: 10px;
 }
 
 .hy-plugins__row:hover {
@@ -397,9 +401,18 @@
   gap: 6px;
   margin: 0;
   min-width: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* Status and description share the second line, so the name owns the first. */
+.hy-plugins__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
 }
 
 .hy-plugins__name-text {
@@ -651,4 +664,46 @@
   font-size: 13px;
   line-height: 1.5;
   color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+
+/* -- quieter rows --------------------------------------------------------- */
+
+.hy-plugins__desc {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Actions on hover only. Eight rows each shouting "Test" is the loudest thing
+   in the panel and none of it is what you came to read. */
+.hy-plugins__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.hy-plugins__row:hover .hy-plugins__actions,
+.hy-plugins__row:focus-within .hy-plugins__actions {
+  opacity: 1;
+}
+
+/* …except when it needs something from you. That must always be visible. */
+.hy-plugins__row:has(.hy-plugins__badge--warn) .hy-plugins__actions,
+.hy-plugins__row:has(.hy-plugins__badge--err) .hy-plugins__actions {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hy-plugins__actions { transition: none; }
+}
+
+/* The connected pill was full-strength green on every row at once. It is a
+   resting state, not news: dot plus muted label. */
+.hy-plugins__badge--ok {
+  background: transparent;
+  padding-left: 0;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-weight: 500;
 }
