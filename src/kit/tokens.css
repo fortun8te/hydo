@@ -1423,6 +1423,41 @@
   --hy-bubble-user: #d6d8dd;
   --hy-code-ground: #f4f4f6;
   --hy-shadow: rgba(20, 20, 20, 0.16);
+  --hy-shadow-heavy: rgba(20, 20, 20, 0.28);
+  /* --hy-hairline is the inset 1px ring drawn on solid avatar/mark discs
+     (sidebar account mark, collapsed-rail avatar) — on white these need a
+     dark hairline, not the pale rgba(252,252,252,*) that was hardcoded for
+     dark-only and read as an invisible near-white-on-white ring in light. */
+  --hy-hairline: rgba(20, 20, 20, 0.12);
+  --hy-hairline-strong: rgba(20, 20, 20, 0.18);
+  /* A near-black scrim reads as a dirty smudge on a white page; light mode's
+     scrim is lighter and warmer so the dimmed page behind a sheet still
+     looks like paper, not soot. */
+  --hy-scrim: rgba(20, 20, 20, 0.32);
+  --hy-scrim-heavy: rgba(20, 20, 20, 0.5);
+  /* Muted text tier between --sand-text-secondary and --sand-text-tertiary,
+     used for captions/labels that were hardcoded as mid-grey hex (#8a8a8a,
+     #9a9a9a, #6a6a6a) tuned to sit on black — on white those same greys are
+     too light to read as intentional hierarchy rather than a rendering bug. */
+  --hy-text-muted: #767676;
+  --hy-text-faint: #9a9a9a;
+  /* Inline-code chip: salmon-on-black-38% was tuned for a dark bubble and
+     fails contrast (~1.7:1) once the ground goes white. */
+  --hy-inline-code-bg: rgba(20, 20, 20, 0.06);
+  --hy-inline-code-text: #c2431f;
+}
+
+/* --sand-line is referenced all over (composer todolist strip, overlays,
+   richcontent, production, rails) as `var(--sand-line, <dark literal>)` but
+   was never actually defined — every one of those call sites was silently
+   running on its dark-tuned fallback in EVERY theme. Defining it here is
+   what makes those fallbacks stop mattering. */
+:root, [data-theme='cursor-light'] {
+  --sand-line: rgba(20, 20, 20, 0.14);
+}
+
+[data-theme='cursor-dark'], :root[data-theme='cursor-dark'] {
+  --sand-line: rgba(252, 252, 252, 0.18);
 }
 
 [data-theme='cursor-dark'], :root[data-theme='cursor-dark'] {
@@ -1435,4 +1470,13 @@
   --hy-bubble-user: #5a5a5a;
   --hy-code-ground: #0d0d0d;
   --hy-shadow: rgba(0, 0, 0, 0.55);
+  --hy-shadow-heavy: rgba(0, 0, 0, 0.7);
+  --hy-hairline: rgba(252, 252, 252, 0.1);
+  --hy-hairline-strong: rgba(252, 252, 252, 0.16);
+  --hy-scrim: rgba(0, 0, 0, 0.5);
+  --hy-scrim-heavy: rgba(0, 0, 0, 0.7);
+  --hy-text-muted: #9a9a9a;
+  --hy-text-faint: #6a6a6a;
+  --hy-inline-code-bg: rgba(0, 0, 0, 0.38);
+  --hy-inline-code-text: #ff8b72;
 }

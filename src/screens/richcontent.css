@@ -98,8 +98,8 @@
   line-height: 1.35;
   padding: 1px 6px;
   border-radius: 6px;
-  color: #ff8b72;
-  background: rgba(0, 0, 0, 0.38);
+  color: var(--hy-inline-code-text);
+  background: var(--hy-inline-code-bg);
   border: 0;
   white-space: pre-wrap;
   word-break: break-word;
@@ -288,7 +288,7 @@
 
 .hy-rc-file-dl:hover {
   color: var(--sand-text-primary, #fcfcfc);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--sand-fill-ghost-hover, #7777772c);
 }
 
 .hy-rc .hy-rc-file-tile {
@@ -863,7 +863,7 @@ button.hy-rc-image-tile {
   height: min(70vh, 640px);
   border: 1px solid var(--sand-border-weak, #fcfcfc1a);
   border-radius: 12px;
-  background: #111;
+  background: var(--hy-code-ground);
 }
 
 .hy-rc .hy-rc-mv-html-bar {
@@ -1158,7 +1158,7 @@ button.hy-rc-image-tile {
   padding: 12px;
   border-radius: 12px;
   background: var(--hy-code-ground);
-  border: 1px solid rgba(252, 252, 252, 0.08);
+  border: 1px solid var(--hy-menu-border);
   overflow: hidden;
 }
 
@@ -1197,7 +1197,7 @@ button.hy-rc-image-tile {
   width: 15px;
   height: 15px;
   margin-top: 3px;
-  border: 1.5px solid rgba(252, 252, 252, 0.32);
+  border: 1.5px solid var(--hy-hairline-strong);
   border-radius: 4px;
   font-size: 10px;
   line-height: 1;
@@ -1205,14 +1205,14 @@ button.hy-rc-image-tile {
 }
 
 .hy-rc-task-item.is-done .hy-rc-task-box {
-  background: #2bb673;
-  border-color: #2bb673;
+  background: var(--sand-ok, #2bb673);
+  border-color: var(--sand-ok, #2bb673);
 }
 
 .hy-rc-task-item.is-done .hy-rc-task-text {
   color: var(--sand-text-secondary, #fcfcfc99);
   text-decoration: line-through;
-  text-decoration-color: rgba(252, 252, 252, 0.35);
+  text-decoration-color: var(--hy-hairline-strong);
 }
 
 /* -- clickable links ------------------------------------------------------ */

@@ -10,7 +10,7 @@ import ChannelCreate from "./ChannelCreate.jsx";
 import BotCreate from "./BotCreate.jsx";
 import About from "./About.jsx";
 import Home from "./Home.jsx";
-import Computer from "./Computer.jsx";
+import ComputerRail from "./ComputerRail.jsx";
 import Plugins from "./Plugins.jsx";
 import Sheet from "./Sheet.jsx";
 import Transcript from "./Transcript.jsx";
@@ -225,7 +225,7 @@ export default function Shell({ state }) {
     return () => {
       gone = true;
     };
-  }, [sheet]);
+  }, [sheet, rail]);
 
   // Whose plan the composer shows. In a channel it is whoever is actually
   // working, because two open plans is two things to read and the one that
@@ -540,7 +540,7 @@ export default function Shell({ state }) {
             className={boxUp ? "icon-btn is-live" : "icon-btn"}
             title={boxUp ? "The computer is awake" : "Computer"}
             aria-label="Computer"
-            onClick={() => setSheet("computer")}
+            onClick={() => setRail((r) => (r === "computer" ? null : "computer"))}
           >
             {/* `device-desktop`, not `desktop`. The icon kit ships 523 named
                 glyphs and `gb-icon-desktop` is not one of them, so this
@@ -674,6 +674,28 @@ export default function Shell({ state }) {
         <Artifact artifactId={artifactId} onClose={() => setArtifactId(null)} />
       ) : null}
 
+      {rail === "computer" && (
+        <ComputerRail
+          agent={selected && !isChannel ? selected : null}
+          onClose={() => setRail(null)}
+          onOpenRoutines={() => {
+            setRoutineId(null);
+            setRail("routines");
+          }}
+          onCreateRoutine={async () => {
+            if (!selected || isChannel) return;
+            const next = await window.hydo.createRoutine({
+              name: "",
+              instruction: "",
+              triggers: [{ kind: "schedule", cadence: "once" }],
+            });
+            const list = next.routines?.[selected.id] || [];
+            setRail("routines");
+            if (list[0]) setRoutineId(list[0].id);
+          }}
+        />
+      )}
+
       {rail === "undo" && selected && !isChannel && (
         <Rollback agent={selected} onClose={() => setRail("bot")} />
       )}
@@ -750,11 +772,6 @@ export default function Shell({ state }) {
             setChannelCreate(false);
           }}
         />
-      )}
-      {sheet === "computer" && (
-        <Sheet title="Computer" onClose={() => setSheet(null)}>
-          <Computer />
-        </Sheet>
       )}
       {sheet === "about" && (
         <Sheet title="About" onClose={() => setSheet(null)}>

@@ -17,6 +17,21 @@ export const PLUGIN_LOGOS = {
   tableau: new URL("../kit/images/tableau-DMgl1MR0.png", import.meta.url).href,
   workday: new URL("../kit/images/workday-DI2a8j1o.svg", import.meta.url).href,
   zoominfo: new URL("../kit/images/zoominfo-kXQt8h27.png", import.meta.url).href,
+  // Added for the marketplace icon audit: these used to be hand-drawn
+  // approximations in DRAWN below (or a bare letter tile for slack/notion/
+  // linear, which had no mark at all). Real official marks now, sourced
+  // from simple-icons/vendor CDNs — see the audit report for provenance.
+  slack: new URL("../kit/images/slack.png", import.meta.url).href,
+  notion: new URL("../kit/images/notion.svg", import.meta.url).href,
+  linear: new URL("../kit/images/linear.svg", import.meta.url).href,
+  github: new URL("../kit/images/github.svg", import.meta.url).href,
+  figma: new URL("../kit/images/figma.svg", import.meta.url).href,
+  gmail: new URL("../kit/images/gmail.svg", import.meta.url).href,
+  gcal: new URL("../kit/images/googlecalendar.svg", import.meta.url).href,
+  gdrive: new URL("../kit/images/googledrive.svg", import.meta.url).href,
+  chatgpt: new URL("../kit/images/openai.svg", import.meta.url).href,
+  blender: new URL("../kit/images/blender.svg", import.meta.url).href,
+  searxng: new URL("../kit/images/searxng.svg", import.meta.url).href,
 };
 
 function svg(inner) {
@@ -26,23 +41,11 @@ function svg(inner) {
 }
 
 const DRAWN = {
-  figma: svg(
-    `<rect width="44" height="44" rx="11" fill="#1e1e1e"/><circle cx="16" cy="14" r="5" fill="#f24e1e"/><circle cx="28" cy="14" r="5" fill="#ff7262"/><circle cx="16" cy="22" r="5" fill="#a259ff"/><circle cx="28" cy="22" r="5" fill="#1abcfe"/><circle cx="16" cy="30" r="5" fill="#0acf83"/>`
-  ),
-  blender: svg(
-    `<rect width="44" height="44" rx="11" fill="#e87d0d"/><path fill="#fff" d="M22 8l11 6.4v12.2L22 33l-11-6.4V14.4z"/><circle cx="22" cy="20" r="4.2" fill="#e87d0d"/>`
-  ),
-  searxng: svg(
-    `<rect width="44" height="44" rx="11" fill="#3050f0"/><circle cx="20" cy="20" r="8" fill="none" stroke="#fff" stroke-width="3"/><path stroke="#fff" stroke-width="3" stroke-linecap="round" d="M26 26l8 8"/>`
-  ),
   exa: svg(
     `<rect width="44" height="44" rx="11" fill="#111"/><text x="22" y="28" text-anchor="middle" fill="#fff" font-size="16" font-weight="700" font-family="ui-sans-serif,system-ui,sans-serif">exa</text>`
   ),
   pencil: svg(
     `<rect width="44" height="44" rx="11" fill="#f4c430"/><path fill="#1c1c1c" d="M12 30.5l14.2-14.2 3.5 3.5L15.5 34H12z"/><path fill="#1c1c1c" d="M27.2 15.2l2.1-2.1 3.6 3.6-2.1 2.1z"/>`
-  ),
-  chatgpt: svg(
-    `<rect width="44" height="44" rx="11" fill="#10a37f"/><path fill="#fff" d="M22 11c2.4 0 4.6 1 6.1 2.7a7.2 7.2 0 013.3 6.1c0 .4 0 .8-.1 1.2a7.3 7.3 0 012.3 8.3A7.3 7.3 0 0128 33.6a7.2 7.2 0 01-12-.3 7.3 7.3 0 01-6.4-4.6 7.3 7.3 0 012.4-8.2 7.2 7.2 0 013.3-6.2A7.2 7.2 0 0122 11z"/>`
   ),
   magnific: svg(
     `<rect width="44" height="44" rx="11" fill="#6d28d9"/><circle cx="22" cy="22" r="9" fill="none" stroke="#fff" stroke-width="3"/><circle cx="22" cy="22" r="3" fill="#fff"/>`
@@ -58,18 +61,6 @@ const DRAWN = {
   ),
   filesystem: svg(
     `<rect width="44" height="44" rx="11" fill="#3b82f6"/><path fill="#fff" d="M12 14h10l3 3h7v15H12z"/>`
-  ),
-  github: svg(
-    `<rect width="44" height="44" rx="11" fill="#111"/><path fill="#fff" d="M22 10a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2.1c-3.3.7-4-1.6-4-1.6-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.6.1-3.3 0 0 1-.3 3.3 1.2a11.4 11.4 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 3 .1 3.3.8.8 1.2 1.9 1.2 3.2 0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6A12 12 0 0022 10z"/>`
-  ),
-  gmail: svg(
-    `<rect width="44" height="44" rx="11" fill="#fff"/><path fill="#4285F4" d="M7 13v19h7.6V21.4L22 26.9l7.4-5.5V32H37V13L22 24.1z"/><path fill="#EA4335" d="M7 13v4l15 11 15-11v-4L22 23.3z"/>`
-  ),
-  gcal: svg(
-    `<rect width="44" height="44" rx="11" fill="#fff"/><rect x="5" y="5" width="34" height="34" rx="7" fill="#1a73e8"/><text x="22" y="30" text-anchor="middle" fill="#fff" font-size="19" font-weight="700" font-family="ui-sans-serif,system-ui,sans-serif">31</text>`
-  ),
-  gdrive: svg(
-    `<rect width="44" height="44" rx="11" fill="#fff"/><path fill="#0F9D58" d="M15.6 31 22 11.6 28.4 31z"/><path fill="#4285F4" d="M6.2 31h12.6L15.9 20.7z"/><path fill="#FFBA00" d="M25.2 31h12.6L34.9 20.7z"/>`
   ),
 };
 
@@ -126,6 +117,20 @@ export function pluginPrettyName(plugin) {
   }
   return String((plugin && plugin.name) || id);
 }
+
+/**
+ * Marks whose official colour is essentially black.
+ *
+ * The icon tile is `--sand-fill-secondary`, which is dark under the dark theme
+ * and light under the light one — so a black mark disappears in dark and a
+ * white one would disappear in light. Recolouring someone's logo per theme is
+ * not ours to do, so these get a constant light chip to sit on instead, which
+ * is what app stores do with the same problem.
+ *
+ * GitHub shipped at #181717 and Notion at #000000, and both rendered as a
+ * barely-visible smudge on the dark tile.
+ */
+export const MONO_DARK_LOGOS = new Set(["github", "notion"]);
 
 export function pluginIconUrl(plugin) {
   if (!plugin || typeof plugin !== "object") return "";

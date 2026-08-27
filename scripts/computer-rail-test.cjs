@@ -1,0 +1,71 @@
+"use strict";
+
+// Pins the Computer-screen-is-a-rail-not-a-dialog decision. The user's own
+// verdict was "this is a weird menu, i don't want this — it should open a
+// sidebar instead", and a future edit re-wrapping ComputerRail in <Sheet>
+// would silently bring the dialog back without any component test catching
+// it (this app has no jsdom render step, only source-shape assertions like
+// wiring-check.cjs — so that is what this checks too).
+
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const ROOT = path.join(__dirname, "..");
+const shell = fs.readFileSync(path.join(ROOT, "src/screens/Shell.jsx"), "utf8");
+const rail = fs.readFileSync(path.join(ROOT, "src/screens/ComputerRail.jsx"), "utf8");
+const css = fs.readFileSync(path.join(ROOT, "src/screens/rails.css"), "utf8");
+const icons = fs.readFileSync(path.join(ROOT, "src/kit/icons.css"), "utf8");
+
+// The old modal is gone, not just unused.
+assert.ok(!fs.existsSync(path.join(ROOT, "src/screens/Computer.jsx")), "Computer.jsx should be removed");
+assert.ok(!shell.includes('import Computer from "./Computer.jsx"'), "Shell still imports the old modal");
+assert.ok(!shell.includes('sheet === "computer"'), "Shell still opens Computer in a Sheet dialog");
+
+// The header monitor button reveals the rail, not a sheet.
+assert.ok(shell.includes("import ComputerRail from"), "Shell does not import ComputerRail");
+const headerBtn = shell.slice(shell.indexOf('aria-label="Computer"'), shell.indexOf('aria-label="Computer"') + 200);
+assert.ok(headerBtn.includes('setRail'), 'the Computer header button should setRail, not setSheet');
+assert.ok(!headerBtn.includes('setSheet("computer")'), 'the Computer header button still opens a Sheet');
+assert.ok(shell.includes('rail === "computer"'), "Shell never renders ComputerRail from rail state");
+
+// ComputerRail itself: an <aside>, not a role="dialog" — Sheet.jsx is the
+// only place role="dialog" belongs in this app.
+assert.ok(rail.includes("<aside"), "ComputerRail should render an <aside>, matching BotRail/ChannelRail");
+assert.ok(!rail.includes('role="dialog"'), "ComputerRail must not be a dialog");
+assert.ok(!rail.includes("<Sheet"), "ComputerRail must not wrap itself in the Sheet modal");
+
+// The thumbnail: no polling loop. setInterval/setTimeout anywhere in this
+// file is exactly the cost the rework exists to avoid on a per-second-billed
+// machine — box-runtime.cjs's own comment names the law this pins.
+assert.ok(!rail.includes("setInterval"), "ComputerRail must not poll the screen");
+assert.ok(rail.includes("desktopUrl"), "ComputerRail should use the runtime's own desktopUrl, not a screenshot call");
+
+// The hover-to-open affordance and the caption the user asked for.
+assert.ok(rail.includes("computer-rail__open"), "missing the hover Open pill");
+assert.ok(rail.includes("'s screen") || rail.includes("&apos;s screen"), 'missing the "<Bot>\'s screen" caption');
+
+// Every icon class ComputerRail renders must actually resolve to a glyph.
+// This is the exact failure mode named in the task: gb-icon-desktop doesn't
+// exist, ::before falls to `content: none`, and the button measures 0x0
+// while looking correct in a diff.
+const usedIcons = [...rail.matchAll(/gb-icon-([a-z0-9-]+)/g)].map((m) => `gb-icon-${m[1]}`);
+assert.ok(usedIcons.length > 0, "expected ComputerRail to reference icon classes");
+for (const cls of new Set(usedIcons)) {
+  assert.ok(icons.includes(`.${cls}::before`), `icon class ${cls} has no ::before rule in icons.css`);
+}
+
+// The CSS the component actually renders exists — a class used in JSX with
+// no rule behind it is the same silent-0x0 failure mode above, just in the
+// stylesheet instead of the icon font.
+const usedClasses = new Set(
+  [...rail.matchAll(/className=(?:"([\w-]+(?: [\w-]+)*)"|\{[^}]*"([\w-]+(?: [\w-]+)*)")/g)]
+    .flatMap((m) => (m[1] || m[2] || "").split(" "))
+    .filter((c) => c.startsWith("computer-rail__"))
+);
+assert.ok(usedClasses.size > 0, "expected computer-rail__* classes in ComputerRail.jsx");
+for (const cls of usedClasses) {
+  assert.ok(css.includes(`.${cls}`), `class ${cls} used in ComputerRail.jsx has no rule in rails.css`);
+}
+
+console.log("computer-rail-test ok");

@@ -20,7 +20,7 @@
   min-height: 52px;
   border-radius: 26px;
   background: var(--hy-raised);
-  border: 1px solid #fcfcfc12;
+  border: 1px solid var(--hy-hairline);
 }
 
 /* Beats `.sand-composer input { padding: 8px 0 }` in styles.css, which would
@@ -69,7 +69,7 @@
 }
 
 .sand-composer__plus:hover {
-  background: #4a4a4a;
+  background: var(--hy-raised-hover);
 }
 
 .sand-composer__actions {
@@ -147,8 +147,11 @@
 /* Stop is the opposite errand . you press it when something is going wrong .
    so it keeps the plain disc and none of the glow. */
 .sand-composer .send.send--stop {
-  background: #fcfcfc;
-  color: #141414;
+  /* was a literal near-white disc + near-black icon: the deliberate inverted
+     "stop" pill, so it must swap to the same inversion tokens the primary
+     button uses rather than staying pinned to dark-mode's colors. */
+  background: var(--sand-fill-primary, #fcfcfc);
+  color: var(--sand-text-on-primary, #141414);
   box-shadow: none;
 }
 
@@ -214,8 +217,8 @@
   height: 52px;
   border-radius: 10px;
   overflow: hidden;
-  background: #2a2a2a;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--hy-raised);
+  border: 1px solid var(--hy-hairline);
   flex: none;
 }
 
@@ -234,8 +237,8 @@
   height: 18px;
   border: 0;
   border-radius: 50%;
-  background: #fff;
-  color: #111;
+  background: var(--sand-fill-primary, #fff);
+  color: var(--sand-text-on-primary, #111);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
@@ -255,7 +258,7 @@
   min-width: 0;
   padding: 7px 8px 7px 10px;
   border-radius: 16px;
-  background: #3a3a3a;
+  background: var(--hy-raised-hover);
   color: var(--sand-text-secondary, #fcfcfc99);
   font-size: 13px;
 }
@@ -288,7 +291,7 @@
 }
 
 .sand-reply__x:hover {
-  background: #ffffff1f;
+  background: var(--sand-fill-ghost-hover, #7777772c);
   color: var(--sand-text-primary, #fcfcfc);
 }
 
@@ -313,8 +316,8 @@
   padding: 6px;
   border-radius: 16px;
   background: var(--hy-menu);
-  border: 1px solid rgba(252, 252, 252, 0.1);
-  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.72);
+  border: 1px solid var(--hy-menu-border);
+  box-shadow: 0 20px 56px var(--hy-scrim-heavy);
   z-index: 6;
 }
 
@@ -354,7 +357,7 @@
   flex: none;
   display: grid;
   place-items: center;
-  color: #9a9a9a;
+  color: var(--hy-text-faint);
   font-size: 14px;
 }
 
@@ -413,7 +416,7 @@
 .sand-slash__sep {
   height: 1px;
   margin: 5px 8px;
-  background: rgba(252, 252, 252, 0.09);
+  background: var(--hy-hairline);
 }
 
 .sand-slash__empty {
@@ -471,12 +474,12 @@
   justify-content: flex-end;
   border-radius: 13px;
   background: var(--hy-menu);
-  border: 1px solid var(--hy-menu-border, rgba(252, 252, 252, 0.1));
+  border: 1px solid var(--hy-menu-border);
   /* Much shallower than the slash menu's lift. Same ground colour, but this
      panel is ATTACHED to the composer rather than floating over it, and the
      menu's 56px shadow made an identical #1c1c1c read as a lighter, raised
      surface than the menu itself. */
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 18px var(--hy-shadow);
   overflow: hidden;
 }
 

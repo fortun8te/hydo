@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Kit from "../kit/ui.jsx";
-import { pluginIconUrl, pluginPrettyName } from "../lib/plugin-icons.js";
+import { pluginIconUrl, pluginPrettyName, MONO_DARK_LOGOS } from "../lib/plugin-icons.js";
 
 // ---------------------------------------------------------------------------
 // Defensive kit binding.
@@ -58,8 +58,9 @@ export function LetterTile({ name, id }) {
 function Mark({ id, name, iconUrl }) {
   const src = iconUrl || pluginIconUrl({ id, name, iconUrl });
   if (src) {
+    const chip = MONO_DARK_LOGOS.has(String(id || "").toLowerCase());
     return (
-      <span className="hy-plugins__mark hy-plugins__mark--img">
+      <span className={`hy-plugins__mark hy-plugins__mark--img${chip ? " hy-plugins__mark--chip" : ""}`}>
         <img src={src} alt="" aria-hidden="true" />
       </span>
     );

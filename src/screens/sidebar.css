@@ -80,7 +80,10 @@
 }
 
 .sand-sidebar .sand-row:hover {
-  --row-ground: #242424;
+  /* was a literal #242424: matched --hy-raised-hover in dark by coincidence,
+     but never moved in light mode, so a hovered row's status-pip ring cut
+     itself out of black instead of the pale hover fill underneath it. */
+  --row-ground: var(--hy-raised-hover);
   background: var(--sand-fill-ghost-hover, #7777772c);
 }
 
@@ -92,7 +95,10 @@
 .sand-sidebar .sand-row.is-pick,
 .sand-sidebar .sand-row.is-pick:hover,
 .sand-sidebar .sand-row.is-on.is-pick {
-  --row-ground: #2e2e2e;
+  /* was a literal #2e2e2e, same bug as the :hover ground above it — the
+     selected row's ring is meant to match --hy-raised, which it already
+     paints as the background, but the ring color itself never followed. */
+  --row-ground: var(--hy-raised);
   background: var(--hy-raised);
 }
 
@@ -129,7 +135,7 @@
   background: transparent;
   outline: none;
   padding: 0;
-  caret-color: #5aa8ff;
+  caret-color: var(--sand-border-focus, #1c8bfe);
 }
 
 .sand-sidebar .sand-row__tag {
@@ -208,7 +214,7 @@
 }
 
 .sand-sidebar .sand-row.is-pick:not(.is-on) {
-  --row-ground: #2e2e2e;
+  --row-ground: var(--hy-raised);
   background: var(--hy-raised);
 }
 
@@ -264,12 +270,12 @@
 }
 
 .sand-sidebar .sand-pin:hover {
-  --row-ground: #242424;
+  --row-ground: var(--hy-raised-hover);
   background: var(--sand-fill-ghost-hover, #7777772c);
 }
 
 .sand-sidebar .sand-pin.is-on {
-  --row-ground: #2e2e2e;
+  --row-ground: var(--hy-raised);
   background: var(--hy-raised);
 }
 
@@ -468,7 +474,7 @@
 
 .sand-sidebar .sand-plugins:hover,
 .sand-sidebar .sand-account:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--sand-fill-ghost-hover, #7777772c);
 }
 
 /* 40px, and a circle. In the reference both foot rows carry a proper icon
@@ -492,8 +498,8 @@
    is an object next to the avatar below it rather than an empty ring. */
 .sand-sidebar .sand-plugins .sand-foot__mark {
   border: 0;
-  background: #1c1c1c;
-  box-shadow: inset 0 0 0 1px rgba(252, 252, 252, 0.1);
+  background: var(--hy-raised);
+  box-shadow: inset 0 0 0 1px var(--hy-hairline);
   color: var(--sand-text-primary, #fcfcfc);
 }
 
@@ -597,7 +603,7 @@
   min-width: 232px;
   padding: 6px;
   border-radius: 14px;
-  background: #1f1f1f;
+  background: var(--hy-menu);
 }
 
 .sand-sidebar .account-menu__item {
@@ -705,7 +711,7 @@
 .sand-sidebar[data-collapsed="true"] .sand-row.is-on,
 .sand-sidebar[data-collapsed="true"] .sand-row.is-on:hover,
 .sand-sidebar[data-collapsed="true"] .sand-row.is-pick {
-  background: #2c2c2c;
+  background: var(--hy-raised);
 }
 
 .sand-sidebar[data-collapsed="true"] .sand-section__head,
@@ -771,8 +777,8 @@
   width: 36px;
   height: 36px;
   font-size: 13px;
-  background: #1c1c1c;
-  box-shadow: inset 0 0 0 1px rgba(252, 252, 252, 0.14);
+  background: var(--hy-raised);
+  box-shadow: inset 0 0 0 1px var(--hy-hairline-strong);
 }
 
 .sand-sidebar[data-collapsed="true"] .account-menu {

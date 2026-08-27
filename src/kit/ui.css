@@ -37,7 +37,7 @@
 .hy-dialog__scrim {
   position: absolute;
   inset: 0;
-  background: #00000073;
+  background: var(--hy-scrim);
 }
 
 .hy-dialog__card {
@@ -360,7 +360,7 @@
   height: 17px;
   border-radius: 50%;
   background: var(--sand-text-on-color, #fcfcfc);
-  box-shadow: 0 1px 2px #00000059;
+  box-shadow: 0 1px 2px var(--hy-shadow);
   transition: transform 160ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
