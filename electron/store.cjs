@@ -84,6 +84,15 @@ const PROFILE_IDS = ["chat", "writer", "researcher", "builder", "full"];
 // state.json, and that file is re-serialised on every save, so this is a cap
 // on how much work every future write does . not just on the picture.
 const MAX_AVATAR = 350_000;
+// Deleting a teammate must actually stop it: a live Hermes session, maybe a
+// turn or a subagent in flight, maybe a `terminal`-started process, maybe a
+// hold on the shared box. All of that is bounded and non-blocking, same shape
+// as the quit path's QUIT_STOP_BUDGET_MS in box-runtime.cjs — issue the stop,
+// give it a budget, move on rather than let a wedged gateway hang a delete.
+// Wider than quit's 2000ms because a delete can fan out into several RPCs
+// (per-subagent interrupt, process kills, then the session close) where quit
+// only races a single close.
+const DELETE_STOP_BUDGET_MS = 3000;
 
 /**
  * Who the user is, when nobody has said yet.
@@ -1808,6 +1817,68 @@ function createStore(opts = {}) {
     }
   })();
 
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * The actual "stop it" behind deleteAgent, in the order that matters:
+   * interrupt whatever is in flight, THEN close the session, THEN release any
+   * box hold this teammate is holding. Every step is individually caught — a
+   * gateway that will not answer must not stop the row from ever being
+   * deletable, it only means the cleanup underneath is best-effort.
+   */
+  async function stopTeammate(id, subagentIds) {
+    try {
+      const gateway = require("./hermes-gateway.cjs");
+      if (gateway.available()) {
+        // Background subagent workers first — otherwise one can still be
+        // mid-tool-call when the session underneath it closes.
+        if (typeof gateway.interruptSubagent === "function") {
+          for (const sid of subagentIds) {
+            await gateway.interruptSubagent(id, sid).catch(() => {});
+          }
+        }
+        // The foreground/background turn itself, so it does not go on writing
+        // into a thread whose row is about to disappear.
+        if (typeof gateway.interrupt === "function") {
+          await gateway.interrupt(id).catch(() => {});
+        }
+        // Anything left running in `terminal` (dev servers, watchers) — a
+        // teammate on the `builder` profile can leave one behind, and closing
+        // the session is not documented to reap it.
+        if (typeof gateway.listProcesses === "function" && typeof gateway.killProcess === "function") {
+          const procs = await gateway.listProcesses(id).catch(() => []);
+          for (const p of procs) {
+            const pid = p && (p.id || p.process_id || p.pid);
+            if (pid) await gateway.killProcess(id, pid).catch(() => {});
+          }
+        }
+        // The Hermes session and its python child. Same class of leak the
+        // quit path already fixes — an orphaned child per deleted bot.
+        if (typeof gateway.close === "function") {
+          await gateway.close(id).catch(() => {});
+        }
+      }
+    } catch {
+      /* no gateway at all — nothing live to stop */
+    }
+    // A hold is a token in a Set (box-runtime.cjs `hold`); calling hold()
+    // again for the same token and invoking the release it returns deletes
+    // that same key, regardless of which call originally created it. That is
+    // the only way to release a hold this bot may still own without reaching
+    // into box-runtime's closure — a stale hold is a refcount that never
+    // drops to zero, so the idle sweep never fires and the shared machine
+    // bills forever.
+    if (box) {
+      try {
+        box.hold(`turn-${id}`)();
+      } catch {
+        /* no box configured */
+      }
+    }
+  }
+
   function normalizeSendImages(raw) {
     if (!Array.isArray(raw)) return [];
     const out = [];
@@ -1995,6 +2066,27 @@ function createStore(opts = {}) {
       profile: agent.toolProfile || "chat",
       extraToolsets: Array.isArray(agent.toolsets) ? agent.toolsets : [],
       mcp: Array.isArray(agent.mcp) ? agent.mcp : [],
+    };
+
+    // Say what is ACTUALLY happening while a cold turn boots, instead of one
+    // flat "Coming online" for a stretch that measured 135s on this machine
+    // (cold gateway + a local model's first turn). hermes-gateway.cjs calls
+    // this at the only two boundaries it can genuinely see: the gateway
+    // child coming up (spawn + RPC handshake) and `session.create`/`resume`
+    // going out against it. Nothing past this point is guessed — once
+    // `submit` below starts streaming, the existing `onActivity` handler
+    // takes over with the real per-turn labels ("Thinking", a tool name...).
+    sessionOpts.onStage = (stage) => {
+      if (stage === "gateway-start") {
+        setStatus(agent.id, "working", "Starting Hermes", convId || agent.id);
+      } else if (stage === "session-create") {
+        setStatus(agent.id, "working", `Starting session: ${sessionOpts.model}`, convId || agent.id);
+      } else if (stage === "session-resume") {
+        setStatus(agent.id, "working", `Resuming session: ${sessionOpts.model}`, convId || agent.id);
+      }
+      // setStatus alone does not push to the renderer; this is the same
+      // debounced push the streaming deltas below use.
+      saveSoon();
     };
 
     if (!gateway.hasSession(agent.id) && agent.hermesSessionId) {
@@ -2812,13 +2904,15 @@ function createStore(opts = {}) {
       save();
       return publicState();
     },
-    deleteEntries(ids) {
+    async deleteEntries(ids) {
       const list = [...new Set((Array.isArray(ids) ? ids : [ids]).map((id) => String(id || "")).filter(Boolean))];
       for (const id of list) {
         const entry = entryById(id);
         if (!entry) continue;
         if (entry.kind === "channel") api.deleteChannel(id);
-        else api.deleteAgent(id);
+        // Awaited: deleteAgent's own interrupt/close/release/forget ordering
+        // only holds if this call is not left running past the loop.
+        else await api.deleteAgent(id);
       }
       save();
       return publicState();
@@ -3028,14 +3122,50 @@ function createStore(opts = {}) {
       save();
       return publicState();
     },
-    deleteAgent(id) {
+    /**
+     * A teammate is not just a row in state.json. Behind it there can be a live
+     * Hermes session, a turn (or a subagent) in flight, a `terminal`-started
+     * background process, and — if boxEnabled — a hold on the shared machine.
+     * Deleting the row without stopping those leaves an orphaned python child
+     * (the same class of leak the quit path already fixes) and, worse, a hold
+     * the idle sweep never sees drop, which is a machine that bills forever.
+     *
+     * Order matters: interrupt in-flight work → close the session → release
+     * the box hold → only THEN forget the row. Forgetting first would mean the
+     * close below has no id left to act on.
+     */
+    async deleteAgent(id) {
       const idx = state.agents.findIndex((a) => a.id === id);
       if (idx < 0) return publicState();
+      const agent = state.agents[idx];
+      // Captured before the row goes away — subagentIds/lastSubagentId live on
+      // the agent object itself, so they are gone the instant it is spliced.
+      const subagentIds = [
+        ...new Set([...(agent.subagentIds || []), agent.lastSubagentId].filter(Boolean)),
+      ];
+
+      await Promise.race([stopTeammate(id, subagentIds), sleep(DELETE_STOP_BUDGET_MS)]);
+
+      // On-disk profile (~/.hermes/profiles/hydo<id>/) and workspace are left
+      // in place deliberately: silently deleting someone's files on a bot
+      // delete is its own bug. createAgent always mints a fresh uuid, so
+      // nothing ever re-derives this id's paths and resurrects a ghost bot
+      // from them — they just sit there as clutter until the user clears
+      // them by hand.
       state.agents.splice(idx, 1);
       delete state.messages[id];
       delete state.routines[id];
       for (const k of Object.keys(state.dms || {})) {
         if (k.split(":").includes(id)) delete state.dms[k];
+      }
+      // A channel's `members` is a list of agent ids, so a deleted bot left
+      // dangling here is not a row that disappeared — it is a member of
+      // every channel it was in that a reload can never resolve back to an
+      // agent, forever.
+      for (const ch of state.channels || []) {
+        if (Array.isArray(ch.members) && ch.members.includes(id)) {
+          ch.members = ch.members.filter((m) => m !== id);
+        }
       }
       if (state.selectedId === id) state.selectedId = state.agents[0]?.id || null;
       save();

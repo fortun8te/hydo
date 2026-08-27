@@ -1039,7 +1039,15 @@ function Transcript({
       ...extra,
     });
     if (!presence.visible) return null;
-    const elapsed = elapsedLabel(extra.since ?? since, clock);
+    // `since` (from Shell) is when THIS window's user last hit send — it is
+    // 0/stale for a turn this window did not start, which includes a brand
+    // new teammate's landing turn (fired from the create flow, never from
+    // the composer). `agent.activeAt` is the store's own turn-start stamp
+    // (see `setStatus` in store.cjs), set for every working turn regardless
+    // of who kicked it off, so it is the fallback rather than a guess. It is
+    // an ISO string on the wire, so it needs parsing before it is a "since".
+    const agentSince = agent.activeAt ? new Date(agent.activeAt).getTime() : 0;
+    const elapsed = elapsedLabel(extra.since ?? (since || agentSince), clock);
     return (
       <div
         className="sand-inchat"

@@ -1081,8 +1081,21 @@ function sessionFor(botId, opts = {}) {
   }
   const title = opts.title || botId;
 
+  // `opts.onStage` is best-effort UI plumbing — never load-bearing, and a
+  // caller that passes none behaves exactly as before. It reports the only
+  // two waits on this path that are actually real and actually distinct:
+  // the gateway child (spawn + RPC handshake, inside `ensure`) and
+  // `session.create` against it. Measured on this machine: a cold gateway
+  // plus a first local-model turn took 135s total, and until this existed
+  // the caller had nothing truer to say than "Coming online" for the whole
+  // stretch — which reads exactly like a hang once it passes a few seconds.
+  const rt = getRuntime(pin);
+  const childWasReady = !!(rt.ready && rt.child && rt.child.exitCode === null);
+  if (!childWasReady) safeCall(opts.onStage, 'gateway-start');
+
   const creating = ensure(pin)
     .then(() => {
+      safeCall(opts.onStage, 'session-create');
       try {
         fs.mkdirSync(cwd, { recursive: true });
       } catch (err) {
@@ -1726,15 +1739,21 @@ function resume(botId, sessionId, opts = {}) {
   const target = String(sessionId || '').trim();
   if (!target) return Promise.reject(new Error('resume: sessionId required'));
   const pin = pinFor(opts);
+  // Same honest two-stage split as sessionFor: only the child boot is a real
+  // wait worth naming before the RPC even goes out.
+  const rt = getRuntime(pin);
+  const childWasReady = !!(rt.ready && rt.child && rt.child.exitCode === null);
+  if (!childWasReady) safeCall(opts.onStage, 'gateway-start');
   return ensure(pin)
-    .then(() =>
-      request(
+    .then(() => {
+      safeCall(opts.onStage, 'session-resume');
+      return request(
         'session.resume',
         { session_id: target, omit_messages: true },
         REQUEST_TIMEOUT_MS,
         pin
-      )
-    )
+      );
+    })
     .then((result) => {
       forget(botId);
       const bot = {

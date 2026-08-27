@@ -306,8 +306,8 @@ app.whenReady().then(() => {
     }, 400);
     return next;
   });
-  ipcMain.handle("hydo:deleteAgent", (_e, id) => {
-    const next = store.deleteAgent(id);
+  ipcMain.handle("hydo:deleteAgent", async (_e, id) => {
+    const next = await store.deleteAgent(id);
     push();
     return next;
   });
@@ -478,8 +478,8 @@ app.whenReady().then(() => {
     push();
     return next;
   });
-  ipcMain.handle("hydo:deleteEntries", (_e, ids) => {
-    const next = store.deleteEntries(ids);
+  ipcMain.handle("hydo:deleteEntries", async (_e, ids) => {
+    const next = await store.deleteEntries(ids);
     push();
     return next;
   });

@@ -472,7 +472,7 @@ async function channels() {
   );
 
   // Deleting a bot must not leave it haunting a channel.
-  store.deleteAgent(beta);
+  await store.deleteAgent(beta);
   const reloaded = createStore({ dir, complete: async () => "x" });
   assert.ok(
     !reloaded.getState().channels[0].members.includes(beta),
