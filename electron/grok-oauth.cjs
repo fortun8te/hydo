@@ -99,4 +99,22 @@ function ensureHermesXaiOauth() {
   }
 }
 
-module.exports = { ensureHermesXaiOauth, grokAuthPath, hermesAuthPath };
+/**
+ * Is there a hosted (Grok) credential to run a turn on, WITHOUT writing anything?
+ *
+ * `ensureHermesXaiOauth` is the setup path and it writes ~/.hermes/auth.json.
+ * The local-endpoint fallback asks this question on a turn, where a write is
+ * both a surprise and a file lock nobody asked for — so the read-only twin
+ * exists. True when Hermes already holds xai-oauth tokens, or when the Grok
+ * CLI holds a record that `ensureHermesXaiOauth` could import.
+ */
+function hostedAuthReady() {
+  try {
+    if (hermesHasXaiOauth(readJson(hermesAuthPath()))) return true;
+    return !!grokRecord(readJson(grokAuthPath()));
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { ensureHermesXaiOauth, hostedAuthReady, grokAuthPath, hermesAuthPath };

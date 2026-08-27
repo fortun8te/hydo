@@ -519,12 +519,33 @@ console.log("box-runtime-test (presets) ok");
   // second branch was added for teammates with no shell — two mutually
   // exclusive branches, only ever one of which ships, counted as one long one.
   // The source is not what is taxed; the emitted string is.
-  const branches = block.split(/\n\s*: agent\.boxEnabled/).map((b) => b.match(/"[^"]{20,}"/g) || []);
-  if (branches.length < 2) throw new Error("expected a no-shell branch and a shell branch");
-  for (const strings of branches) {
-    const prose = strings.join(" ");
-    if (prose.length > 2000) {
-      throw new Error(`a boxBlock branch is taxed every turn; keep it short (${prose.length})`);
+  //
+  // The second attempt scraped `"..."` literals out of the branch source, and
+  // that was broken too, in a way that read as working: the browsing ladder is
+  // a SINGLE-quoted string containing double quotes (`lux start "<goal>"`), so
+  // the quote pairing slid and the counted chunks were mostly comments and
+  // array punctuation. Demonstrated while adding the browser-routing line —
+  // changing that sentence's length by 160 characters moved the number by
+  // ZERO. A size pin blind to the prose it pins is worse than none.
+  //
+  // So: evaluate the branch's array literal with the same variables store.cjs
+  // has in scope, and measure the string the teammate actually reads.
+  const branchSrc = block.split(/\n\s*: agent\.boxEnabled/);
+  if (branchSrc.length < 2) throw new Error("expected a no-shell branch and a shell branch");
+  const render = (src, hasBrowser) => {
+    const arr = /\[([\s\S]*)\]\.join\("\\n"\)/.exec(src);
+    if (!arr) throw new Error("a boxBlock branch is no longer an array literal joined with newlines");
+    // eslint-disable-next-line no-new-func
+    const fn = new Function("boxId", "agent", "hasBrowser", `return [${arr[1]}].join("\\n");`);
+    return fn("bx_test123", { id: "a1" }, hasBrowser);
+  };
+  for (const [i, src] of branchSrc.entries()) {
+    // Both settings of the routing line, so the widest teammate is the one pinned.
+    for (const hasBrowser of [false, true]) {
+      const prose = render(src, hasBrowser);
+      if (prose.length > 2000) {
+        throw new Error(`boxBlock branch ${i} is taxed every turn; keep it short (${prose.length})`);
+      }
     }
   }
   // A teammate without `terminal` cannot run `box exec` at all, so it must be

@@ -484,6 +484,54 @@ for real output rather than trusting the resume call's own timing.
 
 ---
 
+## Two browsers, and the rule for picking one
+
+A teammate with the Linux workspace on *and* the `browser` toolset holds two
+ways to read a web page, and until now nothing said which. They differ in ways
+that decide the turn:
+
+| | Hermes' own `browser` | The box ladder |
+|---|---|---|
+| Where it runs | this Mac | the shared box |
+| Wakes a billed machine | no | **yes** — and `box exec` does not wake it (above) |
+| lux ration (1 at a time, 20/day) | not subject to it | the top rung is |
+| Whose logins | **the user's own** — `browser.use_real_profile: true` drives a managed snapshot of his default Chrome | the **box's** Chrome profile, a different set entirely (see the persistence section above) |
+| Where the bytes land | in this conversation | on the shared disk, until you pull them |
+| Works with the Mac asleep | no | yes, once the box is awake |
+
+The last two rows are the whole reason both exist. So the rule in `AGENTS.md` is
+one sentence, and it is a decision procedure rather than a description:
+
+> Two browsers. Needs the user's own logins or accounts: your own `browser`
+> tool, on this Mac, no box to wake. Bulk fetching, the shared disk, or work
+> that outlives this Mac: the box above, whose Chrome carries its own separate
+> logins.
+
+Costs verified rather than assumed: Hermes' browser spends **zero box seconds**
+(it never issues a `box exec`), needs **no resume**, and is **not** counted
+against the 20/day lux ration — those are box-side quotas and it is not on the
+box. It does need this Mac awake, which the box does not.
+
+**Only teammates that actually have `browser` see the rule.** No stock tool
+profile carries it (`TOOL_PROFILES` in `electron/hermes-gateway.cjs`), and
+`full` pins nothing at all — it inherits the user's own `toolsets:` from
+`config.yaml`, which here is `[hermes-cli]`. So the gate is the same shape as
+the `hasShell` gate beside it: check the pin, never assume. Pinned by
+`scripts/browse-routing-test.cjs`.
+
+**One line, and the size pin had to be repaired to see it.** The pin in
+`scripts/box-runtime-test.cjs` scraped `"..."` literals out of the branch
+source, and the browsing ladder is a *single*-quoted string containing double
+quotes (`lux start "<goal>"`), so the pairing slid and it was counting comments
+and array punctuation. Measured while adding this line: changing the sentence's
+length by 160 characters moved the pinned number by **zero**. It now evaluates
+each branch's array literal and measures the string the teammate actually
+reads — the shell branch is **1,382 chars** without the routing line and
+**1,615** with it, against a 2,000 cap that used to read 1,997 for prose it was
+not looking at.
+
+---
+
 ## `box exec` quoting: a false-negative that cost two wrong conclusions
 
 This bit twice in one session, and both times the wrong conclusion was reached

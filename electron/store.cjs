@@ -8,6 +8,7 @@ const artifactLib = require("./artifacts.cjs");
 const autoProfile = require("./auto-profile.cjs");
 const contextMgmt = require("./context-mgmt.cjs");
 const modelPick = require("./model-pick.cjs");
+const localFallback = require("./local-fallback.cjs");
 const routinesLib = require("./routines.cjs");
 // Approval-mode + allowlist IPC (see docs/SAFETY.md gaps #1/#2). Registered
 // here — not in electron/main.cjs — because this module already loads inside
@@ -2084,6 +2085,26 @@ function createStore(opts = {}) {
       profileSets === null || // `full` pins nothing and gets Hermes' own default
       (Array.isArray(profileSets) && profileSets.includes("terminal")) ||
       (Array.isArray(agent.toolsets) && agent.toolsets.includes("terminal"));
+    // The OTHER browser. Hermes' own `browser` toolset runs on this Mac and,
+    // since `browser.use_real_profile`, drives a managed snapshot of the user's
+    // default Chrome: it is signed in wherever HE is. The box's Chrome is a
+    // different profile with a different set of logins, and the ladder above
+    // wakes a machine that bills by the second.
+    //
+    // With both switched on, nothing said which to pick, so a teammate picked
+    // arbitrarily: box-browsing a site the user is signed into hits a login
+    // wall it cannot pass, and Hermes-browsing a bulk fetch that has to land on
+    // the shared disk drags every byte through this conversation instead.
+    //
+    // Checked, not assumed: only a teammate whose pin actually carries
+    // `browser` is told the rule. No stock profile carries it (TOOL_PROFILES in
+    // hermes-gateway.cjs), and `full` pins nothing — it inherits the user's own
+    // `toolsets:` from config.yaml, which is not guaranteed to include it — so
+    // `full` gets no claim either. Naming a tool a teammate does not have is
+    // the bug this file keeps paying for.
+    const hasBrowser =
+      (Array.isArray(profileSets) && profileSets.includes("browser")) ||
+      (Array.isArray(agent.toolsets) && agent.toolsets.includes("browser"));
     const boxBlock =
       agent.boxEnabled && boxId && !hasShell
         ? [
@@ -2117,6 +2138,14 @@ function createStore(opts = {}) {
             // every turn. lux runs that loop in the box and returns text — one
             // session at a time, 20/day (docs.ascii.dev/box/desktop-streaming).
             'Text before pixels. Fetch a page as TEXT: `curl -sL <url> | html2text -utf8 | awk NF | rg -m5 -C2 <pattern> | head -c 1500`. Raw HTML is mostly markup: the same 2,000 bytes of Hacker News is 1 story raw, 13 as text. Needs JavaScript? Swap the curl for `google-chrome --headless --no-sandbox --user-data-dir=$(mktemp -d) --dump-dom <url>` (~3s; a REUSED dir silently prints nothing). Only for a login or real clicking: `lux start "<goal>" && lux run --max-steps 15` (one at a time, 20/day for the team). Never take screenshots or watch a screen in a loop — one costs more than a whole task, and you cannot see it.',
+            "",
+            // Which browser, when a teammate holds both. Kept to one line
+            // because this block is taxed on every turn (see the size pin in
+            // box-runtime-test.cjs), and emitted only when `browser` is really
+            // in the pin — see hasBrowser above.
+            hasBrowser
+              ? "Two browsers. Needs the user's own logins or accounts: your own `browser` tool, on this Mac, no box to wake. Bulk fetching, the shared disk, or work that outlives this Mac: the box above, whose Chrome carries its own separate logins."
+              : "",
             "",
           ].join("\n")
         : "";
@@ -2162,8 +2191,50 @@ function createStore(opts = {}) {
       }
     }
 
-    const carefulProvider = modelPick.sessionProvider(agent, state.settings);
-    const turnModel = modelPick.sessionModel(agent, state.settings);
+    let carefulProvider = modelPick.sessionProvider(agent, state.settings);
+    let turnModel = modelPick.sessionModel(agent, state.settings);
+    // ── the local endpoint may simply not be there ───────────────────────
+    //
+    // MEASURED before this existed, against the dead `lmstudio` entry in the
+    // user's own config (nothing listening on localhost:1234): the turn sat
+    // 28.1s and posted "API call failed after 3 retries: Connection error."
+    // The question was answered by nobody and the user had to retype it on a
+    // different provider. A 2.5s probe is the whole cost of not doing that.
+    //
+    // `flags.hosted` is the one retry below; it must not re-probe or it would
+    // bounce back onto the box that just failed.
+    if (!flags.hosted) {
+      const decision = await localFallback.check(carefulProvider);
+      if (decision.run !== "local") {
+        // Said out loud, in the transcript, BEFORE the answer arrives. A turn
+        // that ran somewhere other than where the user chose and did not say
+        // so is the silent substitution this codebase treats as a lie.
+        pushMsg(convId || agent.id, {
+          id: uuid(),
+          role: "system",
+          kind: "event",
+          text: decision.note,
+          at: now(),
+        });
+        saveSoon();
+      }
+      if (decision.run === "none") {
+        // Nothing to fall back to. The user's message is already in the
+        // transcript and the note above says what happened — so fail LOUDLY
+        // here and let speak() suppress the duplicate "Hermes failed" bubble.
+        const stop = new Error(decision.note);
+        stop.hydoExplained = true;
+        throw stop;
+      }
+      if (decision.run === "hosted") {
+        carefulProvider = decision.provider;
+        turnModel = decision.model;
+        logAction(agent.id, "model", `local endpoint down (${decision.state}) — ran on ${turnModel}`);
+      }
+    } else if (flags.hostedProvider) {
+      carefulProvider = flags.hostedProvider;
+      turnModel = flags.hostedModel || turnModel;
+    }
     // ── the fast lane ────────────────────────────────────────────────────
     //
     // A local model's hidden scratchpad is not slow-per-token: measured on the
@@ -2831,7 +2902,26 @@ function createStore(opts = {}) {
       .filter((m) => m && (m.role === "user" || m.role === "bot") && m.kind !== "event")
       .slice(-20);
     let raw;
-    let shotImages = [];
+    // The tail of a turn, as a function: the local-endpoint retry below has to
+    // reach the same finish line as the happy path, and duplicating this block
+    // is how the two quietly drift apart.
+    function finishSpeak(value) {
+      let out = value;
+      let shots = [];
+      let posted = false;
+      let yielded = false;
+      if (out && typeof out === "object" && out.text != null) {
+        shots = Array.isArray(out.images) ? out.images : [];
+        posted = !!out.posted;
+        yielded = !!out.yielded;
+        out = out.text;
+      }
+      const done = extractDirectives(String(out || "").trim() || (posted ? "" : "Empty reply."));
+      done.images = shots;
+      done.posted = posted;
+      done.yielded = yielded;
+      return done;
+    }
     try {
       if (opts.complete) {
         raw = await complete(system, userText, agent.model || state.settings.model, priorTurns);
@@ -2850,6 +2940,48 @@ function createStore(opts = {}) {
           } catch {
             gw = null;
           }
+          // The preflight already explained itself in the transcript. A second
+          // bubble repeating it is noise, and "Hermes failed" would be wrong
+          // besides — Hermes was never asked.
+          if (err && err.hydoExplained) {
+            setStatus(agent.id, "idle");
+            save();
+            // `posted: true` so send() adds no bubble at all — the system note
+            // in the transcript IS the answer to this turn.
+            return finishSpeak({ text: "", posted: true });
+          }
+          // The preflight can be right and the turn still die: the desk PC can
+          // sleep mid-stream, which is what happened twice in one session. ONE
+          // retry on the hosted model, announced in the transcript. One, not a
+          // loop — retrying a machine that is off is the polling this avoids.
+          const rescue = localFallback.afterFailure(
+            modelPick.sessionProvider(agent, state.settings),
+            err
+          );
+          if (rescue) {
+            pushMsg(convId || agent.id, {
+              id: uuid(),
+              role: "system",
+              kind: "event",
+              text: rescue.note,
+              at: now(),
+            });
+            saveSoon();
+            try {
+              raw = await streamThroughHermes(agent, soul, userText, notes, convId, {
+                background: !/^\s*\[job\]/m.test(String(extra || "")),
+                jobWake: /^\s*\[job\]/m.test(String(extra || "")),
+                lean: !!turnOpts.lean,
+                hosted: true,
+                hostedProvider: rescue.provider,
+                hostedModel: rescue.model,
+              });
+              return finishSpeak(raw);
+            } catch (err2) {
+              raw = `Hermes failed on ${rescue.model} too: ${err2 && err2.message ? err2.message : err2}`;
+              return finishSpeak(raw);
+            }
+          }
           // Hermes is the product. If the gateway is up, a failed turn is a
           // failed turn — do not paper it over with OpenRouter "success".
           if (gw && typeof gw.available === "function" && gw.available()) {
@@ -2862,19 +2994,7 @@ function createStore(opts = {}) {
     } catch (err) {
       raw = `Couldn't reach the model. ${err.message}`;
     }
-    let posted = false;
-    let yielded = false;
-    if (raw && typeof raw === "object" && raw.text != null) {
-      shotImages = Array.isArray(raw.images) ? raw.images : [];
-      posted = !!raw.posted;
-      yielded = !!raw.yielded;
-      raw = raw.text;
-    }
-    const extracted = extractDirectives(String(raw || "").trim() || (posted ? "" : "Empty reply."));
-    extracted.images = shotImages;
-    extracted.posted = posted;
-    extracted.yielded = yielded;
-    return extracted;
+    return finishSpeak(raw);
   }
 
   /**
