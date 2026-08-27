@@ -112,3 +112,37 @@ non-streaming mode, this is the error you will see.
 **Not run:** the real Unsloth server, which is on the PC and unreachable from
 this Mac until it is bound to `0.0.0.0`. Everything above the address is
 independent of which server answers.
+
+---
+
+## A local model CAN use the shared Linux box
+
+This was the open question, and it is not obvious: reaching an endpoint proves
+nothing about whether that endpoint gets *tools*. If the `chat_completions`
+transport did not carry them, a local model could chat and nothing else — no
+terminal, no box, no work.
+
+Tested with a stub that behaves like a tool-using model: it logs what the
+request contained, emits a `tool_call`, and answers only after it sees the
+tool's result come back.
+
+```
+{"turn":1,"toolCount":0, "hasTerminal":false,"sawToolResult":false}
+{"turn":2,"toolCount":29,"hasTerminal":true, "sawToolResult":false}
+{"turn":3,"toolCount":29,"hasTerminal":true, "sawToolResult":true}
+```
+
+Turn 2 carried **29 tools including `terminal`** to a custom provider. The stub
+asked to run `echo HYDO_TOOLPROOF`; Hermes executed it, fed the result back, and
+the model closed with `TOOLS_WORK: I ran it and saw HYDO_TOOLPROOF`. Hydo's own
+`onTool` saw three `terminal` calls.
+
+`terminal` is the tool that runs `box exec`, so a local model on the **builder**
+profile can drive the shared machine exactly as a hosted one does.
+
+The remaining variable is the model, not the plumbing: it has to be able to emit
+`tool_calls` at all. Qwen3-class GGUFs generally can. A model that cannot will
+chat happily and never touch the box — and the symptom is a teammate that
+describes what it would do rather than doing it.
+
+Turn 1 carries no tools; that is a short internal call, not a fault.
