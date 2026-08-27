@@ -10,6 +10,7 @@ import ChannelCreate from "./ChannelCreate.jsx";
 import BotCreate from "./BotCreate.jsx";
 import About from "./About.jsx";
 import Home from "./Home.jsx";
+import Computer from "./Computer.jsx";
 import Plugins from "./Plugins.jsx";
 import Sheet from "./Sheet.jsx";
 import Transcript from "./Transcript.jsx";
@@ -355,6 +356,7 @@ export default function Shell({ state }) {
         }}
         onCopyId={(entry) => navigator.clipboard?.writeText(entry.id)}
         onPlugins={() => setPluginsOpen(true)}
+        onComputer={() => setSheet("computer")}
         userName={state.settings.userName}
         userAvatar={state.settings.userAvatar}
         userAvatar={state.settings.userAvatar}
@@ -685,6 +687,11 @@ export default function Shell({ state }) {
             setChannelCreate(false);
           }}
         />
+      )}
+      {sheet === "computer" && (
+        <Sheet title="Computer" onClose={() => setSheet(null)}>
+          <Computer />
+        </Sheet>
       )}
       {sheet === "about" && (
         <Sheet title="About" onClose={() => setSheet(null)}>

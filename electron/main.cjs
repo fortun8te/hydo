@@ -4,6 +4,7 @@ const path = require("node:path");
 const { createStore } = require("./store.cjs");
 const gateway = require("./hermes-gateway.cjs");
 const plugins = require("./hermes-plugins.cjs");
+const box = require("./box.cjs");
 
 // Every Hermes-backed handler below degrades to a truthful empty answer rather
 // than rejecting into the renderer: `available()` false must leave the app
@@ -517,6 +518,16 @@ app.whenReady().then(() => {
       return { ok: false, reason: err.message, ext };
     }
   });
+
+  // ---- the team computer -------------------------------------------------
+  // One shared cloud Linux machine for every teammate. Read-only handlers are
+  // safe to call whenever; `ensure` and `stop` cost money and are deliberate.
+  ipcMain.handle("hydo:boxStatus", () => box.status());
+  ipcMain.handle("hydo:boxLimits", () => box.limits());
+  ipcMain.handle("hydo:boxList", () => box.list());
+  ipcMain.handle("hydo:boxEnsure", () => box.ensure());
+  ipcMain.handle("hydo:boxDesktop", (_e, id) => box.desktopUrl(id));
+  ipcMain.handle("hydo:boxStop", (_e, id) => box.stop(id));
 
   ipcMain.handle("hydo:dismissClarify", async (_e, id) => {
     const next = await store.dismissClarify(id);

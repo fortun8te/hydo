@@ -419,3 +419,74 @@
   outline: 2px solid var(--sand-accent, #2a92fe);
   outline-offset: 2px;
 }
+
+/* ── Team computer ────────────────────────────────────────────────────────
+   Mostly type: this screen's job is to be honest about three things people
+   assume wrongly about agent computers . whether it is running, what it costs
+   while it is, and that the per-bot folders on it are a convention. */
+.hy-computer { display: flex; flex-direction: column; gap: 14px; }
+.hy-computer__head { display: flex; align-items: center; justify-content: space-between; }
+.hy-computer__head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.hy-computer__lede {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 19px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  max-width: 62ch;
+}
+.hy-computer__card,
+.hy-computer__step {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid var(--sand-line, #ffffff12);
+  border-radius: 13px;
+  background: var(--hy-menu, #1c1c1c);
+}
+.hy-computer__card--quiet { background: transparent; }
+.hy-computer__card h3,
+.hy-computer__step h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.hy-computer__card p,
+.hy-computer__step p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  max-width: 62ch;
+}
+.hy-computer__row { display: flex; align-items: center; gap: 9px; }
+.hy-computer__state { font-size: 14px; font-weight: 600; }
+/* Green only when it is actually awake . this dot is a claim about money. */
+.hy-computer__pip {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #4a4a4a;
+  flex: none;
+}
+.hy-computer__pip.is-on {
+  background: var(--sand-ok, #2bb673);
+  animation: sand-pip-breathe 1.9s ease-in-out infinite;
+}
+.hy-computer__note { font-size: 12px; }
+.hy-computer__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.hy-computer__err { color: var(--sand-danger, #e02d3c); font-size: 12.5px; }
+.hy-computer__facts { display: flex; flex-wrap: wrap; gap: 18px; margin: 0; }
+.hy-computer__facts div { display: flex; flex-direction: column; gap: 2px; }
+.hy-computer__facts dt {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sand-text-tertiary, #8d8d8d);
+}
+.hy-computer__facts dd { margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.hy-computer pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--hy-raised, #2e2e2e);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-x: auto;
+}
