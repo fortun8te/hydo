@@ -1,0 +1,1134 @@
+/* Right-hand rails: BotRail, ChannelRail, RoutineRail.
+   Polish layer on top of the base rules in ../styles.css and production.css —
+   this file is additive only, nothing here is load-bearing for layout.
+
+   Spacing scale used throughout: 4 / 8 / 12 / 16 / 24.
+   Every selector below is qualified with an ancestor class (.bot-rail /
+   .routine-rail) so it wins over the single-class base rules in styles.css
+   and production.css regardless of <link>/import order. Kit tokens only,
+   every var() carries a literal fallback. */
+
+/* ---------- header ---------- */
+
+.bot-rail .bot-rail__head {
+  padding: 0 16px;
+  gap: 4px;
+  border-bottom: 1px solid var(--sand-border-subtle, #fcfcfc0d);
+}
+
+.bot-rail .bot-rail__title {
+  font-size: 13px;
+}
+
+/* ---------- overall rhythm ---------- */
+
+aside.bot-rail {
+  gap: 16px;
+}
+
+aside.bot-rail > .bot-rail__field,
+aside.bot-rail > .bot-rail__notify,
+aside.bot-rail > .bot-rail__blob,
+aside.bot-rail > .bot-rail__blob-wrap {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+.bot-rail .bot-rail__blob-wrap {
+  position: relative;
+  display: block;
+  width: 72px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.bot-rail .bot-rail__online {
+  width: 14px;
+  height: 14px;
+  right: 2px;
+  bottom: 2px;
+  box-shadow: 0 0 0 3px var(--sand-bg-elevated, #181818);
+}
+
+.bot-rail .bot-rail__field {
+  gap: 8px;
+}
+
+.bot-rail .bot-rail__field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  letter-spacing: 0.01em;
+}
+
+.bot-rail .bot-rail__count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.bot-rail .bot-rail__blob {
+  margin: 12px auto 4px;
+  cursor: pointer;
+}
+
+/* fields nested inside a .bot-rail__body (RoutineRail) already get their
+   side spacing from the body's own padding — cancel the blanket margin from
+   styles.css so they don't get indented twice. */
+.bot-rail .bot-rail__body > .bot-rail__field,
+.bot-rail .bot-rail__body > .bot-rail__notify,
+.bot-rail .bot-rail__body > .bot-rail__blob {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.routine-rail .bot-rail__body {
+  padding: 16px 24px 24px;
+  gap: 16px;
+}
+
+/* ---------- inputs ---------- */
+
+.bot-rail .bot-rail__field input,
+.bot-rail .bot-rail__field textarea {
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  border-radius: 10px;
+  background: var(--sand-bg-elevated, #181818);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 13px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.bot-rail .bot-rail__field textarea {
+  min-height: 76px;
+  line-height: 1.5;
+  padding-top: 10px;
+}
+
+.bot-rail .bot-rail__field input::placeholder,
+.bot-rail .bot-rail__field textarea::placeholder {
+  color: var(--sand-text-disabled, #fcfcfc59);
+}
+
+.bot-rail .bot-rail__field input:hover,
+.bot-rail .bot-rail__field textarea:hover {
+  border-color: var(--sand-border-strong, #fcfcfc4d);
+}
+
+.bot-rail .bot-rail__field input:focus,
+.bot-rail .bot-rail__field textarea:focus {
+  border-color: var(--sand-border-focus, #1c8bfe);
+}
+
+.bot-rail button:focus-visible,
+.bot-rail input:focus-visible,
+.bot-rail textarea:focus-visible {
+  outline: 2px solid var(--sand-border-focus, #1c8bfe);
+  outline-offset: 2px;
+}
+
+/* ---------- color swatches + shape picker ---------- */
+
+.bot-rail .bot-rail__swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 22px);
+  grid-auto-rows: 22px;
+  gap: 14px;
+  justify-content: start;
+  align-items: center;
+  padding-top: 2px;
+}
+
+.bot-rail .bot-rail__swatches.bot-rail__shapes {
+  grid-template-columns: repeat(auto-fill, 36px);
+  grid-auto-rows: 36px;
+  gap: 10px;
+}
+
+.bot-rail .swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--sand-border-subtle, #fcfcfc0d) inset;
+  cursor: pointer;
+}
+
+.bot-rail .swatch:hover:not(.is-on) {
+  box-shadow: 0 0 0 1px var(--sand-border-strong, #fcfcfc4d) inset;
+}
+
+.bot-rail .swatch.is-on {
+  box-shadow:
+    0 0 0 1.5px var(--sand-bg-base, #070707),
+    0 0 0 3.5px var(--sand-fill-primary, #fafafa);
+}
+
+.bot-rail .swatch:focus-visible {
+  outline: 2px solid var(--sand-border-focus, #1c8bfe);
+  outline-offset: 3px;
+}
+
+.bot-rail .swatch--custom {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
+.bot-rail .swatch--custom-face {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.bot-rail .color-wheel {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--sand-bg-elevated, #181818);
+  box-shadow: var(--sand-shadow-popover), 0 10px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bot-rail .color-wheel__pad {
+  position: relative;
+  height: 132px;
+  border-radius: 10px;
+  cursor: crosshair;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.bot-rail .color-wheel__hue {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: none;
+  background: linear-gradient(
+    to right,
+    #e02d3c,
+    #e4a11b,
+    #2bb673,
+    #3b82f0,
+    #8b5cf0,
+    #e0479b,
+    #e02d3c
+  );
+}
+
+.bot-rail .color-wheel__knob {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.bot-rail .color-wheel__knob--pad {
+  top: 0;
+  left: 0;
+}
+
+.bot-rail .color-wheel__knob--hue {
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+}
+
+.bot-rail .color-wheel__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bot-rail .color-wheel__chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 0 1px var(--sand-border-subtle, #fcfcfc0d) inset;
+}
+
+.bot-rail .color-wheel__hex {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  border-radius: 8px;
+  background: var(--sand-bg-subtle, #111);
+  color: var(--sand-text-primary, #fcfcfc);
+  font: 500 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 0 10px;
+  letter-spacing: 0.04em;
+}
+
+.bot-rail .color-wheel__hex:focus {
+  outline: none;
+  border-color: var(--sand-border-focus, #1c8bfe);
+}
+
+.bot-rail .shape-pick {
+  width: 36px;
+  height: 36px;
+  padding: 3px;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  background: var(--sand-bg-elevated, #181818);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  overflow: hidden;
+  outline: none;
+  box-shadow: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.bot-rail .shape-pick .umbra-face {
+  width: 26px;
+  height: 26px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bot-rail .shape-pick:hover:not(.is-on) {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.bot-rail .shape-pick.is-on,
+.bot-rail .shape-pick:focus,
+.bot-rail .shape-pick:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: #f2f2f2;
+}
+
+/* ---------- notifications row ---------- */
+
+.bot-rail .bot-rail__notify {
+  padding: 16px;
+  gap: 16px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+}
+
+.bot-rail .bot-rail__notify-title {
+  font-size: 13px;
+}
+
+.bot-rail .bot-rail__notify p {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.bot-rail .bot-rail__toggle:hover {
+  filter: brightness(1.08);
+}
+
+aside.bot-rail > .bot-rail__workspace {
+  margin: 0 24px;
+}
+
+/* ---------- routines card (BotRail) ---------- */
+
+aside.bot-rail > .bot-rail__routines {
+  margin: 0 24px;
+  padding: 16px;
+  gap: 12px;
+  border-radius: 14px;
+}
+
+.bot-rail .bot-rail__routines-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 0 12px;
+  margin-bottom: 4px;
+  border: 0;
+  border-bottom: 1px solid var(--sand-border-default, #fcfcfc26);
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+
+.bot-rail .bot-rail__routines-open .gb-icon {
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.bot-rail .bot-rail__routines-open:hover .gb-icon {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.bot-rail .bot-rail__routines > p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.bot-rail .bot-rail__routines > .ghost {
+  margin-top: 4px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---------- channel members ---------- */
+
+.bot-rail .bot-rail__hint {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.bot-rail .sand-members {
+  gap: 8px;
+}
+
+.bot-rail .sand-member {
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.bot-rail .sand-member:hover:not(:disabled) {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.bot-rail .sand-member.is-on {
+  background: var(--sand-fill-accent-subtle, #1084fe2c);
+  border-color: var(--sand-border-accent-subtle, #1084fe52);
+}
+
+.bot-rail .sand-member.is-on:hover:not(:disabled) {
+  background: var(--sand-fill-accent-subtle-hover, #1084fe52);
+}
+
+.bot-rail .sand-member:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.bot-rail .sand-member__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+  flex: 1;
+}
+
+.bot-rail .sand-member__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bot-rail .sand-member__label {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.bot-rail .sand-member__aff {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.bot-rail .sand-member.is-on .sand-member__aff {
+  background: var(--sand-fill-accent, #1084fe);
+  color: var(--sand-text-on-color, #fcfcfc);
+}
+
+.bot-rail .sand-member:disabled .sand-member__aff {
+  background: transparent;
+  color: var(--sand-text-disabled, #fcfcfc59);
+}
+
+.bot-rail .sand-member .umbra-face {
+  flex: none;
+}
+
+/* ---------- routine rail ---------- */
+
+.routine-rail .routine-rail__lede {
+  line-height: 1.5;
+  margin: 0 0 4px;
+}
+
+.routine-rail .routine-rail__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0 12px;
+}
+
+.routine-rail .routine-rail__empty-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--sand-bg-elevated, #181818);
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.routine-rail .routine-rail__empty h2 {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.routine-rail .routine-rail__empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.routine-rail .routine-rail__list {
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.routine-rail .routine-rail__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  background: var(--sand-bg-elevated, #181818);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.routine-rail .routine-rail__row-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.routine-rail .routine-rail__row-name {
+  font-weight: 500;
+}
+
+.routine-rail .routine-rail__row-when {
+  font-size: 12px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routine-rail .routine-rail__row:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  border-color: var(--sand-border-strong, #fcfcfc4d);
+}
+
+.routine-rail .routine-rail__row > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routine-rail .routine-rail__status {
+  flex: none;
+  font-size: 12px;
+}
+
+.routine-rail .routine-rail__status.is-on {
+  color: var(--sand-text-success, #38d591);
+}
+
+aside.routine-rail .routine-rail__toolbar {
+  padding: 12px 24px;
+  gap: 8px;
+}
+
+.routine-rail .routine-rail__active {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.routine-rail .routine-rail__when {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+}
+
+.routine-rail .routine-rail__trig {
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  background: var(--sand-bg-elevated, #181818);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.routine-rail .routine-rail__trig-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.routine-rail .routine-rail__trig-kind {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.routine-rail .routine-rail__trig-x {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sand-text-tertiary, #fcfcfc66);
+  cursor: pointer;
+}
+
+.routine-rail .routine-rail__trig-x:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.routine-rail .routine-rail__trig-cadence {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  border-radius: 8px;
+  background: var(--sand-bg-subtle, #111);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.routine-rail .routine-rail__trig-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.routine-rail .routine-rail__menu {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--sand-bg-elevated, #181818);
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.routine-rail .routine-rail__menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.routine-rail .routine-rail__menu button:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.routine-rail .routine-rail__menu-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--sand-border-subtle, #fcfcfc0d);
+}
+
+.routine-rail .routine-rail__menu-cancel {
+  color: var(--sand-text-secondary, #fcfcfc99) !important;
+}
+
+.routine-rail .routine-rail__slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  background: var(--sand-bg-elevated, #181818);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.routine-rail .routine-rail__slot .gb-icon {
+  flex: none;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.routine-rail .routine-rail__slot:hover {
+  border-color: var(--sand-border-strong, #fcfcfc4d);
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.routine-rail .routine-rail__slot:focus-within {
+  border-color: var(--sand-border-focus, #1c8bfe);
+}
+
+.routine-rail .routine-rail__slot-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+
+.routine-rail .routine-rail__add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--sand-border-default, #fcfcfc26);
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.routine-rail .routine-rail__add:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  border-color: var(--sand-border-strong, #fcfcfc4d);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.routine-rail .routine-rail__runs {
+  display: flex;
+  flex-direction: column;
+}
+
+.routine-rail .routine-rail__runs > p {
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--sand-border-subtle, #fcfcfc0d);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.routine-rail .routine-rail__runs > p:last-child {
+  border-bottom: 0;
+}
+
+.bot-rail .bot-rail__checks {
+  gap: 4px;
+}
+
+.bot-rail .bot-rail__check {
+  font-size: 13px;
+}
+
+.bot-rail .bot-rail__check input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+
+/* -- Abilities disclosure ------------------------------------------------ */
+/* The full Hermes toolset registry is 30+ rows, which would bury Connections
+   and Routines if it were always open. Collapsed by default, with the count of
+   extras on the summary line so you can see at a glance that a bot has been
+   given something beyond its profile. */
+
+.bot-rail .bot-rail__disclose {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bot-rail .bot-rail__disclose .gb-icon {
+  font-size: 12px;
+  color: var(--sand-text-tertiary, #8d8d8d);
+}
+
+.bot-rail .bot-rail__disclose-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--sand-text-tertiary, #8d8d8d);
+}
+
+.bot-rail .bot-rail__check-meta {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 11px;
+  color: var(--sand-text-tertiary, #8d8d8d);
+}
+
+/* A toolset the profile already covers is on and not editable here: turning it
+   off would be a lie, since the profile puts it back on the next turn. */
+.bot-rail .bot-rail__check input:disabled {
+  opacity: 0.5;
+}
+
+.bot-rail .bot-rail__check:has(input:disabled) {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.bot-rail .bot-rail__checks {
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+
+/* -- Undo (file rollback) ------------------------------------------------ */
+
+.bot-rail.rollback .rollback__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bot-rail.rollback .rollback__row {
+  border-radius: 10px;
+  background: var(--sand-bg-elevated, #181818);
+  overflow: hidden;
+}
+
+.bot-rail.rollback .rollback__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--sand-text-primary, #fcfcfc);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bot-rail.rollback .rollback__head:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.bot-rail.rollback .rollback__msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.bot-rail.rollback .rollback__when,
+.bot-rail.rollback .rollback__head .gb-icon {
+  flex: none;
+  font-size: 11px;
+  color: var(--sand-text-tertiary, #8d8d8d);
+}
+
+.bot-rail.rollback .rollback__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 11px 11px;
+}
+
+.bot-rail.rollback .rollback__files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* One file at a time is the SAFE restore: disk only, allowed mid-turn. It is
+   therefore the prominent control, and the whole-session rollback is the
+   plain button underneath it. */
+.bot-rail.rollback .rollback__file {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bot-rail.rollback .rollback__file:hover {
+  background: #3a3a3a;
+}
+
+.bot-rail.rollback .rollback__file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+}
+
+.bot-rail.rollback .rollback__diff {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--sand-bg-base, #070707);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.bot-rail.rollback .rollback__all {
+  width: 100%;
+}
+
+
+/* -- Artifact pane ------------------------------------------------------- */
+/* Same slot as the bot rail, wider: a chart in 280px is not a chart. The frame
+   is the point, so it takes all the height that is left. */
+
+.artifact {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: min(46vw, 620px);
+  min-width: 340px;
+  border-left: 1px solid var(--sand-border-default, #fcfcfc26);
+  background: var(--sand-bg-subtle, #111);
+  overflow: hidden;
+}
+
+.artifact__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 44px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--sand-border-default, #fcfcfc26);
+  -webkit-app-region: drag;
+}
+
+.artifact__head .icon-btn {
+  -webkit-app-region: no-drag;
+}
+
+.artifact__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.artifact__ver {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* No border and a matching ground: the frame should read as the content of the
+   pane, not as a box sitting inside it. */
+.artifact__frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #0d0d0d;
+}
+
+.artifact__foot {
+  flex: none;
+  padding: 7px 14px;
+  border-top: 1px solid var(--sand-border-default, #fcfcfc26);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact__note {
+  padding: 16px 14px;
+  font-size: 13px;
+}
+
+.artifact__link {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 16px 14px;
+  font-size: 13px;
+}
+
+.artifact__link code {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--sand-bg-base, #070707);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+
+/* -- the bot's own plan --------------------------------------------------- */
+/* Mirrored from Hermes' `todo` tool. Read-only by design: it is the model's
+   working list, re-injected into its own context, so a second author would
+   put it out of step with what it believes it is doing. */
+
+.bot-rail .bot-rail__plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bot-rail .bot-rail__plan-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 17px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.bot-rail .bot-rail__plan-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #4a4a4a;
+}
+
+.bot-rail .bot-rail__plan-item.is-in_progress {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.bot-rail .bot-rail__plan-item.is-in_progress .bot-rail__plan-dot {
+  background: #5aa8ff;
+  animation: sand-pip-breathe 1.9s ease-in-out infinite;
+}
+
+.bot-rail .bot-rail__plan-item.is-completed .bot-rail__plan-dot {
+  background: #2bb673;
+}
+
+.bot-rail .bot-rail__plan-item.is-completed span:last-child {
+  text-decoration: line-through;
+  text-decoration-color: rgba(252, 252, 252, 0.3);
+}
+
+.bot-rail .bot-rail__plan-item.is-cancelled {
+  opacity: 0.5;
+}
+
+.bot-rail .bot-rail__plan-item.is-cancelled span:last-child {
+  text-decoration: line-through;
+}
+
+
+/* -- artifact media ------------------------------------------------------ */
+/* Pictures and players get a centred, checker-free dark ground so a
+   transparent PNG reads as transparent rather than as white. */
+
+.artifact__media {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 16px;
+  background: #0d0d0d;
+  overflow: auto;
+}
+
+.artifact__media img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.artifact__media video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.artifact__media audio {
+  width: 100%;
+}

@@ -1,0 +1,807 @@
+/* Transcript — bubble geometry, grouping, reactions, approval cards,
+   markdown, working row.
+
+   Numbers here are measured off the Grok Bot reference capture
+   (extracted-ui-kit/screens/01-chat.png), not guessed:
+     page               #070707   → --sand-bg-base
+     bot bubble         #262626   → --sand-fill-bubble-agent
+     user bubble        #5a5a5a   → --sand-fill-bubble-user
+     bubble radius      20px, collapsing to 7px on the corner that faces the
+                        next/previous bubble from the same speaker
+     bubble padding     10px 16px, line-height 22px, type 16px
+     max bubble width   700px
+     gap                5px within a speaker's run, 20px across speakers
+
+   This file loads after production.css and styles.css, so same-specificity
+   selectors here are the ones that win. Tokens with fallbacks, no !important. */
+
+/* ------------------------------------------------------------------ layout */
+
+/* The thread is a COLUMN, not a full-bleed row.
+   Without this every child is width:100%, so on a wide window a bot bubble
+   sticks to the far left edge, the user's sticks to the far right, and the
+   middle is a canyon. Capping and centring keeps the two speakers in
+   conversational distance of each other at any window size, and the composer
+   below uses the same --thread-max so the pill stays aligned with the text
+   above it. */
+.sand-transcript {
+  --thread-max: 860px;
+  gap: 6px;
+  /* The scrollbar lives on this element, so the cap goes on the children. */
+  padding-inline: 20px;
+}
+
+.sand-transcript > * {
+  width: 100%;
+  max-width: var(--thread-max);
+  margin-inline: auto;
+}
+
+/* One row of the conversation. A speaker change (or any card) opens the
+   larger gap; consecutive bubbles from one speaker keep a tight iMessage gap. */
+.sand-transcript .hy-item {
+  display: block;
+  width: 100%;
+}
+
+.sand-transcript .hy-item.hy-sep {
+  margin-top: 14px;
+}
+
+.sand-transcript .hy-item--in {
+  animation: hy-msg-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.sand-transcript .hy-item--in .sand-transcript-row:not(.sand-transcript-row--user) {
+  transform-origin: 12px 100%;
+}
+
+.sand-transcript .hy-item--in .sand-transcript-row--user {
+  transform-origin: calc(100% - 12px) 100%;
+}
+
+@keyframes hy-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sand-transcript .hy-item--in {
+    animation: none;
+  }
+}
+
+.sand-transcript .hy-msg__col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: min(792px, 100%);
+}
+
+.sand-transcript .sand-transcript-row--user .hy-msg__col {
+  align-items: flex-end;
+}
+
+.sand-transcript .sand-transcript-row--named > .hy-msg__col {
+  max-width: min(792px, calc(100% - 38px));
+}
+
+/* A continuation bubble in a channel keeps the avatar's indent without
+   repeating the avatar or the name. */
+.sand-transcript .sand-transcript-row.hy-row--tucked {
+  padding-left: 38px;
+}
+
+/* ----------------------------------------------------------------- bubbles */
+
+.sand-transcript .sand-bubble {
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 16px;
+  border-radius: 20px;
+  font-size: 16px;
+  line-height: 22px;
+  color: var(--sand-text-primary, #fcfcfc);
+  background: var(--sand-fill-bubble-agent, #262626);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* iMessage-style grouping: the corner facing a same-speaker neighbour
+   collapses, so a run reads as one block of speech. */
+.sand-transcript .sand-transcript-row .sand-bubble.hy-b--cont {
+  border-top-left-radius: 7px;
+}
+
+.sand-transcript .sand-transcript-row .sand-bubble.hy-b--lead {
+  border-bottom-left-radius: 7px;
+}
+
+.sand-transcript .sand-transcript-row--user .sand-bubble.hy-b--cont {
+  border-top-left-radius: 20px;
+  border-top-right-radius: 7px;
+}
+
+.sand-transcript .sand-transcript-row--user .sand-bubble.hy-b--lead {
+  border-bottom-left-radius: 20px;
+  border-bottom-right-radius: 7px;
+}
+
+/* ---------------------------------------------------- message + hover chrome */
+
+.sand-transcript .hy-msg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 100%;
+}
+
+.sand-transcript .sand-transcript-row--user .hy-msg {
+  align-items: flex-end;
+}
+
+/* Bubble and action bar on one line, the bar centred on the bubble and on the
+   bubble's trailing side — right of a teammate, left of you. The bar keeps its
+   space at all times and only fades, so hovering never nudges the layout. */
+.sand-transcript .hy-msg__line {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.sand-transcript .sand-transcript-row--user .hy-msg__line {
+  flex-direction: row-reverse;
+}
+
+.sand-transcript .hy-msg__line > .sand-bubble {
+  min-width: 0;
+  max-width: 700px;
+  flex: 0 1 auto;
+}
+
+.sand-transcript .hy-actions {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 90ms ease-out;
+}
+
+.sand-transcript .hy-msg:hover .hy-actions,
+.sand-transcript .hy-msg:focus-within .hy-actions,
+.sand-transcript .hy-actions.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sand-transcript .hy-actions__btn {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sand-text-tertiary, #fcfcfc66);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.sand-transcript .hy-actions__btn:hover {
+  color: var(--sand-text-primary, #fcfcfc);
+  background: transparent;
+}
+
+.sand-transcript .hy-actions__btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sand-border-focus, #1c8bfe);
+}
+
+.sand-transcript .hy-actions__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.sand-transcript .hy-actions__btn:disabled:hover {
+  background: transparent;
+  color: var(--sand-text-tertiary, #fcfcfc66);
+}
+
+/* -------------------------------------------------------------- emoji strip */
+
+/* Hangs off the action bar and floats over whatever is beneath it. */
+.sand-transcript .hy-emoji {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: var(--sand-bg-elevated, #181818);
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  box-shadow: 0 10px 30px #0000008c;
+  z-index: 30;
+}
+
+.sand-transcript .hy-emoji--above {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.sand-transcript .sand-transcript-row--user .hy-emoji {
+  left: auto;
+  right: 0;
+}
+
+.sand-transcript .hy-item,
+.sand-transcript .hy-msg {
+  overflow: visible;
+}
+
+.sand-transcript .hy-emoji__btn {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 90ms ease-out, background-color 90ms ease-out;
+}
+
+.sand-transcript .hy-emoji__btn:hover {
+  background: var(--sand-fill-ghost-selected, #77777752);
+  transform: scale(1.14);
+}
+
+.sand-transcript .hy-emoji__btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sand-border-focus, #1c8bfe);
+}
+
+.sand-transcript .hy-emoji__more {
+  font-size: 19px;
+}
+
+.sand-transcript .hy-emoji--more {
+  flex-wrap: wrap;
+  width: 220px;
+  border-radius: 16px;
+}
+
+/* ------------------------------------------------------------- quoted reply */
+
+/* Quote sits above the bubble, not inside it — both you and the teammate. */
+.sand-transcript .hy-quote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(520px, 100%);
+  min-width: 0;
+  margin: 0 4px 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.sand-transcript .sand-transcript-row--user .hy-quote {
+  margin-left: auto;
+  text-align: right;
+}
+
+.sand-transcript .hy-quote:hover:not(:disabled) {
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.sand-transcript .hy-quote:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sand-border-focus, #1c8bfe);
+}
+
+.sand-transcript .hy-quote:disabled {
+  cursor: default;
+}
+
+.sand-transcript .hy-quote--gone {
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.sand-transcript .hy-quote .gb-icon {
+  flex: none;
+  font-size: 12px;
+}
+
+.sand-transcript .hy-quote__who {
+  flex: none;
+  font-weight: 600;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.sand-transcript .hy-quote__text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ----------------------------------------------------------- reaction pills */
+
+.sand-transcript .hy-reactions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: -9px 0 0;
+  padding: 0 10px;
+  max-width: 100%;
+}
+
+.sand-transcript .sand-transcript-row--user .hy-reactions {
+  justify-content: flex-end;
+}
+
+.sand-transcript .hy-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  background: var(--sand-bg-elevated, #181818);
+  /* cut the pill out of the bubble it hangs off */
+  box-shadow: 0 0 0 2px var(--sand-bg-base, #070707);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sand-transcript .hy-reaction:hover {
+  background: var(--sand-fill-ghost-selected, #77777752);
+}
+
+.sand-transcript .hy-reaction.is-mine {
+  border-color: var(--sand-border-focus, #1c8bfe);
+  background: var(--sand-fill-accent-subtle, #1084fe2c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.sand-transcript .hy-reaction:focus-visible {
+  outline: none;
+  border-color: var(--sand-border-focus, #1c8bfe);
+}
+
+.sand-transcript .hy-reaction__emoji {
+  font-size: 13px;
+}
+
+.sand-transcript .hy-reaction__count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.sand-transcript .hy-reaction__face {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* ------------------------------------------------------------- attachments */
+
+/* Attachments, link cards, image grids and task cards hang under the bubble.
+   `align-self: stretch` gives them a definite width to size against — without
+   it a grid that lays itself out in percentages collapses to nothing in this
+   shrink-to-fit column. */
+.sand-transcript .hy-extras {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sand-transcript .hy-extras--in {
+  align-self: stretch;
+  margin-top: 6px;
+}
+
+.sand-transcript .sand-transcript-row--user .hy-extras {
+  align-items: flex-end;
+}
+
+.sand-transcript .hy-shots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  max-width: 100%;
+}
+
+/* Natural width, capped — never stretched to fill the column. */
+.sand-transcript .hy-shot {
+  display: block;
+  width: auto;
+  max-width: min(420px, 100%);
+  height: auto;
+  border-radius: 14px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+}
+
+/* ---------------------------------------------------------- approval card */
+
+/* A question from a teammate belongs on the teammate's side: flush with the
+   left edge of a bot bubble, running rightward. Only the ambient system lines
+   (day, tally, routine, rename) are centred. */
+.sand-transcript .hy-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(700px, 100%);
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: var(--sand-fill-bubble-agent, #262626);
+}
+
+.sand-transcript .hy-ask--done {
+  opacity: 0.75;
+}
+
+.sand-transcript .hy-ask__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sand-transcript .hy-ask__head .umbra-face {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.sand-transcript .hy-ask__who {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.sand-transcript .hy-ask__text {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.sand-transcript .hy-ask__cmd {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sand-bg-base, #070707);
+  border: 1px solid rgba(252, 252, 252, 0.09);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+.sand-transcript .hy-ask__btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.sand-transcript .hy-ask__secret {
+  flex: 1 1 160px;
+  min-width: 120px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(252, 252, 252, 0.11);
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font: inherit;
+}
+
+.sand-transcript .hy-ask__body {
+  flex: 1 1 100%;
+  min-height: 64px;
+  resize: vertical;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.sand-transcript .hy-ask__btn {
+  flex: none;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(252, 252, 252, 0.11);
+  background: rgba(252, 252, 252, 0.05);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sand-transcript .hy-ask__btn:hover {
+  background: var(--sand-fill-ghost-selected, #77777752);
+}
+
+.sand-transcript .hy-ask__btn:focus-visible {
+  outline: none;
+  border-color: var(--sand-border-focus, #1c8bfe);
+  box-shadow: 0 0 0 2px var(--sand-border-focus, #1c8bfe);
+}
+
+.sand-transcript .hy-ask__btn--deny {
+  color: var(--sand-text-danger, #ff5667);
+  border-color: transparent;
+  background: transparent;
+}
+
+.sand-transcript .hy-ask__btn--deny:hover {
+  background: var(--sand-fill-danger-subtle, #ff263c2c);
+}
+
+.sand-transcript .hy-ask__done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+/* --------------------------------------------------- quiet system lines */
+
+/* rename / system event line, same quiet family as .sand-day */
+.sand-transcript .hy-event {
+  display: block;
+  width: 100%;
+  text-align: center;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 12px;
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* ------------------------------------------------------------- working row */
+
+/* Tool names are plumbing and never reach this row — Transcript.jsx maps them
+   to plain speech or drops them. Both the idle line and the hover line
+   shimmer, which is what makes the row read as "in flight". */
+.sand-transcript .sand-inchat__idle,
+.sand-transcript .sand-inchat__busy {
+  background: linear-gradient(90deg, #8a8a8a 0%, #ececec 45%, #8a8a8a 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: sand-shimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sand-transcript .sand-inchat__idle,
+  .sand-transcript .sand-inchat__busy {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------- streaming caret */
+
+.hy-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  opacity: 0.7;
+  animation: hy-caret-blink 1s step-end infinite;
+}
+
+@keyframes hy-caret-blink {
+  0%,
+  49% {
+    opacity: 0.7;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.sand-transcript .sand-bubble.hy-streaming {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* ---------------------------------------------------------------- markdown */
+
+.sand-transcript .hy-md {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sand-transcript .hy-md > *:first-child {
+  margin-top: 0;
+}
+
+.sand-transcript .hy-md > *:last-child {
+  margin-bottom: 0;
+}
+
+.sand-transcript .hy-md-p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Inline code: monospace salmon on a chip a shade darker than the bubble —
+   the one accent colour in the transcript besides link blue. */
+.sand-transcript .hy-md-code-inline {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 1px 6px;
+  border-radius: 6px;
+  color: #ff8b72;
+  background: rgba(0, 0, 0, 0.38);
+  border: 0;
+  word-break: break-word;
+}
+
+.sand-transcript .sand-transcript-row--user .hy-md-code-inline {
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.sand-transcript .hy-md-pre {
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sand-bg-base, #070707);
+  border: 1px solid rgba(252, 252, 252, 0.09);
+}
+
+.sand-transcript .hy-md-pre .hy-md-code {
+  display: block;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.76em;
+  line-height: 1.5;
+  color: var(--sand-text-primary, #fcfcfc);
+  white-space: pre;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.sand-transcript .hy-md-list {
+  margin: 0;
+  padding-left: 1.25em;
+}
+
+.sand-transcript .hy-md-list li {
+  margin: 2px 0;
+}
+
+.sand-transcript .hy-md-quote {
+  margin: 0;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--sand-border-default, #fcfcfc26);
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.sand-transcript .hy-md-quote p {
+  margin: 2px 0;
+}
+
+/* Blue and inline — but a <span>, never an <a>. A model-authored URL does not
+   get a click target in this app. */
+.sand-transcript .hy-md-link {
+  color: var(--sand-text-accent, #459ffe);
+  word-break: break-word;
+}
+
+
+/* -- artifact card ------------------------------------------------------- */
+/* Something the bot made, at the point in the thread where it made it. Wide
+   and clickable rather than a bubble: it is an object, not a sentence. */
+
+.sand-transcript .hy-artifact {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: min(420px, 100%);
+  padding: 11px 12px;
+  border: 1px solid rgba(252, 252, 252, 0.1);
+  border-radius: 14px;
+  background: var(--sand-fill-bubble-agent, #262626);
+  color: var(--sand-text-primary, #fcfcfc);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sand-transcript .hy-artifact:hover {
+  background: #303030;
+  border-color: rgba(252, 252, 252, 0.18);
+}
+
+.sand-transcript .hy-artifact__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--sand-bg-base, #070707);
+  color: #5aa8ff;
+  font-size: 16px;
+}
+
+.sand-transcript .hy-artifact__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sand-transcript .hy-artifact__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sand-transcript .hy-artifact__meta {
+  font-size: 12px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.sand-transcript .hy-artifact > .gb-icon {
+  flex: none;
+  font-size: 13px;
+  color: var(--sand-text-tertiary, #8d8d8d);
+}

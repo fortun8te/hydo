@@ -1,0 +1,371 @@
+/*
+ * overlays.css — visual polish for SignIn, Sheet, and ContextMenu.
+ *
+ * This file only ADDS to the selectors already defined in ../styles.css
+ * (.gate*, .sheet*, .ctx*) — it never removes or fights those rules.
+ * Wherever a property needs to genuinely override a base declaration
+ * (same selector, same property), the rule below is written with one
+ * extra qualifying ancestor class so it wins on specificity alone,
+ * regardless of whether this file is imported before or after styles.css.
+ * No selector here reaches outside .gate/.sheet/.ctx, so nothing leaks.
+ */
+
+/* ---------------------------------------------------------------------- */
+/* Sign-in                                                                 */
+/* ---------------------------------------------------------------------- */
+
+.gate {
+  /* Subtle vignette on the near-black ground — additive, doesn't touch
+     the base background declaration. */
+  background-image: radial-gradient(
+    ellipse 60% 50% at 50% 42%,
+    color-mix(in srgb, var(--sand-bg-elevated, #181818) 55%, transparent),
+    transparent 70%
+  );
+}
+
+.gate__stack {
+  /* Optical centring: true geometric centre reads slightly high once the
+     eye weighs the button at the bottom, so nudge the whole stack down a
+     touch. Small enough to stay comfortable at the 640px min height. */
+  transform: translateY(3vh);
+}
+
+@keyframes ov-gate-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ov-gate-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.gate__blob {
+  animation: ov-gate-rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) 0ms backwards;
+}
+
+.gate__title {
+  animation: ov-gate-rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) 70ms backwards;
+}
+
+.gate__tagline {
+  animation: ov-gate-rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) 130ms backwards;
+}
+
+.gate__btn {
+  /* Opacity-only entrance (not transform) so it never fights the
+     hover/active transforms below once the animation has finished. */
+  animation: ov-gate-fade-in 360ms ease-out 190ms backwards;
+  transition: filter 140ms ease, transform 100ms ease, box-shadow 140ms ease;
+  box-shadow: 0 1px 2px #00000040;
+}
+
+.gate__btn:hover {
+  filter: brightness(0.94);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px -6px #00000066;
+}
+
+.gate__btn:active {
+  filter: brightness(0.88);
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 1px 2px #00000040;
+}
+
+.gate__btn:focus-visible {
+  outline: 2px solid var(--sand-border-focus, #1c8bfe);
+  outline-offset: 3px;
+}
+
+/* Small-window safety net (min window is 980x640): tighten up if the
+   available height ever gets tight so nothing clips or crowds. */
+@media (max-height: 700px) {
+  .gate__stack {
+    gap: 10px;
+    padding: 16px;
+    transform: translateY(1.5vh);
+  }
+  .gate__blob {
+    width: 72px;
+    height: 72px;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Sheet                                                                   */
+/* ---------------------------------------------------------------------- */
+
+@keyframes ov-sheet-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ov-sheet-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sheet__scrim {
+  animation: ov-sheet-scrim-in 140ms ease-out;
+}
+
+.sheet__card {
+  animation: ov-sheet-card-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* Let the body scroll internally instead of the card growing past its
+     max-height (set in styles.css) and clipping content. */
+  min-height: 0;
+}
+
+.sheet .sheet__body {
+  /* Qualified selector so this wins over the base .sheet__body rule
+     regardless of import order — flex sizing is what makes the internal
+     scroll region work. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sheet__head .icon-btn:focus-visible {
+  outline: 2px solid var(--sand-border-focus, #1c8bfe);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Context menu                                                           */
+/* ---------------------------------------------------------------------- */
+
+@keyframes ov-ctx-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ctx__card {
+  width: 268px;
+  padding: 8px 6px;
+  border-radius: 16px;
+  background: #1c1c1c;
+  border: 0.5px solid rgba(252, 252, 252, 0.08);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  animation: ov-ctx-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top left;
+}
+
+.ctx__card .ctx__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font: 400 15px/1 var(--sand-font-family-sans, system-ui, sans-serif);
+  letter-spacing: -0.01em;
+}
+
+.ctx__wrap {
+  position: relative;
+  width: 100%;
+}
+
+.ctx__flyout {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: -8px;
+  z-index: 2;
+  min-width: 196px;
+  padding: 8px 6px;
+  border-radius: 16px;
+  background: #1c1c1c;
+  border: 0.5px solid rgba(252, 252, 252, 0.08);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+.ctx__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: #c5c5c5;
+}
+
+.ctx__icon svg,
+.ctx__icon.gb-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+.ctx__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  color: var(--sand-text-primary, #fcfcfc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctx__sep {
+  height: 1px;
+  margin: 6px 10px;
+  background: rgba(252, 252, 252, 0.1);
+}
+
+.ctx__item.is-active,
+.ctx__item:hover,
+.ctx__item:focus-visible {
+  background: rgba(252, 252, 252, 0.1);
+  outline: none;
+}
+
+.ctx__item--danger .ctx__icon,
+.ctx__item--danger .ctx__label {
+  color: var(--sand-text-danger, #ff5667);
+}
+
+.ctx__item--danger.is-active,
+.ctx__item--danger:hover,
+.ctx__item--danger:focus-visible {
+  background: var(--sand-border-danger-subtle, #ff263c2b);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Reduced motion — placed last so it wins on source order over the       */
+/* animation declarations above (same selectors, no !important needed).  */
+/* ---------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .gate__blob,
+  .gate__title,
+  .gate__tagline,
+  .gate__btn,
+  .sheet__scrim,
+  .sheet__card,
+  .ctx__card {
+    animation: none;
+  }
+}
+
+
+/* -- destructive confirm ------------------------------------------------- */
+/* Measured off the reference: a ~420px card, 17px semibold title, 15px body at
+   secondary, then two full-width stacked buttons — neutral Cancel on top, red
+   confirm below. Stacked rather than side by side on purpose: it makes the
+   destructive button the one you have to travel furthest to reach. */
+
+.confirm__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.62);
+  animation: confirm-fade 120ms ease-out both;
+}
+
+.confirm {
+  position: fixed;
+  z-index: 61;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 22px 20px;
+  border-radius: 18px;
+  background: #1c1c1c;
+  border: 1px solid rgba(252, 252, 252, 0.1);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.7);
+  animation: confirm-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.confirm__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 23px;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.confirm__body {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 21px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.confirm__btn {
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 11px;
+  background: #2f2f2f;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.confirm__btn:hover {
+  background: #3a3a3a;
+}
+
+.confirm__btn:focus-visible {
+  outline: 2px solid var(--sand-border-focus, #1c8bfe);
+  outline-offset: 2px;
+}
+
+.confirm__btn--danger {
+  background: #ff2f45;
+  color: #fff;
+}
+
+.confirm__btn--danger:hover {
+  background: #ff4055;
+}
+
+@keyframes confirm-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes confirm-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm,
+  .confirm__backdrop {
+    animation: none;
+  }
+}

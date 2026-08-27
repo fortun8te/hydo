@@ -1,0 +1,190 @@
+/* ChoiceCard — the card a teammate drops in when it wants a pick, not a guess.
+   Also serves `kind:'clarify'`.
+
+   Measured off extracted-ui-kit/screens/01-chat.png:
+     card       #262626 (the bot-bubble fill), 20px radius, 16px padding,
+                700px wide — the same cap as a bubble — with its left edge
+                flush with a bot bubble. A question from the bot sits on the
+                bot's side; it is NOT centred.
+     list       one hairline-divided group, 12px radius, rows 47px tall
+     badge      24px rounded square (r≈7), a shade lighter than the row
+     input      near-black with a 1px hairline, 36px tall, 10px radius
+
+   Every selector scoped under .hy-choice, tokens with fallbacks,
+   no !important. */
+
+.hy-choice {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  width: min(700px, 100%);
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--sand-fill-bubble-agent, #262626);
+}
+
+.hy-choice--resolved {
+  opacity: 0.86;
+}
+
+.hy-choice__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hy-choice__title {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-choice__face {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  /* sits on the title's first line, not centred against a wrapped one */
+  margin-top: 3px;
+}
+
+.hy-choice__close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  cursor: pointer;
+}
+
+.hy-choice__close:hover {
+  background: var(--sand-fill-ghost-selected, #77777752);
+}
+
+.hy-choice__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sand-border-focus, #1c8bfe);
+}
+
+.hy-choice__sub {
+  margin: -6px 0 0;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-choice__list {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(252, 252, 252, 0.07);
+  background: rgba(252, 252, 252, 0.04);
+}
+
+.hy-choice__row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 47px;
+  border: 0;
+  border-bottom: 1px solid rgba(252, 252, 252, 0.05);
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-family: inherit;
+}
+
+.hy-choice__row:last-child {
+  border-bottom: 0;
+}
+
+.hy-choice__row:hover:not(:disabled),
+.hy-choice__row.is-on {
+  background: var(--sand-fill-ghost-selected, #77777752);
+}
+
+.hy-choice__row:disabled {
+  cursor: default;
+}
+
+.hy-choice__row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--sand-border-focus, #1c8bfe);
+}
+
+/* A rounded square, not a circle — that is what the reference draws. */
+.hy-choice__badge {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: rgba(252, 252, 252, 0.06);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.hy-choice__row.is-on .hy-choice__badge {
+  background: var(--sand-fill-accent-subtle, #1084fe2c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-choice__text {
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.hy-choice__input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(252, 252, 252, 0.11);
+  background: var(--sand-bg-base, #070707);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 16px;
+  font-family: inherit;
+}
+
+.hy-choice__input::placeholder {
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-choice__input:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.hy-choice__input:focus-visible,
+.hy-choice__input:focus {
+  outline: none;
+  border-color: var(--sand-border-focus, #1c8bfe);
+}
+
+/* What you actually answered, once a clarify card is resolved. */
+.hy-choice__answer {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(252, 252, 252, 0.05);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 15px;
+  line-height: 1.4;
+}

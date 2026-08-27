@@ -1,0 +1,1252 @@
+/* RichContent — markdown, file chips, link cards, image grids, the Computer
+   card. Everything a teammate's message can contain, and nothing that looks
+   like tool plumbing.
+
+   House rules held here: every selector is scoped under .hy-rc so nothing can
+   collide with the live sand-/hy-choice/hy- rules; colour comes only from
+   design tokens, always with a fallback; no !important anywhere; focus rings
+   are box-shadow, never the browser default outline. */
+
+.hy-rc {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.hy-rc *,
+.hy-rc *::before,
+.hy-rc *::after {
+  box-sizing: border-box;
+}
+
+.hy-rc :focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sand-border-focus, #1c8bfe);
+}
+
+/* ==========================================================================
+   1. Markdown
+   ========================================================================== */
+
+.hy-rc.hy-rc-md {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.hy-rc .hy-rc-p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.hy-rc .hy-rc-strong {
+  font-weight: var(--sand-font-weight-semibold, 600);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-rc .hy-rc-em {
+  font-style: italic;
+}
+
+.hy-rc .hy-rc-strike {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+/* Headings — flatter than document headings; this is a chat bubble. */
+.hy-rc .hy-rc-h {
+  margin: 4px 0 0;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-weight: var(--sand-font-weight-semibold, 600);
+  line-height: 1.3;
+}
+
+.hy-rc.hy-rc-md > .hy-rc-h:first-child {
+  margin-top: 0;
+}
+
+.hy-rc .hy-rc-h1 {
+  font-size: 1.24em;
+}
+.hy-rc .hy-rc-h2 {
+  font-size: 1.16em;
+}
+.hy-rc .hy-rc-h3 {
+  font-size: 1.08em;
+}
+.hy-rc .hy-rc-h4,
+.hy-rc .hy-rc-h5,
+.hy-rc .hy-rc-h6 {
+  font-size: 1em;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-rc .hy-rc-hr {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--sand-border-weak, #fcfcfc1a);
+}
+
+/* -- inline code: the salmon chip -- */
+.hy-rc .hy-rc-code {
+  font-family: var(--cursor-font-family-mono, ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.88em;
+  line-height: 1.35;
+  padding: 1px 6px;
+  border-radius: 6px;
+  color: #ff8b72;
+  background: rgba(0, 0, 0, 0.38);
+  border: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* -- fenced code: its own horizontal scroller, never widens the bubble.
+      The pre is a scroll container, so its min-content contribution is 0 and
+      it can never force the bubble wider than the bubble's own max-width. -- */
+.hy-rc .hy-rc-pre-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* The language sits above the block, never on top of the code. */
+.hy-rc .hy-rc-pre-lang {
+  align-self: flex-end;
+  font-family: var(--cursor-font-family-mono, ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+  pointer-events: none;
+}
+
+.hy-rc .hy-rc-pre {
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sand-bg-base, #070707);
+  border: 1px solid var(--sand-border-subtle, #fcfcfc0d);
+  scrollbar-width: thin;
+}
+
+.hy-rc .hy-rc-pre-code {
+  display: block;
+  font-family: var(--cursor-font-family-mono, ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.82em;
+  line-height: 1.55;
+  white-space: pre;
+  color: var(--sand-text-primary, #fcfcfc);
+  background: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.hy-rc .hy-rc-lists,
+.hy-rc .hy-rc-list {
+  margin: 0;
+  padding-left: 1.35em;
+}
+
+.hy-rc .hy-rc-li {
+  margin: 2px 0;
+}
+
+.hy-rc .hy-rc-li::marker {
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-rc .hy-rc-li > .hy-rc-list {
+  margin-top: 2px;
+}
+
+.hy-rc .hy-rc-quote {
+  margin: 0;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--sand-border-weak, #fcfcfc1a);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* -- links: blue, inline, and deliberately not clickable -- */
+.hy-rc .hy-rc-link {
+  color: var(--sand-text-accent, #459ffe);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+/* -- tables -- */
+.hy-rc .hy-rc-table-wrap {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  scrollbar-width: thin;
+}
+
+.hy-rc .hy-rc-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9em;
+}
+
+.hy-rc .hy-rc-table th,
+.hy-rc .hy-rc-table td {
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--sand-border-subtle, #fcfcfc0d);
+  white-space: nowrap;
+}
+
+.hy-rc .hy-rc-table th {
+  font-weight: var(--sand-font-weight-medium, 500);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  background: var(--sand-fill-neutral-subtle, #77777717);
+}
+
+.hy-rc .hy-rc-table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ==========================================================================
+   2. File chips
+   ========================================================================== */
+
+.hy-rc.hy-rc-files {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.hy-rc.hy-rc-files--end {
+  align-items: flex-end;
+}
+
+.hy-rc.hy-rc-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(280px, 100%);
+  padding: 8px 10px 8px 8px;
+  text-align: left;
+  border-radius: 18px;
+  background: var(--sand-fill-bubble-agent, #262626);
+  border: 0;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.hy-rc-file-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.hy-rc-file-dl {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+  cursor: pointer;
+}
+
+.hy-rc-file-dl:hover {
+  color: var(--sand-text-primary, #fcfcfc);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hy-rc .hy-rc-file-tile {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--sand-data-gray-1, #3d3d3d);
+  color: var(--sand-data-gray-5, #b7b7b7);
+}
+
+.hy-rc .hy-rc-file-glyph {
+  width: 19px;
+  height: 19px;
+}
+
+.hy-rc .hy-rc-file-tile--markdown {
+  background: var(--sand-data-blue-1, #084382);
+  color: var(--sand-data-blue-5, #80befe);
+}
+
+.hy-rc .hy-rc-file-tile--pdf {
+  background: var(--sand-data-red-1, #82131f);
+  color: var(--sand-data-red-5, #ff8c98);
+}
+
+.hy-rc .hy-rc-file-tile--html {
+  background: var(--sand-data-orange-1, #823500);
+  color: var(--sand-data-orange-5, #ffae78);
+}
+
+.hy-rc .hy-rc-file-tile--archive {
+  background: var(--sand-data-yellow-1, #824e00);
+  color: var(--sand-data-yellow-5, #ffc878);
+}
+
+.hy-rc .hy-rc-file-tile--image {
+  background: var(--sand-data-purple-1, #4a2d82);
+  color: var(--sand-data-purple-5, #c5a7fe);
+}
+
+.hy-rc .hy-rc-file-tile--doc {
+  background: var(--sand-data-cyan-1, #006055);
+  color: var(--sand-data-cyan-5, #78dbd0);
+}
+
+.hy-rc .hy-rc-file-tile--code {
+  background: var(--sand-data-green-1, #00673a);
+  color: var(--sand-data-green-5, #78e2b4);
+}
+
+.hy-rc .hy-rc-file-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Middle truncation without measuring: the base name is the only thing
+   allowed to shrink, so the extension is always on screen. */
+.hy-rc .hy-rc-file-name {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: var(--sand-font-weight-medium, 500);
+  line-height: 1.35;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-rc .hy-rc-file-name-base {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hy-rc .hy-rc-file-name-ext {
+  flex: none;
+  white-space: nowrap;
+}
+
+.hy-rc .hy-rc-file-meta {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+/* ==========================================================================
+   3. Link card
+   ========================================================================== */
+
+.hy-rc.hy-rc-linkcard {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: min(380px, 100%);
+  padding: 10px 13px;
+  text-align: left;
+  border-radius: 14px;
+  background: var(--sand-bg-elevated, #181818);
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-family: inherit;
+}
+
+button.hy-rc-linkcard {
+  cursor: pointer;
+  transition: background var(--cursor-duration-fast, 120ms) var(--cursor-easing-out, ease-out);
+}
+
+button.hy-rc-linkcard:hover {
+  background: var(--sand-fill-elevated-hover, #77777717);
+}
+
+.hy-rc .hy-rc-linkcard-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--sand-fill-neutral-subtle, #77777717);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  overflow: hidden;
+}
+
+.hy-rc .hy-rc-link-glyph {
+  width: 17px;
+  height: 17px;
+}
+
+.hy-rc .hy-rc-linkcard-favicon {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  border-radius: 3px;
+}
+
+.hy-rc .hy-rc-linkcard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.hy-rc .hy-rc-linkcard-title {
+  font-size: 13px;
+  font-weight: var(--sand-font-weight-semibold, 600);
+  line-height: 1.35;
+  color: var(--sand-text-primary, #fcfcfc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hy-rc .hy-rc-linkcard-domain {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   4. Image grid
+   ========================================================================== */
+
+.hy-rc.hy-rc-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: min(360px, 100%);
+}
+
+.hy-rc .hy-rc-image-tile {
+  position: relative;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--sand-fill-neutral-subtle, #77777717);
+  flex: 1 1 calc(50% - 4px);
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  font-family: inherit;
+}
+
+button.hy-rc-image-tile {
+  cursor: pointer;
+}
+
+/* one image: large, rounded, natural aspect, capped in width — the tile hugs
+   the image rather than boxing it in a wider plate */
+.hy-rc.hy-rc-images--one .hy-rc-image-tile {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  aspect-ratio: auto;
+  border-radius: 14px;
+  background: transparent;
+}
+
+.hy-rc.hy-rc-images--one .hy-rc-image {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+/* two to four: tiled in a row */
+.hy-rc.hy-rc-images--2 .hy-rc-image-tile,
+.hy-rc.hy-rc-images--3 .hy-rc-image-tile,
+.hy-rc.hy-rc-images--4 .hy-rc-image-tile {
+  flex: 1 1 calc(50% - 4px);
+}
+
+.hy-rc.hy-rc-images--3 .hy-rc-image-tile:first-child {
+  flex-basis: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.hy-rc .hy-rc-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+
+.hy-rc .hy-rc-image-missing {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 96px;
+  min-height: 96px;
+  background: var(--sand-fill-neutral-subtle, #77777717);
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-rc .hy-rc-image-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--sand-bg-scrim, #141414b2);
+  color: var(--sand-text-on-color, #fcfcfc);
+  font-size: 20px;
+  font-weight: var(--sand-font-weight-semibold, 600);
+  letter-spacing: 0.01em;
+}
+
+/* ==========================================================================
+   5. Task card — the "Computer" card
+   ========================================================================== */
+
+.hy-rc.hy-rc-task {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(340px, 100%);
+  padding: 12px 13px;
+  border-radius: 16px;
+  background: var(--sand-bg-elevated, #181818);
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-rc .hy-rc-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hy-rc .hy-rc-task-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: var(--sand-font-weight-semibold, 600);
+  line-height: 1.3;
+  color: var(--sand-text-primary, #fcfcfc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hy-rc .hy-rc-task-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: var(--sand-font-weight-medium, 500);
+  line-height: 1.4;
+  background: var(--sand-fill-neutral-subtle, #77777717);
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-rc .hy-rc-task-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.hy-rc .hy-rc-task-pill--done {
+  background: var(--sand-fill-success-subtle, #00c97217);
+  color: var(--sand-text-success, #38d591);
+}
+
+.hy-rc .hy-rc-task-pill--running {
+  background: var(--sand-fill-accent-subtle, #1084fe17);
+  color: var(--sand-text-accent, #459ffe);
+}
+
+.hy-rc .hy-rc-task-pill--running .hy-rc-task-dot {
+  animation: hy-rc-pulse 1.4s ease-in-out infinite;
+}
+
+.hy-rc .hy-rc-task-pill--failed {
+  background: var(--sand-fill-danger-subtle, #ff263c17);
+  color: var(--sand-text-danger, #ff5667);
+}
+
+.hy-rc .hy-rc-task-pill--waiting {
+  background: var(--sand-fill-warning-subtle, #ff980017);
+  color: var(--sand-text-warning, #ffaf38);
+}
+
+@keyframes hy-rc-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hy-rc .hy-rc-task-pill--running .hy-rc-task-dot {
+    animation: none;
+  }
+}
+
+.hy-rc .hy-rc-task-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.hy-rc .hy-rc-task-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  background: var(--sand-fill-neutral-subtle, #77777717);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: var(--sand-font-weight-medium, 500);
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background var(--cursor-duration-fast, 120ms) var(--cursor-easing-out, ease-out);
+}
+
+.hy-rc .hy-rc-task-action:hover {
+  background: var(--sand-fill-elevated-hover, #77777717);
+}
+
+.hy-rc .hy-rc-task-glyph {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* ==========================================================================
+   6. Bubble fit — rich content sitting inside .sand-bubble
+   ========================================================================== */
+
+.sand-transcript .sand-bubble > .hy-rc {
+  max-width: 100%;
+}
+
+.sand-transcript .sand-bubble > .hy-rc-md {
+  white-space: normal;
+}
+
+/* ==========================================================================
+   7. MediaViewer — the full-bleed overlay a click actually opens
+   ========================================================================== */
+
+.hy-rc.hy-rc-mv {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 14px;
+  background: var(--sand-bg-scrim-heavy, #141414f2);
+  backdrop-filter: blur(var(--sand-blur-background, 12px));
+  overscroll-behavior: contain;
+}
+
+.hy-rc .hy-rc-mv-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 1100px;
+  min-height: 0;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-family: var(--cursor-font-family-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+
+.hy-rc .hy-rc-mv-dialog:focus {
+  outline: none;
+}
+
+/* -- quiet top bar -- */
+.hy-rc .hy-rc-mv-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  min-width: 0;
+  padding: 2px 2px 0;
+}
+
+.hy-rc .hy-rc-mv-count {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-rc .hy-rc-mv-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: var(--sand-font-weight-medium, 500);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hy-rc .hy-rc-mv-size {
+  flex: none;
+  font-size: 12px;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-rc .hy-rc-mv-close {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  cursor: pointer;
+  transition: background var(--cursor-duration-fast, 120ms) var(--cursor-easing-out, ease-out);
+}
+
+.hy-rc .hy-rc-mv-close:hover {
+  background: var(--sand-fill-ghost-hover, #77777717);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-rc .hy-rc-mv-closeglyph {
+  width: 16px;
+  height: 16px;
+}
+
+/* -- stage -- */
+.hy-rc .hy-rc-mv-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 52px;
+}
+
+.hy-rc .hy-rc-mv-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hy-rc .hy-rc-mv-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  border-radius: 50%;
+  background: var(--sand-bg-elevated, #181818);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  cursor: pointer;
+  transition: background var(--cursor-duration-fast, 120ms) var(--cursor-easing-out, ease-out);
+}
+
+.hy-rc .hy-rc-mv-nav:hover {
+  background: var(--sand-fill-elevated-hover, #77777717);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-rc .hy-rc-mv-nav--prev {
+  left: 2px;
+}
+
+.hy-rc .hy-rc-mv-nav--next {
+  right: 2px;
+}
+
+.hy-rc .hy-rc-mv-chevron {
+  width: 20px;
+  height: 20px;
+}
+
+/* image — contained, never blown up past its natural size */
+.hy-rc .hy-rc-mv-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+  object-fit: contain;
+  user-select: none;
+}
+
+.hy-rc .hy-rc-mv-frame {
+  width: min(920px, 100%);
+  height: min(70vh, 640px);
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  border-radius: 12px;
+  background: #111;
+}
+
+.hy-rc .hy-rc-mv-html-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.hy-rc .hy-rc-mv-html-bar button {
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.hy-rc .hy-rc-mv-html-bar button.is-on {
+  background: var(--sand-fill-ghost-selected, #fcfcfc14);
+}
+
+.hy-rc .hy-rc-mv-zip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: min(520px, 100%);
+}
+
+.hy-rc .hy-rc-mv-zip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  border-radius: 10px;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+.hy-rc .hy-rc-mv-zip-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--sand-border-weak, #fcfcfc12);
+}
+
+.hy-rc .hy-rc-mv-zip-size {
+  opacity: 0.55;
+}
+
+/* text-ish preview */
+.hy-rc .hy-rc-mv-text {
+  margin: 0;
+  width: min(920px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--sand-bg-base, #070707);
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  font-family: var(--cursor-font-family-mono, ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--sand-text-primary, #fcfcfc);
+  white-space: pre;
+  scrollbar-width: thin;
+  text-align: left;
+}
+
+/* big file card — the no-preview / binary case */
+.hy-rc .hy-rc-mv-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 28px 32px;
+  border-radius: 18px;
+  background: var(--sand-bg-elevated, #181818);
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  text-align: center;
+}
+
+.hy-rc .hy-rc-mv-card-tile {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+  border-radius: 20px;
+}
+
+.hy-rc .hy-rc-mv-card-tile .hy-rc-file-glyph {
+  width: 40px;
+  height: 40px;
+}
+
+.hy-rc .hy-rc-mv-card-name {
+  max-width: min(520px, 100%);
+  font-size: 16px;
+  font-weight: var(--sand-font-weight-semibold, 600);
+  line-height: 1.35;
+  color: var(--sand-text-primary, #fcfcfc);
+  overflow-wrap: anywhere;
+}
+
+.hy-rc .hy-rc-mv-card-meta {
+  font-size: 12px;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-rc .hy-rc-mv-card-note {
+  margin-top: 4px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+/* link, large */
+.hy-rc .hy-rc-mv-linkbig {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  max-width: min(640px, 100%);
+  padding: 28px 32px;
+  border-radius: 18px;
+  background: var(--sand-bg-elevated, #181818);
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  text-align: center;
+}
+
+.hy-rc .hy-rc-mv-linkbig-icon {
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+  border-radius: 18px;
+  background: var(--sand-fill-neutral-subtle, #77777717);
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-rc .hy-rc-mv-linkbig-icon .hy-rc-link-glyph {
+  width: 30px;
+  height: 30px;
+}
+
+.hy-rc .hy-rc-mv-linkbig-title {
+  font-size: 17px;
+  font-weight: var(--sand-font-weight-semibold, 600);
+  line-height: 1.35;
+  color: var(--sand-text-primary, #fcfcfc);
+  overflow-wrap: anywhere;
+}
+
+.hy-rc .hy-rc-mv-linkbig-domain {
+  font-size: 12px;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-rc .hy-rc-mv-url {
+  margin-top: 8px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: var(--sand-bg-base, #070707);
+  border: 1px solid var(--sand-border-subtle, #fcfcfc0d);
+  font-family: var(--cursor-font-family-mono, ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--sand-text-accent, #459ffe);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* actions */
+.hy-rc .hy-rc-mv-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.hy-rc .hy-rc-mv-action {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  background: var(--sand-fill-neutral-subtle, #77777717);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: var(--sand-font-weight-medium, 500);
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background var(--cursor-duration-fast, 120ms) var(--cursor-easing-out, ease-out);
+}
+
+.hy-rc .hy-rc-mv-action:hover:not(:disabled) {
+  background: var(--sand-fill-elevated-hover, #77777717);
+}
+
+.hy-rc .hy-rc-mv-action:disabled {
+  cursor: not-allowed;
+  color: var(--sand-text-disabled, #fcfcfc59);
+  border-color: var(--sand-border-subtle, #fcfcfc0d);
+  background: transparent;
+}
+
+/* filmstrip */
+.hy-rc .hy-rc-mv-strip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  /* `safe` keeps the first thumbs reachable once the strip overflows; the
+     whole declaration is simply ignored where it isn't supported, leaving
+     the strip left-aligned rather than broken. */
+  justify-content: safe center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 2px 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.hy-rc .hy-rc-mv-thumb {
+  flex: none;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--sand-border-weak, #fcfcfc1a);
+  border-radius: 9px;
+  background: var(--sand-bg-elevated, #181818);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity var(--cursor-duration-fast, 120ms) var(--cursor-easing-out, ease-out);
+}
+
+.hy-rc .hy-rc-mv-thumb:hover {
+  opacity: 0.85;
+}
+
+.hy-rc .hy-rc-mv-thumb--on {
+  opacity: 1;
+  border-color: var(--sand-border-strong, #fcfcfc4d);
+  box-shadow: inset 0 0 0 1px var(--sand-border-strong, #fcfcfc4d);
+}
+
+.hy-rc .hy-rc-mv-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+
+.hy-rc .hy-rc-mv-thumb-tile {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+}
+
+.hy-rc .hy-rc-mv-thumb-tile .hy-rc-file-glyph,
+.hy-rc .hy-rc-mv-thumb-tile .hy-rc-link-glyph {
+  width: 18px;
+  height: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hy-rc .hy-rc-mv-thumb,
+  .hy-rc .hy-rc-mv-nav,
+  .hy-rc .hy-rc-mv-close,
+  .hy-rc .hy-rc-mv-action {
+    transition: none;
+  }
+}
+
+
+/* -- inline SVG ---------------------------------------------------------- */
+/* A ```svg fence draws as a graphic in the bubble. It sits on its own light
+   ground because bot-authored charts assume a dark page but a diagram may
+   assume a light one, and a stroke-only diagram on #262626 is invisible. */
+
+.hy-rc-svg {
+  margin: 8px 0 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #0d0d0d;
+  border: 1px solid rgba(252, 252, 252, 0.08);
+  overflow: hidden;
+}
+
+.hy-rc-svg img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+}
+
+
+/* -- task lists ---------------------------------------------------------- */
+/* Presentational: a record of what the bot said, not a control. No pointer
+   cursor and no hover, so it never looks tickable. */
+
+.hy-rc-tasks {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hy-rc-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.hy-rc-task-box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin-top: 3px;
+  border: 1.5px solid rgba(252, 252, 252, 0.32);
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1;
+  color: #0d0d0d;
+}
+
+.hy-rc-task-item.is-done .hy-rc-task-box {
+  background: #2bb673;
+  border-color: #2bb673;
+}
+
+.hy-rc-task-item.is-done .hy-rc-task-text {
+  color: var(--sand-text-secondary, #fcfcfc99);
+  text-decoration: line-through;
+  text-decoration-color: rgba(252, 252, 252, 0.35);
+}
+
+/* -- clickable links ------------------------------------------------------ */
+/* Only http(s) links get this. Everything else stays inert text, so the
+   underline is a promise that clicking will actually do something. */
+
+.hy-rc-link--open {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.hy-rc-link--open:hover {
+  text-decoration: underline;
+}
+
+
+/* -- math ---------------------------------------------------------------- */
+/* KaTeX ships its own metrics; we only place it. Long equations scroll inside
+   their own box rather than widening the bubble. */
+
+.hy-rc-tex {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.hy-rc-mathblock {
+  margin: 10px 0;
+  padding: 4px 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.hy-rc-mathblock .katex-display {
+  margin: 0;
+}
+
+/* KaTeX's default is inherited colour, which is right, but its error red is
+   tuned for light backgrounds. */
+.hy-rc .katex .katex-error,
+.hy-rc-mathblock .katex-error {
+  color: #ff6b78;
+}

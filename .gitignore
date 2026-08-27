@@ -1,0 +1,12 @@
+node_modules
+dist
+.DS_Store
+
+# Agent scratch: run logs and verification output, not source.
+.ocodex
+.verify
+
+# Local overrides
+.env
+.env.local
+*.log

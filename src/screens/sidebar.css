@@ -1,0 +1,826 @@
+/* sidebar.css — the roster, the account foot and the collapsed icon rail for
+   src/screens/Sidebar.jsx. Loads after src/styles.css and layers on top of it;
+   every selector below is scoped under .sand-sidebar so nothing here leaks into
+   the rest of the app.
+
+   Numbers come off the real Grok Bot window (extracted-ui-kit/screens, the 2x
+   captures, divided back to CSS px): 280px sidebar, 54px rows on a 58px pitch
+   inset 12px from the edge, a 36px mark, name 14/600, timestamp 12, preview 13,
+   selection fill #313131 (= --sand-fill-ghost-selected over #111). */
+
+/* -- width animation -------------------------------------------------- */
+
+.sand-sidebar {
+  transition:
+    width 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    min-width 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    max-width 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sand-sidebar[data-collapsed="true"] {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+}
+
+/* -- search ------------------------------------------------------------ */
+
+/* Height and radius come off the reference crop by ratio to the traffic
+   lights, which are a fixed 12pt on macOS and so survive an unknown crop
+   scale. Grok's field is ~1.7 light-diameters tall where this was ~2.1, and
+   its corner radius is ~0.25 of its own height where this was ~0.32. Raising
+   this to 36 earlier in the sidebar pass overshot: the ROWS wanted to grow,
+   the search did not. */
+.sand-sidebar .sand-search {
+  margin: 2px 12px 8px;
+  padding: 0 10px;
+  height: 30px;
+  gap: 7px;
+  border-radius: 9px;
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.sand-sidebar .sand-search .gb-icon {
+  font-size: 15px;
+  flex: none;
+}
+
+.sand-sidebar .sand-search input {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* -- roster ------------------------------------------------------------ */
+
+.sand-sidebar .sand-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 12px 12px;
+}
+
+.sand-sidebar .sand-row {
+  /* --row-ground is what the rings in this row cut themselves out of: the
+     status pip and the front face of a channel mark. It is a LOCAL custom
+     property, not a design token (hence no --sand- prefix): it is redefined
+     below for :hover and .is-on so the ring always matches whatever ground is
+     actually behind it. A single literal would visibly mismatch on the
+     selected row, which is where a channel most often sits. */
+  --row-ground: var(--sand-bg-subtle, #111);
+  --mark: 40px;
+  position: relative;
+  align-items: center;
+  gap: 11px;
+  height: 60px;
+  padding: 0 10px;
+  border-radius: 12px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.sand-sidebar .sand-row:hover {
+  --row-ground: #242424;
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+/* The measured selection off the reference capture is a NEUTRAL grey. This had
+   drifted to #3a3f46, which is blue-tinted and a full step lighter, and it was
+   the loudest thing in the sidebar. */
+.sand-sidebar .sand-row.is-on,
+.sand-sidebar .sand-row.is-on:hover,
+.sand-sidebar .sand-row.is-pick,
+.sand-sidebar .sand-row.is-pick:hover,
+.sand-sidebar .sand-row.is-on.is-pick {
+  --row-ground: #2e2e2e;
+  background: #2e2e2e;
+}
+
+.sand-sidebar .sand-row__face-wrap {
+  width: var(--mark);
+  height: var(--mark);
+}
+
+.sand-sidebar .sand-row__face {
+  width: var(--mark);
+  height: var(--mark);
+}
+
+.sand-sidebar .sand-row__copy {
+  gap: 0;
+}
+
+.sand-sidebar .sand-row__top {
+  gap: 8px;
+}
+
+.sand-sidebar .sand-row__name,
+.sand-sidebar .sand-row__rename {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 21px;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.sand-sidebar .sand-row__rename {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  outline: none;
+  padding: 0;
+  caret-color: #5aa8ff;
+}
+
+.sand-sidebar .sand-row__tag {
+  flex: none;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.sand-sidebar .sand-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sand-sidebar .sand-section + .sand-section {
+  margin-top: 12px;
+}
+
+.sand-sidebar .sand-section__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px;
+}
+
+.sand-sidebar .sand-section__label,
+.sand-sidebar .sand-section__rename {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--sand-text-tertiary, #8d8d8d);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.sand-sidebar .sand-section__count {
+  flex: none;
+  color: var(--sand-text-tertiary, #8d8d8d);
+  font-size: 13px;
+}
+
+.sand-sidebar .sand-section__rename {
+  color: var(--sand-text-primary, #fcfcfc);
+  outline: none;
+}
+
+.sand-sidebar .sand-section-name {
+  margin: 0 12px 8px;
+}
+
+.sand-sidebar .sand-section-name input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--sand-border-focus, #1c8bfe);
+  border-radius: 8px;
+  background: var(--sand-bg-elevated, #181818);
+  color: var(--sand-text-primary, #fcfcfc);
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.sand-sidebar .sand-row.is-pick:not(.is-on) {
+  --row-ground: #2e2e2e;
+  background: #2e2e2e;
+}
+
+.sand-sidebar .sand-row__time {
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.sand-sidebar .sand-row__pin {
+  flex: none;
+  font-size: 11px;
+  line-height: 19px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.sand-sidebar .sand-row__last {
+  font-size: 14px;
+  line-height: 19px;
+}
+
+/* -- pinned tiles ------------------------------------------------------- */
+/* Measured off the reference: a 48px mark, the name centred underneath at 13px,
+   laid out as a wrapping row above the list. Pinned entries do NOT also appear
+   as rows below, so a pin moves a teammate rather than badging one. */
+
+/* A 3-column grid, not a wrapping flex row: with flex the tile width and the
+   gap had to be kept summing under 280px by hand, and 88 + 4 + 88 + 4 + 88
+   overflowed by 8px, so the third tile silently dropped to a second row. */
+.sand-sidebar .sand-pinned {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 6px 8px 10px;
+}
+
+.sand-sidebar .sand-pin {
+  --row-ground: var(--sand-bg-subtle, #111);
+  --mark: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  /* Width comes from the grid track. No horizontal padding: the track is only
+     ~78px and every pixel of it is needed for the name ("Finance Guy" wants
+     75). The gap between tiles is the grid's, not the tile's. */
+  min-width: 0;
+  padding: 8px 0 9px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--sand-text-primary, #fcfcfc);
+  cursor: pointer;
+}
+
+.sand-sidebar .sand-pin:hover {
+  --row-ground: #242424;
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.sand-sidebar .sand-pin.is-on {
+  --row-ground: #2e2e2e;
+  background: #2e2e2e;
+}
+
+.sand-sidebar .sand-pin__face-wrap {
+  position: relative;
+  display: block;
+  width: var(--mark);
+  height: var(--mark);
+  flex: none;
+}
+
+.sand-sidebar .sand-pin__face {
+  width: var(--mark);
+  height: var(--mark);
+}
+
+.sand-sidebar .sand-pin__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.sand-sidebar .sand-pin.is-on .sand-pin__name,
+.sand-sidebar .sand-pin.is-unread .sand-pin__name {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* The pip rides the mark, not the tile box. */
+.sand-sidebar .sand-pin__face-wrap .sand-row__dot {
+  position: absolute;
+}
+
+/* Collapsed to the icon rail there is no room for a name or a second column. */
+.sand-sidebar[data-collapsed="true"] .sand-pinned {
+  grid-template-columns: 1fr;
+  padding: 4px 0 8px;
+  justify-items: center;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-pin {
+  --mark: 36px;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-pin__name {
+  display: none;
+}
+
+/* -- status pip --------------------------------------------------------- */
+/* ONE state, and it is not "this row exists". The pip is drawn only while a
+   turn is actually running — `pipOf` reads `workingIn`, which is set for the
+   life of a turn and cleared the instant it ends — and it breathes, so it
+   reads as activity rather than as a badge. Idle bots draw nothing. */
+
+.sand-sidebar .sand-row__dot {
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  background: #59c67a;
+  box-shadow: 0 0 0 2.5px var(--row-ground, #111);
+}
+
+.sand-sidebar .sand-row__dot.is-work {
+  animation: sand-pip-breathe 1.9s ease-in-out infinite;
+}
+
+@keyframes sand-pip-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sand-sidebar .sand-row__dot.is-work { animation: none; }
+}
+
+/* -- unread ------------------------------------------------------------- */
+/* A row with something new gets a blue dot at the end of the preview line and
+   a brighter name, the way the reference app marks one. */
+
+.sand-sidebar .sand-row__last {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sand-sidebar .sand-row__last-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sand-sidebar .sand-row__unread {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #1c8bfe;
+}
+
+.sand-sidebar .sand-row.is-unread .sand-row__name {
+  color: #fff;
+}
+
+.sand-sidebar .sand-row.is-unread .sand-row__last-text {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* -- channel mark: two member faces, stacked --------------------------- */
+/* Face 0 sits behind at the top-left, face 1 in front at the bottom-right and
+   overlapping it. Both are ~2/3 of the mark box so the pair still occupies the
+   same square a single bot face would and the rows stay aligned.
+
+   The front face is separated from the one behind by a ring in the row's
+   background colour. UmbraFace draws an arbitrary body path, not a circle, so
+   a border or box-shadow would ring the *box* rather than the shape — four
+   offset drop-shadows trace the actual alpha edge instead. */
+
+.sand-sidebar .sand-channel-mark {
+  position: relative;
+  display: block;
+  width: var(--mark);
+  height: var(--mark);
+  flex: none;
+}
+
+.sand-sidebar .sand-channel-mark__face {
+  position: absolute;
+  width: calc(var(--mark) * 0.667);
+  height: calc(var(--mark) * 0.667);
+}
+
+.sand-sidebar .sand-channel-mark__face--0 {
+  left: 0;
+  top: 0;
+  z-index: 1;
+}
+
+.sand-sidebar .sand-channel-mark__face--1 {
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  filter:
+    drop-shadow(1.6px 0 0 var(--row-ground, #111))
+    drop-shadow(-1.6px 0 0 var(--row-ground, #111))
+    drop-shadow(0 1.6px 0 var(--row-ground, #111))
+    drop-shadow(0 -1.6px 0 var(--row-ground, #111));
+}
+
+/* A third member would land dead centre and read as mush — the real app only
+   ever shows two. Kept as an explicit rule so a stray third degrades quietly
+   instead of stacking on top of the pair. */
+.sand-sidebar .sand-channel-mark__face--2 {
+  display: none;
+}
+
+.sand-sidebar .sand-channel-mark--empty {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.sand-sidebar .sand-channel-mark__hash {
+  font-size: calc(var(--mark) * 0.45);
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* -- foot: Plugins + account ------------------------------------------- */
+/* No rule above these in the reference — the roster just runs out. */
+
+.sand-sidebar .sand-foot {
+  border-top: 0;
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sand-sidebar .sand-plugins,
+.sand-sidebar .sand-account {
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  color: #e8e8e8;
+  font-family: var(--sand-font-family-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  opacity: 1;
+}
+
+.sand-sidebar .sand-plugins:hover,
+.sand-sidebar .sand-account:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sand-sidebar .sand-foot__mark {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: #ececec;
+}
+
+.sand-sidebar .sand-plugins .sand-foot__mark {
+  border: 1px solid #4a4a4a;
+  background: transparent;
+  color: #f2f2f2;
+}
+
+.sand-sidebar .sand-plugins .sand-plug {
+  display: block;
+}
+
+.sand-sidebar .sand-account .sand-initial {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: #3a3a3a;
+  color: #f5f5f5;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.sand-sidebar .sand-foot__mark--photo {
+  object-fit: cover;
+}
+
+.sand-sidebar .sand-foot__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e8e8e8;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* The collapsed rail's bottom controls. Expanded, the titlebar pair does this
+   job and these are simply not laid out. */
+.sand-rail-controls {
+  display: none;
+}
+
+.sand-sidebar .sand-newwrap {
+  position: relative;
+  flex: none;
+}
+
+.sand-sidebar .sand-newmenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: -2px;
+  z-index: 40;
+  min-width: 204px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--sand-bg-elevated, #181818);
+  box-shadow: var(--sand-shadow-popover), 0 12px 28px rgba(0, 0, 0, 0.42);
+  border: 0;
+}
+
+.sand-sidebar .sand-rail-controls .sand-newmenu {
+  top: auto;
+  bottom: calc(100% + 4px);
+  right: -2px;
+}
+
+.sand-sidebar .sand-newmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sand-text-primary, #fcfcfc);
+  font: 400 14px/1 var(--sand-font-family-sans, system-ui, sans-serif);
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sand-sidebar .sand-newmenu__item:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.sand-sidebar .sand-newmenu__icon {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--sand-text-primary, #fcfcfc);
+  flex: none;
+}
+
+/* -- account menu ------------------------------------------------------ */
+
+.sand-sidebar .account-menu {
+  left: 8px;
+  right: 8px;
+  min-width: 232px;
+  padding: 6px;
+  border-radius: 14px;
+  background: #1f1f1f;
+}
+
+.sand-sidebar .account-menu__item {
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.sand-sidebar .account-menu__item .gb-icon:first-child {
+  width: 18px;
+  font-size: 16px;
+  flex: none;
+  text-align: center;
+}
+
+.sand-sidebar .account-menu__meta {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.sand-sidebar .account-menu__meta .gb-icon {
+  font-size: 13px;
+}
+
+/* -- collapsed rail ----------------------------------------------------- */
+/* The titlebar stays mounted (it carries the window-drag region and the room
+   the macOS traffic lights need) but hands its buttons to the foot: collapsed,
+   the rail reads as avatars from the top, then toggle / + / account at the
+   bottom. */
+
+.sand-sidebar[data-collapsed="true"] .sand-titlebar--side {
+  padding-left: 0;
+  pointer-events: none;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-titlebar--side .icon-btn,
+.sand-sidebar[data-collapsed="true"] .sand-search,
+.sand-sidebar[data-collapsed="true"] .sand-plugins,
+.sand-sidebar[data-collapsed="true"] .sand-foot__label {
+  display: none;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-roster {
+  padding: 2px 10px 12px;
+  gap: 10px;
+  align-items: center;
+  overflow-x: hidden;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-row {
+  --mark: 36px;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  border-radius: 14px;
+  overflow: visible;
+  background: transparent;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-row:hover {
+  background: transparent;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-row__face-wrap,
+.sand-sidebar[data-collapsed="true"] .sand-row__face,
+.sand-sidebar[data-collapsed="true"] .sand-row .umbra-face {
+  width: var(--mark);
+  height: var(--mark);
+  overflow: visible;
+  filter: none;
+}
+
+/* .sand-row__copy collapses via width/opacity (not display:none) so the row
+   shrink can animate instead of jumping. It also has to stop laying its name
+   and timestamp out at full width, or the roster grows a horizontal scrollbar
+   across the bottom of a 68px rail. */
+.sand-sidebar .sand-row__copy {
+  overflow: hidden;
+  transition:
+    flex 180ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 140ms ease;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-row__copy {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  opacity: 0;
+  white-space: nowrap;
+}
+
+/* The tile behind the selected avatar is the only selection affordance in the
+   rail — no accent bar. */
+.sand-sidebar[data-collapsed="true"] .sand-row.is-on,
+.sand-sidebar[data-collapsed="true"] .sand-row.is-on:hover,
+.sand-sidebar[data-collapsed="true"] .sand-row.is-pick {
+  background: #2c2c2c;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-section__head,
+.sand-sidebar[data-collapsed="true"] .sand-section-name {
+  display: none;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-section + .sand-section {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-foot {
+  padding: 4px 8px 18px;
+  align-items: center;
+  gap: 12px;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-rail-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-rail-controls .icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 16px;
+  color: var(--sand-text-tertiary, #fcfcfc66);
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-rail-controls .icon-btn:hover {
+  color: var(--sand-text-secondary, #fcfcfc99);
+  background: transparent;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-account-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-account {
+  width: 40px;
+  height: 40px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  border-radius: 50%;
+  position: relative;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-account:hover {
+  background: transparent;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-account .sand-foot__mark,
+.sand-sidebar[data-collapsed="true"] .sand-account .sand-initial {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+  background: #1c1c1c;
+  box-shadow: inset 0 0 0 1px rgba(252, 252, 252, 0.14);
+}
+
+.sand-sidebar[data-collapsed="true"] .account-menu {
+  left: 0;
+  width: max-content;
+}
+
+/* -- collapsed tooltips -------------------------------------------------- */
+/* Names are hidden in the rail, so surface them from the data-tip already on
+   the markup. Quiet and slow on purpose: the reference shows no tooltip at
+   all, so this must never fire on a casual pass across the rail. */
+
+.sand-sidebar[data-collapsed="true"] .sand-row::after,
+.sand-sidebar[data-collapsed="true"] .sand-account::after,
+.sand-sidebar[data-collapsed="true"] .sand-rail-controls .icon-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1f1f1f;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  transition-delay: 0ms;
+}
+
+/* The rail rows clip their copy; a tooltip drawn from ::after would be clipped
+   with it, so only lift the clip while the row is actually hovered. */
+.sand-sidebar[data-collapsed="true"] .sand-row:hover,
+.sand-sidebar[data-collapsed="true"] .sand-rail-controls .icon-btn {
+  overflow: visible;
+  position: relative;
+}
+
+.sand-sidebar[data-collapsed="true"] .sand-row:hover::after,
+.sand-sidebar[data-collapsed="true"] .sand-account:hover::after,
+.sand-sidebar[data-collapsed="true"] .sand-rail-controls .icon-btn:hover::after {
+  opacity: 1;
+  transition-delay: 650ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sand-sidebar,
+  .sand-sidebar .sand-row__copy,
+  .sand-sidebar[data-collapsed="true"] .sand-row::after,
+  .sand-sidebar[data-collapsed="true"] .sand-account::after {
+    transition: none;
+  }
+}

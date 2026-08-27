@@ -1,0 +1,397 @@
+/* composer.css — the message pill, its `+` / `/` panel and reply mode.
+   Loads after src/styles.css. Numbers come off the real Grok Bot window
+   (extracted-ui-kit/screens/01-chat.png and 02-plugins.png, measured at 2x and
+   divided back to CSS px): a 44px pill inset 16px, fill #2f2f2f, a 28px grey
+   `+` 8px in from the left, a 28px WHITE mic 8px in from the right. */
+
+.sand-composer {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+  /* Same column the transcript uses, so the pill lines up under the bubbles
+     instead of stretching the full width of a wide window. */
+  width: min(100% - 32px, 860px);
+  margin: 0 auto 16px;
+  padding: 8px;
+  min-height: 44px;
+  border-radius: 22px;
+  background: #2f2f2f;
+  border: 1px solid #fcfcfc12;
+}
+
+/* Beats `.sand-composer input { padding: 8px 0 }` in styles.css, which would
+   otherwise push the pill from 44px to 60px. */
+.sand-composer .sand-composer__input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  /* One line has to come out 28px tall, the same as the `+` and the mic, so
+     the resting pill is 28 + 8 + 8 + 2 = 46px. At 10px this was 42px of
+     textarea and a 60px pill: half again as tall as the reference. */
+  padding: 3px 0;
+  margin: 0;
+  background: transparent;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 16px;
+  line-height: 22px;
+  max-height: 132px;
+  resize: none;
+  overflow-y: auto;
+  /* `field-sizing: content` is deliberately NOT set: Composer.jsx sizes this
+     box from the draft value in an effect, and two autosizers on one textarea
+     is what made the pill clip its own placeholder. */
+  font-family: inherit;
+}
+
+.sand-composer .sand-composer__input::placeholder {
+  color: #fcfcfc7a;
+}
+
+/* -- the buttons -------------------------------------------------------- */
+
+.sand-composer__plus {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #3c3c3c;
+  color: #d4d4d4;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.sand-composer__plus:hover {
+  background: #4a4a4a;
+}
+
+.sand-composer__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+/* The mic is always there; the send arrow joins it the moment there is
+   something to send — the real app shows both. */
+.sand-composer .mic,
+.sand-composer .send {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fcfcfc;
+  color: #141414;
+  cursor: pointer;
+}
+
+.sand-composer .send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sand-composer .send.send--stop {
+  background: #fcfcfc;
+  color: #141414;
+}
+
+/* -- reply mode --------------------------------------------------------- */
+/* Quoted strip on top, the input under it, then a bottom row with the `+` at
+   the left and the mic at the right. The pill grows into a tall rounded
+   rectangle to hold all three. */
+
+.sand-composer[data-reply="true"],
+.sand-composer[data-attach="true"] {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "quote quote quote"
+    "thumbs thumbs thumbs"
+    "input input input"
+    "plus  .     actions";
+  align-items: center;
+  gap: 8px 9px;
+  padding: 8px;
+  border-radius: 24px;
+}
+
+.sand-composer[data-attach="true"]:not([data-reply="true"]) {
+  grid-template-areas:
+    "thumbs thumbs thumbs"
+    "input input input"
+    "plus  .     actions";
+}
+
+.sand-composer[data-reply="true"] .sand-reply {
+  grid-area: quote;
+}
+
+.sand-composer[data-reply="true"] .sand-composer__input,
+.sand-composer[data-attach="true"] .sand-composer__input {
+  grid-area: input;
+  line-height: 22px;
+  padding: 0 6px;
+}
+
+.sand-composer[data-reply="true"] .sand-composer__plus,
+.sand-composer[data-attach="true"] .sand-composer__plus {
+  grid-area: plus;
+}
+
+.sand-composer[data-reply="true"] .sand-composer__actions,
+.sand-composer[data-attach="true"] .sand-composer__actions {
+  grid-area: actions;
+}
+
+.sand-thumbs {
+  grid-area: thumbs;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 6px 0;
+}
+
+.sand-thumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  flex: none;
+}
+
+.sand-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sand-thumb__x {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #111;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+  place-items: center;
+  padding: 0;
+}
+
+.sand-thumb:hover .sand-thumb__x {
+  display: grid;
+}
+
+.sand-reply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px 7px 10px;
+  border-radius: 16px;
+  background: #3a3a3a;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 13px;
+}
+
+.sand-reply > .gb-icon {
+  flex: none;
+  font-size: 14px;
+}
+
+.sand-reply__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sand-reply__x {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sand-reply__x:hover {
+  background: #ffffff1f;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* -- the `+` / `/` panel ------------------------------------------------ */
+
+/* The panel is anchored to where the text starts (past the `+`), not to the
+   pill's edges, and it is a fixed reading width rather than the full window:
+   a 1600px-wide list of six skills is a table, not a menu. Numbers measured
+   off the reference capture at 2x and halved: ~400px wide, 16px radius,
+   near-black fill so it separates from the #2f2f2f pill in front of it. */
+.sand-slash {
+  position: absolute;
+  left: 46px;
+  right: auto;
+  width: min(400px, calc(100% - 92px));
+  bottom: calc(100% + 10px);
+  display: flex;
+  flex-direction: column;
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border-radius: 16px;
+  background: #0d0d0d;
+  border: 1px solid rgba(252, 252, 252, 0.1);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.72);
+  z-index: 6;
+}
+
+.sand-slash__wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.sand-slash__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--sand-text-primary, #fcfcfc);
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 15px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+/* One row is highlighted at a time — the keyboard's, which the mouse takes
+   over on hover. Two competing highlights would be a lie about what Enter
+   does. */
+.sand-slash__item.is-active {
+  background: #262626;
+}
+
+
+.sand-slash__mark {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: #9a9a9a;
+  font-size: 14px;
+}
+
+/* styles.css sizes every .umbra-face at 36px; the panel's marks are 22. */
+.sand-slash__mark .umbra-face {
+  width: 18px;
+  height: 18px;
+}
+
+.sand-slash__mark img {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+.sand-slash__at {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.sand-slash__label {
+  flex: none;
+  max-width: 52%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.sand-slash__note {
+  flex: 1;
+  min-width: 0;
+  color: #7d7d7d;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The type column ("Bot" / "Plugin" / "Skill" / "Action") is what makes the
+   list scannable, so it is pinned right and never squeezed out by a long
+   description. */
+.sand-slash__type {
+  flex: none;
+  margin-left: auto;
+  padding-left: 10px;
+  color: #6f6f6f;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Only between groups of a different kind, so a run of skills reads as one. */
+.sand-slash__sep {
+  height: 1px;
+  margin: 5px 8px;
+  background: rgba(252, 252, 252, 0.09);
+}
+
+.sand-slash__empty {
+  padding: 10px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 13px;
+}
+
+
+/* -- attachment chips ---------------------------------------------------- */
+/* The image itself is the button that opens the full-bleed preview; the `x`
+   sits on top of it and must not inherit the pointer target. */
+
+.sand-composer .sand-thumb__open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.sand-composer .sand-thumb__open img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

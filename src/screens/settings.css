@@ -1,0 +1,169 @@
+/* settings.css — the Settings dialog's own panel, header, scroller and the
+   account row's avatar/copy affordances. The dialog shell, nav rail, section
+   headings, row groups and controls are the shared kit (src/kit/ui.jsx +
+   ui.css); this file only positions Settings-specific bits on top of it.
+
+   Panel geometry matches the extracted Grok Bot kit: 32px gutters, a 17px
+   medium title outdented 8px, 22/32/28 padding on the scrolling pane and 28px
+   between sections. */
+@import "../kit/ui.css";
+
+.settings__panel {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  cursor: pointer;
+}
+
+.settings__close:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.settings__head {
+  flex: none;
+  padding: 32px 32px 6px;
+}
+
+.settings__head h2 {
+  margin: 0;
+  padding-left: 8px;
+  font-size: 17px;
+  line-height: 24px;
+  letter-spacing: -0.008em;
+  font-weight: var(--sand-font-weight-medium, 500);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.settings__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.settings__body {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 22px 32px 28px;
+}
+
+/* Nothing stacked in the settings body may be squeezed to make the column fit
+   — it should scroll instead. Flex children default to flex-shrink:1, which
+   once halved every row group's height and stopped the body scrolling. */
+.settings__body > *,
+.settings__section > * {
+  flex-shrink: 0;
+}
+
+.settings__section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+/* -- account row ------------------------------------------------------------ */
+
+.settings__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0.5px solid var(--sand-border-subtle, #fcfcfc0d);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--cursor-bg-tertiary, #7777772c);
+  user-select: none;
+}
+
+.settings__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings__avatar-initial {
+  font-size: 17px;
+  line-height: 1;
+  font-weight: var(--sand-font-weight-medium, 500);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.settings__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  cursor: pointer;
+}
+
+.settings__copy:hover {
+  background: var(--sand-fill-secondary, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.settings__copy .gb-icon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* -- usage / updates --------------------------------------------------------- */
+
+.settings__pct {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.settings__note {
+  margin: 0;
+  padding: 0 8px 0 12px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.settings__meter {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sand-fill-control-track, #fcfcfc1a);
+  overflow: hidden;
+}
+
+/* Neutral, not accent: the dialog is monochrome, and a lone blue bar was the
+   one thing in it that did not look like the rest of the app. */
+.settings__meter-fill {
+  height: 100%;
+  background: var(--sand-fill-primary, #fafafa);
+  border-radius: 999px;
+}

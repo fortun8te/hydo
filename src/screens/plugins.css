@@ -1,0 +1,654 @@
+/* plugins.css — the Plugins marketplace modal (src/screens/Plugins.jsx).
+
+   Everything is prefixed hy-plugins so it cannot collide with the kit's hy-
+   primitives, the app's sand- chrome, or the legacy settings__ rules. The one
+   rule that reaches outside that prefix uses :has() so it only ever applies to
+   a Dialog card that actually contains this screen — Settings and every other
+   Dialog keep the kit's default geometry.
+
+   Spacing scale: 4 / 8 / 12 / 16 / 24 / 32. Colour only from --sand-* tokens
+   with literal fallbacks. */
+
+.hy-dialog__card:has(> .hy-plugins) {
+  width: min(420px, calc(100vw - 32px));
+  height: min(520px, calc(100vh - 64px));
+  background: var(--sand-bg-elevated, #181818);
+}
+
+.hy-plugins {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 14px;
+}
+
+.hy-plugins *,
+.hy-plugins *::before,
+.hy-plugins *::after {
+  box-sizing: border-box;
+}
+
+/* Buttons get the font but NOT the colour: the kit's hy-btn--primary paints
+   its own dark-on-light label, and `color: inherit` here would erase it. Every
+   button class below sets its own colour. Inputs do need it — the UA default is
+   `fieldtext`, which is black on this dark surface. */
+.hy-plugins button {
+  font: inherit;
+}
+
+.hy-plugins input {
+  font: inherit;
+  color: inherit;
+}
+
+.hy-plugins :focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--sand-border-focus, #1c8bfe);
+}
+
+/* -- header ---------------------------------------------------------------- */
+
+.hy-plugins__head {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 8px;
+}
+
+.hy-plugins__titlebar {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.hy-plugins__title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.hy-plugins__close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  cursor: pointer;
+}
+
+.hy-plugins__close:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* -- account / source row ---------------------------------------------------- */
+
+.hy-plugins__source {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  max-width: 100%;
+  margin: -8px 0 0 -8px;
+  padding: 6px 10px 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hy-plugins__source:hover:not(:disabled) {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-plugins__source.is-on {
+  background: var(--sand-fill-ghost-selected, #77777752);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-plugins__source:disabled {
+  cursor: default;
+}
+
+.hy-plugins__source-avatar {
+  position: relative;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--sand-fill-secondary, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-plugins__source-avatar .gb-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* The little initial tile notched onto the avatar's bottom-right corner. */
+.hy-plugins__source-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  border: 2px solid var(--sand-bg-elevated, #181818);
+  background: var(--sand-fill-elevated, #2f2f2f);
+  color: var(--sand-text-primary, #fcfcfc);
+  font-size: 10px;
+  font-weight: var(--sand-font-weight-semibold, 600);
+  line-height: 1;
+}
+
+.hy-plugins__source-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hy-plugins__source .gb-icon-chevron-right-small {
+  flex: none;
+  font-size: 12px;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-plugins__source.is-on .gb-icon-chevron-right-small {
+  transform: rotate(90deg);
+}
+
+/* -- search ---------------------------------------------------------------- */
+
+.hy-plugins__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  border-radius: 8px;
+  background: var(--sand-bg-subtle, #111111);
+}
+
+.hy-plugins__search:focus-within {
+  border-color: var(--sand-border-strong, #fcfcfc4d);
+}
+
+.hy-plugins__search .gb-icon {
+  flex: none;
+  font-size: 14px;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+.hy-plugins__search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+}
+
+.hy-plugins__search-input::placeholder {
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-plugins__search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* -- category chips -------------------------------------------------------- */
+
+.hy-plugins__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -4px;
+}
+
+.hy-plugins__chip {
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hy-plugins__chip:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-plugins__chip.is-on {
+  background: var(--sand-fill-ghost-selected, #77777752);
+  border-color: var(--sand-border-strong, #fcfcfc4d);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* -- unavailable notice ----------------------------------------------------- */
+
+.hy-plugins__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--sand-border-default, #fcfcfc26);
+  border-radius: 10px;
+  background: var(--sand-fill-neutral-subtle, #7777772c);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-plugins__notice .gb-icon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 14px;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+}
+
+/* -- scrolling body --------------------------------------------------------- */
+
+.hy-plugins__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 10px 14px;
+}
+
+.hy-plugins__section + .hy-plugins__section {
+  margin-top: 24px;
+}
+
+.hy-plugins__section-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.hy-plugins__section-title {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: var(--sand-font-weight-regular, 400);
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-plugins__viewall {
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.hy-plugins__viewall:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-plugins__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 0;
+}
+
+@media (max-width: 900px) {
+  .hy-plugins__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hy-plugins__head,
+  .hy-plugins__scroll {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+/* -- one plugin row --------------------------------------------------------- */
+
+.hy-plugins__row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.hy-plugins__row:hover {
+  background: var(--sand-fill-ghost-hover, #7777772c);
+}
+
+.hy-plugins__mark {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hy-plugins__mark--letter {
+  background: var(--sand-fill-secondary, #7777772c);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 16px;
+  font-weight: var(--sand-font-weight-medium, 500);
+}
+
+.hy-plugins__mark--img {
+  background: var(--sand-fill-secondary, #7777772c);
+}
+
+.hy-plugins__mark img,
+.hy-plugins__mark svg {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+}
+
+.hy-plugins__mark--img img {
+  width: 22px;
+  height: 22px;
+}
+
+.hy-plugins__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hy-plugins__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-plugins__name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hy-plugins__desc {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--sand-text-secondary, #fcfcfc99);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* -- badges ----------------------------------------------------------------- */
+
+.hy-plugins__badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--sand-fill-secondary, #7777772c);
+  color: var(--sand-text-secondary, #fcfcfc99);
+  font-size: 11px;
+  font-weight: var(--sand-font-weight-regular, 400);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.hy-plugins__badge--team {
+  gap: 4px;
+  padding-left: 6px;
+}
+
+.hy-plugins__badge--team .gb-icon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.hy-plugins__badge--ok {
+  background: var(--sand-fill-success-subtle, #00c9722c);
+  color: var(--sand-text-success, #38d591);
+}
+
+.hy-plugins__badge--warn {
+  background: var(--sand-fill-warning-subtle, #ff98002c);
+  color: var(--sand-text-warning, #ffaf38);
+}
+
+.hy-plugins__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sand-fill-success, #00c972);
+}
+
+.hy-plugins__tools {
+  opacity: 0.8;
+}
+
+/* -- per-row status line ------------------------------------------------------ */
+
+.hy-plugins__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+
+.hy-plugins__status .gb-icon {
+  font-size: 12px;
+}
+
+.hy-plugins__status--good {
+  color: var(--sand-text-success, #38d591);
+}
+
+.hy-plugins__status--bad {
+  color: var(--sand-text-danger, #ff5667);
+}
+
+/* -- actions ------------------------------------------------------------------ */
+
+.hy-plugins__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The kit Button is reused; only its size is nudged so two of them fit a row.
+   The kit's `.hy-dialog button { color: inherit }` out-specifies its own
+   .hy-btn--* colours, so each variant's colour is re-asserted here at a higher
+   specificity — otherwise the primary Connect button is white on white. */
+.hy-plugins__actions .hy-btn {
+  padding: 6px 14px;
+  min-width: 72px;
+}
+
+.hy-plugins .hy-btn--primary {
+  color: var(--sand-text-on-primary, #141414);
+}
+
+.hy-plugins .hy-btn--ghost {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-plugins .hy-btn--danger {
+  color: var(--sand-text-danger, #ff5667);
+}
+
+.hy-plugins__remove {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+  cursor: pointer;
+}
+
+.hy-plugins__remove:hover:not(:disabled) {
+  background: var(--sand-fill-danger-subtle, #f43f5e1a);
+  color: var(--sand-text-danger, #ff5667);
+}
+
+.hy-plugins__remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* -- spinner -------------------------------------------------------------------- */
+
+.hy-plugins__spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  display: inline-block;
+  border-radius: 50%;
+  border: 1.5px solid var(--sand-border-strong, #fcfcfc4d);
+  border-top-color: var(--sand-text-primary, #fcfcfc);
+  animation: hy-plugins-spin 1400ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes hy-plugins-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  82% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hy-plugins__spinner {
+    animation-duration: 2400ms;
+  }
+
+  .hy-plugins__skel-line,
+  .hy-plugins__skel-mark,
+  .hy-plugins__skel-btn {
+    animation: none;
+  }
+}
+
+/* -- loading skeleton ------------------------------------------------------------ */
+
+.hy-plugins__row--skeleton:hover {
+  background: transparent;
+}
+
+.hy-plugins__skel-mark,
+.hy-plugins__skel-line,
+.hy-plugins__skel-btn {
+  display: block;
+  border-radius: 6px;
+  background: var(--sand-fill-secondary, #7777772c);
+  animation: hy-plugins-pulse 1400ms ease-in-out infinite;
+}
+
+.hy-plugins__skel-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+}
+
+.hy-plugins__skel-line {
+  height: 10px;
+  margin: 3px 0;
+}
+
+.hy-plugins__skel-btn {
+  width: 64px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+@keyframes hy-plugins-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* -- empty state -------------------------------------------------------------------- */
+
+.hy-plugins__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.hy-plugins__empty .gb-icon {
+  font-size: 24px;
+  color: var(--sand-text-tertiary, #fcfcfc8f);
+  margin-bottom: 4px;
+}
+
+.hy-plugins__empty-title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.hy-plugins__empty-sub {
+  margin: 0 0 8px;
+  max-width: 380px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
