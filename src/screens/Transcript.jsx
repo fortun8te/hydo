@@ -3,7 +3,7 @@ import UmbraFace from "../umbra/UmbraFace.jsx";
 import ChoiceCard from "./ChoiceCard.jsx";
 import * as RC from "./RichContent.jsx";
 import { botWorks } from "../lib/working.js";
-import { composerExtrasForMember, presenceOf, joinDelayOf } from "../lib/presence.js";
+import { composerExtrasForMember, presenceOf, joinDelayOf, readHoldFor } from "../lib/presence.js";
 
 function dayKey(iso) {
   const d = new Date(iso);
@@ -937,6 +937,13 @@ export default function Transcript({
   // Which originals are still in the thread — a reply to a deleted message
   // has to say so rather than pretending.
   const known = new Set(list.map((m) => String(m.id)));
+  // The message the faces are currently reading: the last thing the user said.
+  const lastUserChars = (() => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].role === "user") return String(list[i].text || "").length;
+    }
+    return 0;
+  })();
   const roster = Array.isArray(agents) ? agents : [];
   const byId = Object.fromEntries(roster.map((a) => [a.id, a]));
   const memberIds = new Set((channel?.members || []).map(String));
@@ -964,6 +971,10 @@ export default function Transcript({
       // Per-bot join delay, so two faces in a channel do not appear in
       // lockstep like a UI animation.
       joinMs: joinDelayOf(agent.id),
+      // How long the face spends taking your message in, scaled to how much
+      // of it there is. Flat, this was the most mechanical thing left in the
+      // presence system.
+      readMs: readHoldFor(lastUserChars),
       working: busyHere(agent, convId),
       sending: !!sending,
       linger: !!linger,

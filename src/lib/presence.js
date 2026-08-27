@@ -34,6 +34,21 @@ export function joinDelayOf(seed) {
 export const USER_IDLE_MS = 45000;
 export const USER_LEAVE_MS = 4200;
 export const READ_HOLD_MS = 1100;
+// The read hold used to be that flat 1100ms whatever you sent, so "hi" and a
+// four-hundred-word brief were absorbed in exactly the same beat. Nothing
+// about the face said one of them was more to take in, which is the tell that
+// there is a constant behind it rather than someone reading.
+//
+// Square root, not linear: attention does not scale with length, and a linear
+// term would make a pasted stack trace take half a minute to look at. This
+// grows quickly over the first sentence and then flattens . "hi" 1.3s, a
+// paragraph 2.9s, anything longer saturates. It is a beat, not real reading.
+export const READ_HOLD_MAX_MS = 3400;
+export function readHoldFor(chars) {
+  const n = Math.max(0, Number(chars) || 0);
+  const ms = READ_HOLD_MS + Math.sqrt(n) * 90;
+  return Math.min(READ_HOLD_MAX_MS, Math.round(ms));
+}
 // How long he stays after HIS OWN message. He was going the moment the last
 // token landed, which is the exact moment you are reading it and most likely
 // to reply. Staying is the cheap part of feeling present.

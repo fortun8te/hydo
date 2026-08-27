@@ -183,6 +183,33 @@ async function main() {
   assert.ok(uf.includes("fidget:"));
   assert.ok(uf.includes('"scan"'));
 
+  // ---- the read hold scales with what there is to read -------------------
+  // Flat, this was the most mechanical thing left: "hi" and a four-hundred
+  // word brief were absorbed in exactly the same beat.
+  const { readHoldFor, READ_HOLD_MAX_MS } = mod;
+  assert.equal(readHoldFor(0), READ_HOLD_MS, "nothing to read is the floor");
+  assert.ok(readHoldFor(3) > READ_HOLD_MS, '"hi" still takes a beat');
+  assert.ok(readHoldFor(400) > readHoldFor(40), "more text, longer look");
+  assert.ok(readHoldFor(40) > readHoldFor(4));
+  // Sub-linear, or a pasted stack trace would be stared at for half a minute.
+  assert.ok(readHoldFor(4000) < readHoldFor(40) * 10, "attention does not scale with length");
+  assert.ok(readHoldFor(10_000) <= READ_HOLD_MAX_MS, "and it saturates");
+  for (const junk of [null, undefined, -5, NaN, "abc", {}]) {
+    const v = readHoldFor(junk);
+    assert.ok(v >= READ_HOLD_MS && v <= READ_HOLD_MAX_MS, `junk gives a sane hold: ${v}`);
+  }
+  // A longer message really does hold the reading face past where a short one
+  // would have moved on.
+  const long = presenceOf({
+    sending: true, working: true, activity: "Searching",
+    since: 1000, now: 1000 + READ_HOLD_MS + 200, readMs: readHoldFor(600),
+  });
+  assert.equal(long.mood, "looking", "still reading the long one");
+  assert.equal(long.kind, "read");
+
+  const tx2 = fs.readFileSync(path.join(ROOT, "src/screens/Transcript.jsx"), "utf8");
+  assert.ok(tx2.includes("readHoldFor(lastUserChars)"), "the transcript actually measures it");
+
   console.log("presence-test ok");
 }
 
