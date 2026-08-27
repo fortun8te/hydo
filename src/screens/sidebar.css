@@ -187,6 +187,56 @@
   cursor: pointer;
 }
 
+/* The heading is a disclosure control, so it is one flex line: triangle, then
+   the name. Declared AFTER the shared `display: block` above rather than
+   edited into it, because .sand-section__rename shares that rule and an input
+   must not become a flex container. */
+.sand-sidebar .sand-section__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+}
+
+.sand-sidebar .sand-section__label:hover {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+.sand-sidebar .sand-section__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sand-sidebar .sand-section__chev {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  /* Open points down, shut points right. Rotating one path keeps the fold
+     reading as a single movement instead of a glyph swap. */
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.sand-sidebar .sand-section__chev[data-open="false"] {
+  transform: rotate(0deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sand-sidebar .sand-section__chev {
+    transition: none;
+  }
+}
+
+/* A folded section keeps its heading and nothing else. `gap: 4px` on
+   .sand-section would otherwise leave a 4px ghost under the last heading. */
+.sand-sidebar .sand-section[data-folded="true"] {
+  gap: 0;
+}
+
 .sand-sidebar .sand-section__count {
   flex: none;
   color: var(--sand-text-tertiary, #8d8d8d);

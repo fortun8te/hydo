@@ -42,6 +42,25 @@ function HashGlyph() {
   );
 }
 
+// The disclosure triangle on a section heading. Rotated in CSS rather than
+// swapped for a second path, so the fold reads as one movement.
+function Chevron({ open }) {
+  return (
+    <span className="sand-section__chev" data-open={open ? "true" : "false"} aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="12" height="12">
+        <path
+          d="M9.2 6.4 15.6 12 9.2 17.6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
 function BotGlyph() {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -187,6 +206,10 @@ function NewMenu({ open, onClose, onBot, onChannel, anchorRef }) {
 // it off. A timestamp answers "is this new" without anybody having to
 // remember. Six seconds covers the mount plus the opening turn; after that a
 // reload must NOT replay the arrival, which is the failure this guards.
+// The Unassigned group has no section record, so it needs a stable key of its
+// own to remember being folded. A uuid can never collide with it.
+const UNASSIGNED_KEY = "unassigned";
+
 const BORN_MS = 6000;
 function bornNow(entry) {
   if (!entry || !entry.bornAt) return false;
@@ -221,6 +244,8 @@ function Sidebar({
   onEditProfile,
   onCopyId,
   sections = [],
+  collapsedSections = [],
+  onToggleSection,
   userName,
   userAvatar,
   accountOpen,
@@ -251,6 +276,7 @@ function Sidebar({
   const makeBot = onCreateBot || onCreate;
   const makeChannel = onCreateChannel;
   const sectionList = Array.isArray(sections) ? sections : [];
+  const foldedKeys = Array.isArray(collapsedSections) ? collapsedSections : [];
 
   useEffect(() => {
     function onKey(e) {
@@ -385,14 +411,12 @@ function Sidebar({
       id: "copy-id",
       label: "Copy conversation ID",
       icon: "brackets-square",
-      separatorBefore: true,
       onClick: () => onCopyId?.(one),
     });
     items.push({
       id: "hide",
       label: "Hide from sidebar",
       icon: "eye-slash",
-      separatorBefore: true,
       onClick: () => group.forEach((e) => onHide?.(e)),
     });
     items.push({
@@ -400,6 +424,10 @@ function Sidebar({
       label: multi ? `Delete ${crowdLabel(group)}` : "Delete",
       icon: "trash",
       danger: true,
+      // Two dividers, not four: the reference menu groups the destructive
+      // row on its own and keeps Edit/Duplicate/Copy/Hide together. A rule
+      // per item turned the menu into a stack of one-item boxes.
+      separatorBefore: true,
       onClick: () => {
         removeMany(ids);
       },
@@ -465,15 +493,27 @@ function Sidebar({
   const ungrouped = unpinned.filter((e) => !e.sectionId);
   const blocks = [];
   for (const s of sectionList) {
-    blocks.push({ id: s.id, name: s.name, items: unpinned.filter((e) => e.sectionId === s.id) });
+    blocks.push({
+      key: s.id,
+      id: s.id,
+      name: s.name,
+      items: unpinned.filter((e) => e.sectionId === s.id),
+    });
   }
   if (sectionList.length) {
-    blocks.push({ id: null, name: "Unassigned", items: ungrouped });
+    // The catch-all is always drawn, and is the only block a conversation
+    // with no `sectionId` can land in — deleting a section drops its members
+    // here rather than hiding them. It has no record of its own, so its
+    // folded state is keyed by this literal.
+    blocks.push({ key: UNASSIGNED_KEY, id: null, name: "Unassigned", items: ungrouped });
   } else {
-    blocks.push({ id: null, name: null, items: ungrouped });
+    blocks.push({ key: UNASSIGNED_KEY, id: null, name: null, items: ungrouped });
   }
+  for (const b of blocks) b.folded = !!b.name && foldedKeys.includes(b.key);
   // Shift-range selection walks what is on screen, tiles included, in order.
-  const visible = pinnedTiles.concat(blocks.flatMap((b) => b.items));
+  // A folded section's rows are not on screen, so they are not in range
+  // either — shift-clicking across a fold must not silently pick them up.
+  const visible = pinnedTiles.concat(blocks.flatMap((b) => (b.folded ? [] : b.items)));
 
   return (
     <aside className="sand-sidebar" data-collapsed={collapsed ? "true" : "false"}>
@@ -622,7 +662,12 @@ function Sidebar({
           </div>
         ) : null}
         {blocks.map((block) => (
-          <div key={block.id || "none"} className="sand-section">
+          <div
+            key={block.key}
+            className="sand-section"
+            data-section={block.key}
+            data-folded={block.folded ? "true" : "false"}
+          >
             {block.name ? (
               <div className="sand-section__head">
                 {block.id && renameId === block.id ? (
@@ -653,6 +698,11 @@ function Sidebar({
                   <button
                     type="button"
                     className="sand-section__label"
+                    aria-expanded={!block.folded}
+                    onClick={() => onToggleSection?.(block.key)}
+                    // Double-click still renames. The two clicks underneath it
+                    // toggle the fold twice, which lands back where it started,
+                    // so the heading does not flap while you rename it.
                     onDoubleClick={() => {
                       if (!block.id) return;
                       setRenameId(block.id);
@@ -685,13 +735,19 @@ function Sidebar({
                       });
                     }}
                   >
-                    {block.name}
+                    <Chevron open={!block.folded} />
+                    <span className="sand-section__text">{block.name}</span>
                   </button>
                 )}
-                {block.id ? <span className="sand-section__count">{block.items.length}</span> : null}
+                {/* The count is the folded section's only remaining evidence
+                    that anything is inside it, so it appears exactly then —
+                    open, the rows themselves say it. */}
+                {block.folded ? (
+                  <span className="sand-section__count">{block.items.length}</span>
+                ) : null}
               </div>
             ) : null}
-            {block.items.map((entry) => {
+            {(block.folded ? [] : block.items).map((entry) => {
           const isChannel = entry.kind === "channel";
           const busy = entry.id === sendingId;
           const live =

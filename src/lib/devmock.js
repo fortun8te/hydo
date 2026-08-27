@@ -66,7 +66,7 @@ function seed() {
   return {
     signedIn: true,
     selectedId: "b1",
-    settings: { appearance: "dark", userName: "Michael", model: "grok-4.6", provider: "xai-oauth", _pane: "general" },
+    settings: { appearance: "dark", userName: "Michael", model: "grok-4.6", provider: "xai-oauth", collapsedSections: [], _pane: "general" },
     agents: bots,
     sections: [],
     channels: [

@@ -206,6 +206,13 @@ function seedState() {
       provider: "xai-oauth",
       codingModel: "",
       codingHarness: "grok-build",
+      // Which sidebar sections are folded shut, by section id (plus the
+      // literal "unassigned" for the catch-all group, which has no id).
+      // UI state, but it lives in settings for the same reason `_pane` does:
+      // settings is the one bag that already round-trips through state.json,
+      // so a folded section stays folded across a restart without a new IPC
+      // channel of its own.
+      collapsedSections: [],
       _pane: "general",
     },
     agents: [],
@@ -330,8 +337,14 @@ function normalizeState(raw) {
     provider: "xai-oauth",
     codingModel: "",
     codingHarness: "grok-build",
+    collapsedSections: [],
     ...(raw.settings || {}),
   };
+  // A hand-edited state.json (or one written by an older build) can carry
+  // anything here; the sidebar indexes it with .includes, so force the shape.
+  settings.collapsedSections = Array.isArray(settings.collapsedSections)
+    ? [...new Set(settings.collapsedSections.map((k) => String(k || "")).filter(Boolean))]
+    : [];
   settings.codingHarness = modelPick.normalizeHarness(settings.codingHarness);
   settings.model = modelPick.normalizeChatModel(settings.model);
   if (!settings.model || /muse/i.test(settings.model) || modelPick.isBannedChatModel(settings.model)) {
@@ -2958,6 +2971,13 @@ function createStore(opts = {}) {
       state.sections = (state.sections || []).filter((s) => s.id !== id);
       for (const a of state.agents) if (a.sectionId === id) a.sectionId = null;
       for (const c of state.channels || []) if (c.sectionId === id) c.sectionId = null;
+      // Deleting a section must not delete what was in it — the entries above
+      // fall back to Unassigned. The only thing that goes is its collapsed
+      // key, which would otherwise accumulate in settings forever and could
+      // collide with a future section that reused the id.
+      state.settings.collapsedSections = (state.settings.collapsedSections || []).filter(
+        (k) => k !== id
+      );
       save();
       return publicState();
     },
@@ -3250,6 +3270,13 @@ function createStore(opts = {}) {
         } else if (/grok/i.test(state.settings.model)) {
           state.settings.provider = modelPick.DEFAULT_PROVIDER;
         }
+      }
+      // Same clamp as on load: this arrives straight from the renderer.
+      if (Object.prototype.hasOwnProperty.call(patch, "collapsedSections")) {
+        const v = patch.collapsedSections;
+        state.settings.collapsedSections = Array.isArray(v)
+          ? [...new Set(v.map((k) => String(k || "")).filter(Boolean))].slice(0, 200)
+          : [];
       }
       if (Object.prototype.hasOwnProperty.call(patch, "codingHarness")) {
         state.settings.codingHarness = modelPick.normalizeHarness(state.settings.codingHarness);

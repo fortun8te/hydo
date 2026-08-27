@@ -239,6 +239,23 @@ export default function Shell({ state }) {
   // `state.sections || []` minted a fresh array on every render, which on its
   // own was enough to defeat the memo above.
   const sections = useMemo(() => state.sections || [], [state.sections]);
+  // Same reason as `sections`: a fresh array here would defeat Sidebar's memo
+  // on every keystroke in the composer.
+  const collapsedSections = useMemo(
+    () => state.settings.collapsedSections || [],
+    [state.settings.collapsedSections]
+  );
+  // Folding a section is a settings write, not a new IPC channel — see
+  // `collapsedSections` in electron/store.cjs for why it rides in settings.
+  // The current list is read off a ref rather than closed over, so the
+  // callback stays identity-stable and Sidebar's memo keeps holding.
+  const collapsedRef = useRef(collapsedSections);
+  collapsedRef.current = collapsedSections;
+  const onToggleSection = useCallback((key) => {
+    const now = collapsedRef.current || [];
+    const next = now.includes(key) ? now.filter((k) => k !== key) : now.concat(key);
+    window.hydo.setSettings({ collapsedSections: next });
+  }, []);
 
   /* ------------------------------------------------------------------------
      Transcript is memoised (see Transcript.jsx). These seven handlers were
@@ -650,6 +667,8 @@ export default function Shell({ state }) {
         entries={roster}
         agents={agents}
         sections={sections}
+        collapsedSections={collapsedSections}
+        onToggleSection={onToggleSection}
         selectedId={atHome ? "home" : selected?.id}
         query={query}
         onQuery={setQuery}
