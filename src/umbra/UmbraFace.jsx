@@ -330,31 +330,25 @@ function useReducedMotion() {
 // here is a mid-slate, not black — the contrast comes from the sharpness of
 // the horizon, not from how far down the ramp goes.
 const CHROME_RAMP = [
-  // HARD EDGES ARE THE WHOLE THING.
-  //
-  // A smooth vertical ramp reads as plastic or satin no matter how you tune
-  // the values, because a mirror does not blur what it reflects. What the eye
-  // uses to decide "that is chrome" is sharp discontinuity: the horizon line,
-  // the corner where a wall meets a floor.
-  //
-  // But not EVERY edge is hard, or it reads as a barcode. A real room gives
-  // you two or three crisp lines and a lot of soft falloff between them, and
-  // the bands are uneven. Three hard edges here, at uneven heights, and
-  // everything else blends.
-  [0.0, "#AEBBCB"],   // grazing sky, dim
-  [0.12, "#F4F8FD"],  // sky opening up (soft)
-  [0.26, "#FFFFFF"],  // blown highlight band (soft)
-  [0.38, "#AAB5C2"],  // falling toward the horizon (soft)
-  [0.455, "#79838F"],
-  [0.47, "#1B2028"],  // ── HARD: the horizon. The one everything reads from.
-  [0.53, "#13181E"],
-  [0.545, "#525A65"], // ── HARD: ground plane begins
-  [0.66, "#8A9099"],  // ground receding (soft)
-  [0.75, "#EDE8DF"],  // ── warm floor bounce, brightest below the horizon
-  [0.79, "#F7F3EB"],
-  [0.87, "#9C9A97"],  // falloff (soft)
-  [1.0, "#6B7079"],   // terminator, kept off black so it does not punch a
-                      // hole in a dark page
+  // Stops are NOT evenly spread. On a curved body the reflected environment
+  // compresses toward the poles: near the top and bottom you are seeing a
+  // huge solid angle squeezed into a few pixels, so the bands bunch up there
+  // and stretch out across the middle. Evenly spaced stops give you flat
+  // horizontal stripes, which is a decal, not a reflection.
+  [0.0, "#7C8798"],
+  [0.045, "#C9D5E4"],
+  [0.075, "#F2F7FD"], // sky, compressed hard against the top edge
+  [0.14, "#DCE6F2"],
+  [0.3, "#A9B6C6"],   // long stretch across the belly
+  [0.43, "#7C8896"],
+  [0.472, "#1A1F27"], // ── HARD: horizon
+  [0.518, "#141920"],
+  [0.545, "#4E5762"], // ── HARD: ground plane
+  [0.66, "#8B9099"],
+  [0.775, "#E9E4DA"], // warm floor bounce
+  [0.9, "#A09C97"],   // compressing again toward the bottom pole
+  [0.955, "#6A6E77"],
+  [1.0, "#8A9099"],
 ];
 
 function isMetal(colorId) {
@@ -860,6 +854,24 @@ export default function UmbraFace({
                 <stop offset="0.55" stopColor="#ffffff" stopOpacity="0.5" />
                 <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
               </radialGradient>
+              {/* Edge falloff, and the single most important layer here.
+                  A vertical ramp alone is flat by construction: every pixel on
+                  a row is the same colour, so the body reads as a striped
+                  card. On a real curved surface the edges are grazing angles
+                  that fall away into shadow. This darkens the rim and leaves
+                  the centre bright, which is what your eye reads as ROUND. */}
+              <radialGradient
+                id={`${gradId}-edge`}
+                gradientUnits="userSpaceOnUse"
+                cx={-extent * 0.06}
+                cy={-extent * 0.08}
+                r={extent * 1.02}
+              >
+                <stop offset="0.34" stopColor="#000000" stopOpacity="0" />
+                <stop offset="0.72" stopColor="#050810" stopOpacity="0.2" />
+                <stop offset="0.92" stopColor="#05070C" stopOpacity="0.56" />
+                <stop offset="1" stopColor="#04060A" stopOpacity="0.74" />
+              </radialGradient>
               {/* Rim light along the lower edge: the floor bounce catching the
                   silhouette. It is what stops the bottom dissolving into the
                   dark background. */}
@@ -912,6 +924,9 @@ export default function UmbraFace({
                 the silhouette, and drawn after the fill so it sits on top. */}
             {metal && S.bodyD && !(dots && !morphing) ? (
               <g clipPath={`url(#${clipId})`}>
+                {/* Edge falloff first: it darkens the bands, then the
+                    highlights go on top of the result. */}
+                <path d={S.bodyD} fill={`url(#${gradId}-edge)`} />
                 <path d={S.bodyD} fill={`url(#${gradId}-rim)`} />
                 <path d={S.bodyD} fill={`url(#${gradId}-spec)`} />
                 <path d={S.bodyD} fill={`url(#${gradId}-hot)`} />
