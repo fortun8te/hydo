@@ -454,7 +454,7 @@ function toolFiles(evt, cwd) {
 function extractDirectives(text) {
   const lines = String(text || "").split("\n");
   const keep = [];
-  const dirs = { memory: [], ping: [], routine: [], react: [], reply: [], teammate: [], self: [] };
+  const dirs = { memory: [], ping: [], routine: [], react: [], reply: [], teammate: [], self: [], skill: [] };
   for (const line of lines) {
     const ping = line.match(/^\s*PING:\s*(\{.*\})\s*$/i);
     // TEAMMATE: {"name":"...","description":"...","brief":"..."} — hire a NEW
@@ -468,6 +468,12 @@ function extractDirectives(text) {
     // still said New Bot forever, because nothing the model can say reaches
     // `setAgent`. Whitelisted fields only (see `applySelf`).
     const self = line.match(/^\s*SELF:\s*(?:set\s*)?(\{.*\})\s*$/i);
+    // SKILL: {"name":"...","description":"...","body":"# markdown"} — a
+    // teammate writing down its own method so the tenth time is not reasoned
+    // out as slowly as the first. Bounded hard (see skills.cjs): one markdown
+    // file, one directory, validated slug, never overwrites a skill Hydo did
+    // not write.
+    const skill = line.match(/^\s*SKILL:\s*(?:install\s*)?(\{.*\})\s*$/i);
     const routine = line.match(/^\s*ROUTINE:\s*create\s*(\{.*\})\s*$/i);
     // REACT: {"emoji":"..."} — tapback the message being replied to. Same
     // family as the directives above, and stripped just as hard: a teammate
@@ -487,6 +493,10 @@ function extractDirectives(text) {
       }
       if (self) {
         dirs.self.push(JSON.parse(self[1]));
+        continue;
+      }
+      if (skill) {
+        dirs.skill.push(JSON.parse(skill[1]));
         continue;
       }
       if (routine) {
@@ -1319,6 +1329,31 @@ function createStore(opts = {}) {
    * SELF_TOOLSETS is additive on top of its profile, costs schema and nothing
    * else, and shows up in the action log the moment it is taken.
    */
+  /**
+   * A teammate installing a skill for itself.
+   *
+   * Logged either way. An install that silently fails is worse than one that
+   * never happened: the bot believes it has a method it does not have, and
+   * spends the next ten turns trying to load it.
+   */
+  function applySkill(agent, spec) {
+    let res;
+    try {
+      res = require("./skills.cjs").installSkill(spec);
+    } catch (err) {
+      res = { ok: false, reason: err && err.message };
+    }
+    const label = String((spec && spec.name) || "skill").slice(0, 48);
+    if (res && res.ok) {
+      logAction(agent.id, "skill", `${res.updated ? "updated" : "installed"} ${res.name}`);
+    } else {
+      logAction(agent.id, "skill", `could not install ${label}: ${(res && res.reason) || "failed"}`);
+      // Told to its face on the next turn, so it can stop trying.
+      oweNote(agent.id, `Your SKILL: install of "${label}" failed (${(res && res.reason) || "failed"}). Do not retry it this session.`);
+    }
+    return !!(res && res.ok);
+  }
+
   function applySelf(agent, spec) {
     if (!agent || !spec || typeof spec !== "object") return false;
     const patch = {};
@@ -2834,6 +2869,7 @@ function createStore(opts = {}) {
       // Self-settings first: a bot that renames itself this turn should be
       // addressed by the new name in everything below.
       for (const spec of extracted.dirs.self || []) applySelf(agent, spec);
+      for (const spec of extracted.dirs.skill || []) applySkill(agent, spec);
       // Hiring runs BEFORE pings so a bot can create someone and message them
       // in the same turn — `mentionTarget` below then resolves the new name.
       for (const spec of extracted.dirs.teammate || []) {
