@@ -2643,7 +2643,18 @@ function createStore(opts = {}) {
         profilePinned: false,
         reasoningEffort: "low",
         // Extra Hermes toolsets on top of the profile (browser, vision, ...).
-        toolsets: [],
+        // A preset may seed these; anything it names is validated against the
+        // real allowlist, so a stale preset cannot pin a toolset that no
+        // longer exists.
+        toolsets: Array.isArray(patch.toolsets)
+          ? patch.toolsets
+              .map((x) => String(x).trim().toLowerCase())
+              .filter((x) => SELF_TOOLSETS.includes(x))
+              .slice(0, 8)
+          : [],
+        // Permission to use the ONE shared machine. Never a machine of its
+        // own, and setting it here provisions nothing.
+        boxEnabled: patch.boxEnabled === true,
         mcp: [],
         draft: "",
         updatedAt: t,

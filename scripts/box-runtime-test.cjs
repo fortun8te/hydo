@@ -218,3 +218,45 @@ main().catch((err) => {
 }
 
 console.log("box-runtime-test (turn wiring) ok");
+
+// ---- presets can grant the machine, but never a machine of their own ------
+{
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { createStore } = require("../electron/store.cjs");
+  const presets = fs.readFileSync(path.join(__dirname, "../src/lib/bot-presets.js"), "utf8");
+
+  // Exactly one preset turns the shared machine on. If every preset did, then
+  // "make a bot" would mean "start billing" and the toggle would be theatre.
+  const enabled = (presets.match(/boxEnabled: true/g) || []).length;
+  if (enabled !== 1) throw new Error(`exactly one preset may enable the box, found ${enabled}`);
+  if (!/id: "operator"/.test(presets)) throw new Error("the operator preset is the one");
+  if (!/boxEnabled: preset\.boxEnabled === true/.test(presets)) {
+    throw new Error("presetPatch must pass the flag explicitly, not spread it");
+  }
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydo-preset-"));
+  const store = createStore({ dir, complete: async () => "ok" });
+  store.signIn();
+
+  const made = store.createAgent({
+    name: "Ops",
+    toolProfile: "builder",
+    toolsets: ["browser"],
+    boxEnabled: true,
+  });
+  const a = made.agents[0];
+  if (a.boxEnabled !== true) throw new Error("the operator preset grants the permission");
+  if (!a.toolsets.includes("browser")) throw new Error("and seeds its toolsets");
+  // Permission is not provisioning: a created agent must carry no box id.
+  if ("boxId" in a) throw new Error("an agent must never hold a box id");
+
+  // A stale preset naming a toolset that no longer exists must not pin it.
+  const junk = store.createAgent({ name: "X", toolsets: ["browser", "not_a_real_toolset"] });
+  if (junk.agents[0].toolsets.length !== 1) {
+    throw new Error("toolsets from a preset are validated against the real allowlist");
+  }
+}
+
+console.log("box-runtime-test (presets) ok");

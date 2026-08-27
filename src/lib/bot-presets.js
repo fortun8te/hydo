@@ -40,6 +40,9 @@ export const BOT_PRESETS = [
     description:
       "Deep research: finds the primary sources, reads them properly, and says what it could not verify.",
     profile: "researcher",
+    // `search` on top of the profile's `web`. One finds, the other reads, and
+    // a researcher that can only read what it was handed is a summariser.
+    toolsets: ["search"],
     setup:
       "You do research I can act on. Read the actual source rather than a summary of it, cite where each fact came from, and write \"could not verify\" instead of a plausible guess. Ask me one round of setup questions about the areas I care about, then start.",
   },
@@ -66,6 +69,23 @@ export const BOT_PRESETS = [
       "You work in code. Ask me once which repos you own and how I want changes delivered. Always run the project's own checks before you say something is done, and tell me what you actually ran and what it said.",
   },
   {
+    id: "operator",
+    name: "Operator",
+    label: "desktop",
+    tint: "purple",
+    blurb: "Works on the shared Linux machine, stays logged in",
+    description:
+      "Works on the shared Linux machine: real browser, real logins, things that have to stay signed in.",
+    profile: "builder",
+    // The only preset that turns the machine on, because it is the only one
+    // whose whole point is the machine. Permission, not provisioning: nothing
+    // starts until a turn actually reaches for Linux.
+    boxEnabled: true,
+    toolsets: ["browser"],
+    setup:
+      "You work on the shared Linux machine rather than on this Mac. Its disk is the team's: a login you make there stays signed in for everyone else, and everything you leave on it is visible to them, so keep working files in your own folder. Ask me once which sites and tools you should be signed into, then get signed in.",
+  },
+  {
     id: "inbox",
     name: "Inbox",
     label: "inbox",
@@ -87,6 +107,9 @@ export function presetPatch(preset) {
     description: preset.description || "",
     blob: preset.tint,
     toolProfile: preset.profile || "chat",
+    toolsets: Array.isArray(preset.toolsets) ? preset.toolsets : [],
+    // Permission to use the ONE shared machine, never a machine of its own.
+    boxEnabled: preset.boxEnabled === true,
     setup: preset.setup || "",
   };
 }

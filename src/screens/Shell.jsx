@@ -185,6 +185,22 @@ export default function Shell({ state }) {
     return () => clearInterval(id);
   }, [draft, sending, workingHere, linger]);
 
+  // Is the shared machine awake? Read on mount and after the sheet closes,
+  // not on a timer: this is a CLI round-trip, and a header icon is not worth
+  // polling a paid service for.
+  const [boxUp, setBoxUp] = useState(false);
+  useEffect(() => {
+    let gone = false;
+    Promise.resolve(window.hydo?.boxStatus?.())
+      .then((s) => {
+        if (!gone) setBoxUp(!!(s && s.state === "running"));
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [sheet]);
+
   // Whose plan the composer shows. In a channel it is whoever is actually
   // working, because two open plans is two things to read and the one that
   // matters is the one being executed.
@@ -479,6 +495,22 @@ export default function Shell({ state }) {
             </div>
           )}
           <span className="grow" />
+          {/* Watch this teammate's screen, from its name in the header . the
+              place you already are when you are wondering what it is doing.
+              Only for a teammate allowed on the machine, and only while the
+              machine is actually up: an icon that opens nothing is worse than
+              no icon. */}
+          {!isChannel && !peer && selected?.boxEnabled && boxUp ? (
+            <button
+              type="button"
+              className="icon-btn"
+              title={`Watch ${selected.name}'s screen`}
+              aria-label={`Watch ${selected.name}'s screen`}
+              onClick={() => setSheet("computer")}
+            >
+              <i className="gb-icon gb-icon-desktop" />
+            </button>
+          ) : null}
           <button
             type="button"
             className="icon-btn"
