@@ -336,6 +336,45 @@ function stillFrame(shapeId, motionId) {
   return hit;
 }
 
+// -------------------------------------------------------------- on screen
+//
+// A face that nobody can see must not compute frames.
+//
+// One animated face is not cheap: computeFrame() + svgFrame() for the default
+// body is ~3.3ms per frame, and the `d` it produces is ~130KB of path data
+// (65 depth rings x ~192 vertices), which the browser then has to re-parse and
+// re-tessellate. That is ~20% of the main thread for ONE face, so the number of
+// faces actually running at any moment is the single biggest lever in the app.
+//
+// Faces go off screen constantly and none of it is visible: a channel where
+// five teammates are working puts a spinning face on every one of their
+// messages, and the transcript scrolls, so most of them are above the fold.
+// The roster does the same when the sidebar is scrolled or collapsed.
+//
+// Defaults to ON, so a face still animates where there is no IntersectionObserver
+// (tests, jsdom, an old runtime) rather than silently freezing. `rootMargin`
+// keeps a face just past the edge running, so scrolling never reveals a mark
+// that has to start up.
+
+const SEEN_MARGIN = "220px";
+
+function useOnScreen(ref) {
+  const [seen, setSeen] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver !== "function") return undefined;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) setSeen(e.isIntersecting);
+      },
+      { rootMargin: SEEN_MARGIN }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref]);
+  return seen;
+}
+
 // -------------------------------------------------------------- reduced motion
 
 function prefersReducedMotion() {
@@ -809,7 +848,18 @@ export default function UmbraFace({
   // for the life of the app, which is exactly the artificial regularity the
   // aperiodic scheduler exists to kill.
   const [idleSeed] = useState(() => Math.random() * 1000);
-  const liveFrame = useLiveFrame(shapeId, motionId, cfg, !still, stagger, morphRef, pokeRef, idleSeed);
+  const hostRef = useRef(null);
+  const onScreen = useOnScreen(hostRef);
+  const liveFrame = useLiveFrame(
+    shapeId,
+    motionId,
+    cfg,
+    !still && onScreen,
+    stagger,
+    morphRef,
+    pokeRef,
+    idleSeed
+  );
   // NOT useId(): two React roots on one page both start their ids at r0, and a
   // duplicate <radialGradient id> means url(#...) resolves to whichever face
   // mounted first — every avatar wearing the first one's colour. A process-wide
@@ -829,6 +879,7 @@ export default function UmbraFace({
   const cls = `umbra-face ${className}`.trim();
   const blank = (
     <svg
+      ref={hostRef}
       className={cls}
       width={size}
       height={size}
@@ -840,7 +891,10 @@ export default function UmbraFace({
   if (!body) return blank;
 
   try {
-    const S = (!still && liveFrame) || body.rest.frame;
+    // When the face is paused (still, or scrolled out of sight) it shows its
+    // cached rest frame — the same one an idle face has always shown — so a
+    // paused face is a calm mark, never a body frozen mid-spin.
+    const S = (!still && onScreen && liveFrame) || body.rest.frame;
     const extent = fit ? body.rest.fit || body.rest.extent : body.rest.extent;
     const k = size / (extent * 2);
     const paint = body.paint;
@@ -861,6 +915,7 @@ export default function UmbraFace({
 
     return (
       <svg
+        ref={hostRef}
         className={cls}
         width={size}
         height={size}

@@ -1799,7 +1799,21 @@ function createStore(opts = {}) {
     const cachedPct = agent.contextPercent || 0;
     const turnCount = (state.messages[convId || agent.id] || []).length;
     const flyingBlind = !agent.contextPercent && turnCount >= BLIND_COMPACT_AFTER;
-    if (cachedPct >= COMPACT_AT_PERCENT || (flyingBlind && turnCount % BLIND_COMPACT_EVERY === 0)) {
+    // NOT `turnCount % BLIND_COMPACT_EVERY === 0`. `turnCount` counts MESSAGES,
+    // and a turn adds two of them only when the bot answers in exactly one
+    // bubble — `splitBubbles` routinely posts two, and routine notes, events
+    // and approvals land in the same array. So the counter steps by 1, 2, 3 or
+    // more, and whether it ever lands on a multiple of 12 is luck. Measured: a
+    // bot that answers in two bubbles samples 1,3,5,7… and the branch is never
+    // taken once, for the life of the bot — which is precisely the teammate
+    // this exists to save.
+    //
+    // Compare against the count we last asked at instead, so any step size
+    // still trips it.
+    const blindMark = Number(agent.blindCompactAt) || 0;
+    const blindDue = flyingBlind && turnCount - blindMark >= BLIND_COMPACT_EVERY;
+    if (cachedPct >= COMPACT_AT_PERCENT || blindDue) {
+      if (blindDue) agent.blindCompactAt = turnCount;
       try {
         const pre = await gateway.compressIfNeeded(agent.id, COMPACT_AT_PERCENT);
         if (pre && pre.compressed) {

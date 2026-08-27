@@ -327,7 +327,16 @@ export function Markdown({ text, caret }) {
 export { parseInline, parseBlocks };
 
 // Prefer the shared rich-text renderer once it exists; ours is the fallback.
-const Body = typeof RC.Markdown === "function" ? RC.Markdown : Markdown;
+//
+// NOT `typeof RC.Markdown === "function"`. RichContent's Markdown is wrapped in
+// React.memo, and a memo component is an OBJECT, not a function — that check
+// silently fell through to the fallback renderer above and every bubble in the
+// app would have quietly changed which markdown engine drew it. Accept anything
+// React will render as a component.
+const Body =
+  RC.Markdown && (typeof RC.Markdown === "function" || typeof RC.Markdown === "object")
+    ? RC.Markdown
+    : Markdown;
 
 // ---------------------------------------------------------------------------
 // "It has to be like messaging a teammate and only in logs can we see all the

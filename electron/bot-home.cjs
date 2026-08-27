@@ -176,18 +176,94 @@ compression:
   tail_mode: lean
 `;
 
+/**
+ * Top-level blocks copied from the launch config into every bot profile.
+ *
+ * `mcp_servers` is the one that was actually broken. Hermes resolves a
+ * session's MCP servers by NAME against the config of whatever HERMES_HOME it
+ * was started with, and Hydo starts every bot in its own profile home. Servers
+ * added from the Plugins screen go to the launch home (`mcp.servers.add` takes
+ * a `profile` param and Hydo never passed one), so:
+ *
+ *   HERMES_HOME=~/.hermes             config get mcp_servers  -> chrome-devtools, …
+ *   HERMES_HOME=~/.hermes/profiles/…  config get mcp_servers  -> "not set"
+ *
+ * Every name Hydo pinned was then dropped by the resolver as unknown. Which
+ * means connecting an app in Plugins changed nothing for any teammate, and the
+ * whole per-bot MCP design resolved to an empty list. It looked like it worked
+ * because nothing errors: the pin is silently filtered.
+ *
+ * The rest are settings a teammate is simply wrong without. A bot on the code
+ * default reasons in the wrong timezone and searches with a different backend
+ * than the user's own CLI.
+ *
+ * An ALLOWLIST, not a copy of the file: a profile is meant to be its own
+ * thing, and blindly inheriting everything would undo that on purpose.
+ */
+const MIRROR_KEYS = ["mcp_servers", "timezone", "web", "skills"];
+
+/**
+ * Lift whole top-level blocks out of a YAML file, as text.
+ *
+ * Text rather than parse-and-re-emit because there is no YAML dependency here
+ * and adding one to move four blocks is not worth it . but also because
+ * copying the bytes cannot reformat, reorder or lose a comment the user wrote.
+ * A top-level block runs until the next line that starts in column zero.
+ */
+function yamlBlocks(text, keys) {
+  const lines = String(text || "").split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([A-Za-z_][\w-]*):/.exec(lines[i]);
+    if (!m || !keys.includes(m[1])) continue;
+    const block = [lines[i]];
+    let j = i + 1;
+    for (; j < lines.length; j++) {
+      // Blank lines belong to the block only if more of it follows; a trailing
+      // blank would otherwise glue the next block's comment on.
+      if (/^\s*$/.test(lines[j]) || /^\s/.test(lines[j])) block.push(lines[j]);
+      else break;
+    }
+    while (block.length && /^\s*$/.test(block[block.length - 1])) block.pop();
+    out.push(block.join("\n"));
+    i = j - 1;
+  }
+  return out.join("\n");
+}
+
 function writeProfileConfig(home) {
   const file = path.join(home, "config.yaml");
+  let mirrored = "";
+  try {
+    const launch = path.join(os.homedir(), ".hermes", "config.yaml");
+    if (fs.existsSync(launch)) {
+      mirrored = yamlBlocks(fs.readFileSync(launch, "utf8"), MIRROR_KEYS);
+    }
+  } catch {
+    /* no launch config: the bot runs on Hermes' defaults, as before */
+  }
+  const want = mirrored ? `${PROFILE_CONFIG}\n${mirrored}\n` : PROFILE_CONFIG;
   try {
     // Only when it would change: this file is cheap, but a bot may have been
     // given settings by hand and rewriting them every launch would be rude.
+    // Rewritten when it would CHANGE, so adding a plugin reaches existing
+    // teammates on their next turn instead of only new ones . but a byte
+    // identical write is skipped, because this file is read at session start
+    // and churn buys nothing.
     if (fs.existsSync(file)) {
       const cur = fs.readFileSync(file, "utf8");
+      if (cur === want) return;
+      // Only ours is replaced. A profile someone edited by hand keeps what
+      // they wrote; the mirrored blocks are appended to it instead.
+      if (cur.startsWith("# Written by Hydo.")) {
+        fs.writeFileSync(file, want);
+        return;
+      }
       if (cur.includes("tail_mode")) return;
-      fs.writeFileSync(file, `${cur.replace(/\s*$/, "")}\n${PROFILE_CONFIG}`);
+      fs.writeFileSync(file, `${cur.replace(/\s*$/, "")}\n${want}`);
       return;
     }
-    fs.writeFileSync(file, PROFILE_CONFIG);
+    fs.writeFileSync(file, want);
   } catch {
     /* a profile without it still runs, just on the older tail policy */
   }
