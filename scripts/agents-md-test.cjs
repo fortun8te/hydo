@@ -100,3 +100,34 @@ try {
 }
 
 console.log("agents-md-test (box section) ok");
+
+// ---- a teammate must know what it can reach ------------------------------
+// A bot carried no idea of its own toolsets, so "can you check that site" from
+// one without `browser` became an improvised answer or a flat failure — and
+// the user was left to work out which switch was missing. Naming the switch is
+// what turns setup from something you must already understand into something
+// the teammate tells you.
+{
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const store = fs.readFileSync(path.join(__dirname, "../electron/store.cjs"), "utf8");
+
+  assert.ok(/## What you can reach/.test(store), "AGENTS.md says what it carries");
+  assert.ok(/Tool profile \*\*\$\{agent\.toolProfile/.test(store), "built from the real profile");
+  assert.ok(/plus \$\{extras\.join/.test(store), "and the real extras, not a guess");
+
+  // The switch is named. "Ask the user to enable it" is useless advice if the
+  // teammate cannot say where the switch is.
+  assert.ok(/\*\*Advanced\*\*/.test(store), "names where extra toolsets live");
+  assert.ok(/\*\*Linux workspace\*\*/.test(store), "and where the shared machine is turned on");
+  assert.ok(/do not fail silently/.test(store), "and forbids the two bad alternatives");
+
+  // Still one writer. This block goes in the same single assembly as the rest;
+  // a second writer would put AGENTS.md back to being rewritten twice a turn.
+  assert.ok(
+    /agentsWant = `\$\{botHome\.AGENTS_STAMP\}[\s\S]{0,120}\$\{reachBlock\}`/.test(store),
+    "appended to the one authoritative agentsWant"
+  );
+}
+
+console.log("agents-md-test (reach) ok");

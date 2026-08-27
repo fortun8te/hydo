@@ -1730,7 +1730,26 @@ function createStore(opts = {}) {
       agent.boxEnabled && boxId
         ? `\n## Shared Linux machine\n\nOne Ubuntu box for the whole team, id \`${boxId}\`. Run things on it with \`box exec ${boxId} -- <cmd>\`, or \`box ssh ${boxId}\` for a session. The disk is shared: browser logins and installed software stay for the next teammate, and everything on it is visible to all of them. Your scratch folder is \`/home/box/hydo/${agent.id}\`. It sleeps when nobody is using it; a command wakes it.\n`
         : "";
-    const agentsWant = `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n${boxBlock}`;
+    // What this teammate can actually reach, and what to say when it cannot.
+    //
+    // A bot had no idea what it was carrying, so "can you check that site" from
+    // a teammate without `browser` became an improvised answer or a flat
+    // failure . and the user was left to work out for themselves which switch
+    // was missing. Naming the switch is the whole point: it turns setup from
+    // something you have to already understand into something the teammate
+    // tells you.
+    //
+    // Short, and built from what the app already knows, because this file is
+    // taxed on every turn.
+    const extras = Array.isArray(agent.toolsets) ? agent.toolsets.filter(Boolean) : [];
+    const reachBlock = [
+      "",
+      "## What you can reach",
+      `Tool profile **${agent.toolProfile || "chat"}**${extras.length ? `, plus ${extras.join(", ")}` : ""}.`,
+      "If a job needs something you do not have, say so and name the switch: extra toolsets are the **Advanced** section of this Bot's panel, and the shared Linux machine is the **Linux workspace** toggle there. Do not improvise around a missing tool and do not fail silently.",
+      "",
+    ].join("\n");
+    const agentsWant = `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n${boxBlock}${reachBlock}`;
     try {
       if (fs.readFileSync(agentsPath, "utf8") !== agentsWant) {
         fs.writeFileSync(agentsPath, agentsWant);
