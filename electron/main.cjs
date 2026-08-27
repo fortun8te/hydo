@@ -4,7 +4,7 @@ const path = require("node:path");
 const { createStore } = require("./store.cjs");
 const gateway = require("./hermes-gateway.cjs");
 const plugins = require("./hermes-plugins.cjs");
-const box = require("./box.cjs");
+const boxRuntime = require("./box-runtime.cjs");
 
 // Every Hermes-backed handler below degrades to a truthful empty answer rather
 // than rejecting into the renderer: `available()` false must leave the app
@@ -519,16 +519,34 @@ app.whenReady().then(() => {
     }
   });
 
-  // ---- the team computer -------------------------------------------------
-  // One shared cloud Linux machine for every teammate. Read-only handlers are
-  // safe to call whenever; `ensure` and `stop` cost money and are deliberate.
-  ipcMain.handle("hydo:boxStatus", () => box.status());
-  ipcMain.handle("hydo:boxLimits", () => box.limits());
-  ipcMain.handle("hydo:boxList", () => box.list());
-  ipcMain.handle("hydo:boxEnsure", (_e, opts) => box.ensure(opts || {}));
-  ipcMain.handle("hydo:boxCost", (_e, size) => ({ ok: true, cost: box.alwaysOnCost(size) }));
-  ipcMain.handle("hydo:boxDesktop", (_e, id) => box.desktopUrl(id));
-  ipcMain.handle("hydo:boxStop", (_e, id) => box.stop(id));
+  // ---- the one shared box ------------------------------------------------
+  // The id lives on settings, never on an agent: a box id per agent is a
+  // machine per agent and a bill to match. Read-only handlers are free to
+  // call; `ensure` starts billing and is deliberate.
+  const boxes = boxRuntime.createBoxRuntime({
+    getBoxId: () => (store.getState().settings || {}).boxId || "",
+    setBoxId: (id) => {
+      store.setSettings({ boxId: id });
+      push();
+    },
+  });
+  ipcMain.handle("hydo:boxStatus", () => boxes.status());
+  ipcMain.handle("hydo:boxLimits", () => boxes.limits());
+  ipcMain.handle("hydo:boxEnsure", (_e, reason) => boxes.ensureRunning(reason || {}));
+  ipcMain.handle("hydo:boxStop", () => boxes.stop());
+
+  // Idle sweep, in Electron main rather than inside the VM . a machine cannot
+  // be trusted to switch itself off. Stopping early costs a few seconds of
+  // resume; not stopping costs the month's hours.
+  const idleTimer = setInterval(() => {
+    if (boxes.idleFor()) boxes.stop().catch(() => {});
+  }, 60_000);
+  app.on("before-quit", () => {
+    clearInterval(idleTimer);
+    // Force, because quitting must not leave a machine running just because a
+    // job was in flight when the window closed.
+    boxes.stop({ force: true }).catch(() => {});
+  });
 
   ipcMain.handle("hydo:dismissClarify", async (_e, id) => {
     const next = await store.dismissClarify(id);

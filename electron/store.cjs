@@ -126,6 +126,7 @@ function seedState() {
       appearance: "dark",
       userName: "Michael",
       userAvatar: "",
+      boxId: "",
       model: "grok-4.6",
       provider: "xai-oauth",
       codingModel: "",
@@ -188,6 +189,9 @@ function normalizeAgent(agent) {
     // Sits before the spread, so a hand-pinned choice still wins.
     toolProfile: "chat",
     reasoningEffort: "low",
+    // Permission to use the SHARED box. Not a box of its own, and turning it
+    // on provisions nothing.
+    boxEnabled: false,
     mcp: [],
     // Roster flags. Defaults sit before the spread so an older state.json that
     // predates them still loads, and a stored value always wins.
@@ -239,6 +243,9 @@ function normalizeState(raw) {
     // reinstall, and an avatar that points at a file the user later moves is
     // a broken picture with no way to tell them why.
     userAvatar: "",
+    // The ONE Ascii Box for the whole desk. On settings, never on an agent:
+    // a box id per agent is a machine per agent and a bill to match.
+    boxId: "",
     model: "grok-4.6",
     provider: "xai-oauth",
     codingModel: "",
@@ -2735,7 +2742,7 @@ function createStore(opts = {}) {
       // bot on Hermes' own default pays 18,327 — 72% of which is tool
       // definitions it never calls. Changing either moves the bot to a
       // different gateway child on its next turn (see hermes-gateway.cjs).
-      const allowed = ["name", "label", "description", "notifications", "blob", "shape", "status", "draft", "color", "activity", "activityDetail", "model", "provider", "reasoningEffort", "fast", "toolProfile", "profilePinned", "toolsets", "mcp", "sectionId", "backgroundTurn", "subagentIds", "lastSubagentId"];
+      const allowed = ["name", "label", "description", "notifications", "blob", "shape", "status", "draft", "color", "activity", "activityDetail", "model", "provider", "reasoningEffort", "fast", "toolProfile", "profilePinned", "toolsets", "mcp", "sectionId", "backgroundTurn", "subagentIds", "lastSubagentId", "boxEnabled"];
       const before = agent.name;
       for (const key of allowed) {
         if (Object.prototype.hasOwnProperty.call(patch, key)) agent[key] = patch[key];

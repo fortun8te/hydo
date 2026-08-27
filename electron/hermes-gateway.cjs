@@ -252,6 +252,16 @@ function handleLine(rt, raw) {
 
   // Server-pushed event. The NAME is params.type, never msg.method.
   if (msg.method === 'event' && msg.params && typeof msg.params.type === 'string') {
+    // Every frame carries `seq`. Remembering the last one is the entire
+    // client half of Hermes' documented reconnect contract: without it, a
+    // resume cannot tell whether it missed anything, so mid-stream output
+    // emitted while the link was down is dropped in silence . which reads as
+    // a teammate that stopped mid-sentence.
+    const seq = Number(msg.params.seq);
+    if (Number.isFinite(seq)) {
+      const sid = String(msg.params.session_id || msg.params.sessionId || '');
+      if (sid) rt.lastSeq.set(sid, Math.max(rt.lastSeq.get(sid) || 0, seq));
+    }
     routeEvent(rt, msg.params);
   }
 }

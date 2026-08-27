@@ -528,3 +528,21 @@
   outline-offset: 2px;
 }
 .hy-botcreate__preset .umbra-face { flex: none; }
+
+.hy-computer__trial {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--sand-text-primary, #fcfcfc);
+  background: rgba(228, 161, 27, 0.12);
+  border: 1px solid rgba(228, 161, 27, 0.3);
+}
+.hy-computer__tag {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #ffffff12;
+  color: var(--sand-text-secondary, #fcfcfc99);
+}
+.hy-computer__tag.is-work { background: rgba(42, 146, 254, 0.18); color: #9ccaff; }

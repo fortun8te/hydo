@@ -94,15 +94,12 @@ contextBridge.exposeInMainWorld("hydo", {
 
   // Undo a teammate's file changes.
   dismissClarify: (id) => ipcRenderer.invoke("hydo:dismissClarify", id),
-  // The team computer. `boxEnsure` starts or resumes the shared machine and
-  // therefore starts billing; everything else is free to call.
+  // The ONE shared box. `boxEnsure` starts or resumes it and therefore starts
+  // billing; everything else is free to call.
   boxStatus: () => ipcRenderer.invoke("hydo:boxStatus"),
   boxLimits: () => ipcRenderer.invoke("hydo:boxLimits"),
-  boxList: () => ipcRenderer.invoke("hydo:boxList"),
-  boxEnsure: (opts) => ipcRenderer.invoke("hydo:boxEnsure", opts),
-  boxCost: (size) => ipcRenderer.invoke("hydo:boxCost", size),
-  boxDesktop: (id) => ipcRenderer.invoke("hydo:boxDesktop", id),
-  boxStop: (id) => ipcRenderer.invoke("hydo:boxStop", id),
+  boxEnsure: (reason) => ipcRenderer.invoke("hydo:boxEnsure", reason),
+  boxStop: () => ipcRenderer.invoke("hydo:boxStop"),
   pickFiles: () => ipcRenderer.invoke("hydo:pickFiles"),
   attachAny: (agentId, filePath) => ipcRenderer.invoke("hydo:attachAny", agentId, filePath),
   openExternal: (url) => ipcRenderer.invoke("hydo:openExternal", url),
