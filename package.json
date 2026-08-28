@@ -1,6 +1,6 @@
 {
   "name": "hydo",
-  "version": "0.1.123",
+  "version": "0.1.124",
   "author": "Michael Knaap",
   "private": true,
   "description": "Hydo \u2014 an open-source desktop app for a team of AI teammates, running on Hermes Agent.",
@@ -20,7 +20,8 @@
     "pack": "npm run build && npm run icon && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
     "dist": "npm run build && npm run icon && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder",
     "relaunch": "node scripts/relaunch.cjs",
-    "prune-profiles": "node scripts/prune-profiles.cjs"
+    "prune-profiles": "node scripts/prune-profiles.cjs",
+    "wire-probe": "node scripts/wire-probe.cjs"
   },
   "dependencies": {
     "katex": "^0.18.4",
