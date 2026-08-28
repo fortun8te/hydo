@@ -853,3 +853,50 @@
 .sand-transcript .sand-inchat:not([data-kind="work"]) .hy-act-mark {
   display: none;
 }
+
+/* An image is its own block, sized like a photo rather than like text.
+   Above the bubble (see Transcript.jsx): inside it, the bubble's padding and
+   radius cropped the picture into a thumbnail wedged in a grey pill. */
+.sand-transcript .hy-msg__line--media {
+  /* A DEFINITE width, or the percentages below resolve against nothing.
+     MEASURED: with the line left to size itself, `.hy-extras` (a flex column
+     with min-width:0) collapsed to 0, so `max-width: min(320px, 100%)` on the
+     image computed to 0 and a fully loaded 150px photo rendered 0x0 — visible
+     in the DOM, invisible on screen. */
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.sand-transcript .hy-msg__line--media .hy-extras,
+.sand-transcript .hy-msg__line--media .hy-shots {
+  width: 100%;
+  margin-top: 0;
+}
+
+/* The photo itself. The media line deliberately renders the PLAIN `.hy-shot`
+   path rather than RichContent's ImageGrid — ImageGrid sizes its tile from
+   the image and the image from the tile, and inside this line that mutual
+   dependency settles at zero (a decoded 150px photo measured 0x0 across five
+   CSS attempts). See ImageBlock's `plain` prop in Transcript.jsx. */
+.sand-transcript .hy-msg__line--media .hy-shot,
+.sand-transcript .hy-msg__line--media img {
+  border-radius: 16px;
+  max-width: 320px;
+  max-height: 340px;
+  width: auto;
+  height: auto;
+  /* `.hy-shots` is a flex column, so the default `stretch` blew a 150px photo
+     up to the full 296px column. MEASURED before this line: w=296 on a
+     naturalWidth of 150. */
+  align-self: flex-start;
+  /* `contain`, not `cover`: a screenshot cropped to a square loses the part
+     that was worth sending. */
+  object-fit: contain;
+  display: block;
+}
+
+/* The user's own images hug the right edge, like their bubbles do. */
+.sand-transcript .sand-transcript-row--user .hy-msg__line--media {
+  display: flex;
+  justify-content: flex-end;
+}

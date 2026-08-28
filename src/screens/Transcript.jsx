@@ -551,9 +551,16 @@ function imageList(msg) {
     .filter(Boolean);
 }
 
-function ImageBlock({ images }) {
+function ImageBlock({ images, plain = false }) {
   if (!images.length) return null;
-  if (typeof RC.ImageGrid === "function") return <RC.ImageGrid images={images} />;
+  // `plain` is the photo-above-the-bubble path. ImageGrid is built for rich
+  // content — tiles with a 1:1 aspect ratio, a +N overflow chip, a click
+  // target — and its single-image variant sizes the tile from the image and
+  // the image from the tile. Inside the media line that mutual dependency
+  // settles at zero: MEASURED, a decoded 150px photo rendered 0x0 through it
+  // across five CSS attempts. `.hy-shot` is the simple path and it has
+  // rendered correctly everywhere else in this app for months.
+  if (!plain && typeof RC.ImageGrid === "function") return <RC.ImageGrid images={images} />;
   return (
     <div className="hy-shots">
       {images.map((im, i) => (
@@ -575,7 +582,7 @@ function Extras({ msg, kind = "files" }) {
     if (!images.length) return null;
     return (
       <div className="hy-extras hy-extras--in">
-        <ImageBlock images={images} />
+        <ImageBlock images={images} plain />
       </div>
     );
   }
@@ -665,11 +672,22 @@ function Bubble({
   return (
     <div className="hy-msg">
       <QuotedReply replyTo={msg.replyTo} byId={byId} known={known} onJumpTo={onJumpTo} />
+      {/* Images sit ABOVE the bubble, not inside it.
+          Rendered inside, a photo was boxed by the bubble's padding and
+          radius and cropped to the bubble's width -- so a picture sent with a
+          line of text came out as a thumbnail wedged into a grey pill. Every
+          messaging app people actually use (iMessage, WhatsApp, Slack) gives
+          the image its own rounded block and puts the text under it, because
+          the image is the message and the text is the caption. */}
+      {imageList(msg).length ? (
+        <div className="hy-msg__line hy-msg__line--media">
+          <Extras msg={msg} kind="images" />
+        </div>
+      ) : null}
       <div className="hy-msg__line">
-        {text || imageList(msg).length ? (
+        {text ? (
           <div className={bubbleClass}>
-            {text ? <Body text={text} caret={false} /> : null}
-            <Extras msg={msg} kind="images" />
+            <Body text={text} caret={false} />
           </div>
         ) : null}
 

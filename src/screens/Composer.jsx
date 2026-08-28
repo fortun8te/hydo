@@ -127,6 +127,10 @@ export default function Composer({
   const fileRef = useRef(null);
   const [active, setActive] = useState(0);
   const [images, setImages] = useState([]);
+  // Drag feedback, and the reason a file was refused. Both exist because the
+  // old behaviour for "drop a PDF on the transcript" was total silence.
+  const [dragging, setDragging] = useState(false);
+  const [dropNote, setDropNote] = useState("");
   const [skills, setSkills] = useState([]);
   // Index of the attachment being previewed full screen, or -1.
   const [shot, setShot] = useState(-1);
@@ -363,7 +367,17 @@ export default function Composer({
   const canSend = !busy && (!!draft.trim() || hasImages);
 
   function addFiles(fileList) {
-    const files = Array.from(fileList || []).filter((f) => f && f.type && f.type.startsWith("image/"));
+    const all = Array.from(fileList || []).filter(Boolean);
+    const files = all.filter((f) => f.type && f.type.startsWith("image/"));
+    // Dropping a PDF used to do NOTHING — no attachment, no message, no hint
+    // that the app had seen it at all. Silence is the worst possible answer to
+    // a deliberate gesture: the user cannot tell "not supported" from "broken".
+    const refused = all.length - files.length;
+    setDropNote(
+      refused > 0
+        ? `${refused === all.length ? "That is not an image" : `${refused} file${refused === 1 ? "" : "s"} skipped`} — use the + button for other files.`
+        : ""
+    );
     files.slice(0, 8 - images.length).forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -387,12 +401,56 @@ export default function Composer({
   }
 
   function onDrop(e) {
+    setDragging(false);
     const files = e.dataTransfer?.files;
     if (!files || !files.length) return;
-    if (![...files].some((f) => f.type.startsWith("image/"))) return;
     e.preventDefault();
     addFiles(files);
   }
+
+  // The whole window is the drop target, not the composer strip.
+  //
+  // Dropping an image onto the transcript -- which is most of the window, and
+  // the obvious place to aim -- did nothing, because only the little form at
+  // the bottom listened. Nothing highlighted, so there was no way to discover
+  // where the target was except by hitting it. Now the window accepts it and
+  // says so while you are still holding the file.
+  useEffect(() => {
+    let depth = 0;
+    const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+    const enter = (e) => {
+      if (!hasFiles(e)) return;
+      depth += 1;
+      setDragging(true);
+    };
+    const leave = (e) => {
+      if (!hasFiles(e)) return;
+      // dragleave fires for every child element crossed, so a plain boolean
+      // flickers off the moment the pointer moves over a bubble. Count depth.
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setDragging(false);
+    };
+    const over = (e) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    const drop = (e) => {
+      depth = 0;
+      setDragging(false);
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      addFiles(e.dataTransfer.files);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
+  });
 
   return (
     <form
@@ -403,16 +461,28 @@ export default function Composer({
       onSubmit={(e) => {
         e.preventDefault();
         if (!canSend) return;
+        setDropNote("");
         const payload = images.map((im) => ({ src: im.src, name: im.name }));
         setImages([]);
         onSend({ images: payload });
       }}
       onPaste={onPaste}
       onDragOver={(e) => {
-        if ([...e.dataTransfer.items].some((it) => it.type.startsWith("image/"))) e.preventDefault();
+        if ([...(e.dataTransfer.types || [])].includes("Files")) e.preventDefault();
       }}
       onDrop={onDrop}
     >
+      {dragging ? (
+        <div className="sand-drop" aria-hidden="true">
+          <i className="gb-icon gb-icon-image" />
+          <span>Drop to attach</span>
+        </div>
+      ) : null}
+      {dropNote ? (
+        <div className="sand-drop__note" role="status">
+          {dropNote}
+        </div>
+      ) : null}
       {mode && (
         <div className={`sand-slash sand-slash--${mode}`} role="menu">
           {rows.map((row, i) => (
