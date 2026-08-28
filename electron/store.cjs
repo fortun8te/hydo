@@ -166,7 +166,21 @@ const SEED = 4;
 const MAX_MEMBERS = 6;
 // Members reply in turn so they can answer each other. Hard stop so a chatty
 // pair cannot run up turns forever — each round costs one Hermes turn per member.
-const CHANNEL_ROUNDS = 3;
+/**
+ * How many model turns ONE channel message may ever cost, and how often a
+ * single member may be woken inside it.
+ *
+ * The old `CHANNEL_ROUNDS = 3` was a multiplier on every member: six members
+ * meant eighteen sequential turns, most of them spent saying SKIP. These two
+ * are a hard ceiling instead of a multiplier -- the common case is now one
+ * wake each, and the budget only gets spent when teammates genuinely address
+ * one another.
+ *
+ * MAX_WAKES_PER_MEMBER is what stops two bots pinging each other forever; the
+ * budget is what stops a wide chain doing the same thing across six of them.
+ */
+const CHANNEL_WAKE_BUDGET = 10;
+const MAX_WAKES_PER_MEMBER = 2;
 
 function landingLines() {
   return [];
@@ -858,16 +872,18 @@ function standing(agent, settings, soul, memory, extra) {
 
 // The "don't all pile on" rule is prompt, not harness. Every member is woken
 // for every message; this is what stops six teammates acking the same thing.
-function channelBrief(channel, members, me, history, transcript, round) {
+function channelBrief(channel, members, me, history, transcript, wake) {
   const others = members.filter((m) => m.id !== me.id).map((m) => m.name);
+  const pinged = wake && wake.reason === "peer";
   const lines = [
     `You are in the "${channel.name}" channel.`,
     channel.description ? `The channel is for: ${channel.description}` : "",
     others.length ? `Also here: ${others.join(", ")}.` : "You are the only one in here right now.",
-    "Only speak if you have something the others would not have. Otherwise exactly SKIP.",
-    round > 0
-      ? "Follow-up round: SKIP unless a teammate asked you by name or you are correcting a factual error."
-      : "",
+    // A bot woken BY a teammate was addressed by name, so the "don't pile on"
+    // rule would be telling it to ignore a direct question.
+    pinged
+      ? `${wake.fromName} spoke to you directly. Answer them. SKIP only if there is genuinely nothing to say.`
+      : "Only speak if you have something the others would not have. Otherwise exactly SKIP.",
     history ? `Earlier in this channel:\n${history}` : "",
     transcript ? `This exchange so far:\n${transcript}` : "",
     "Reply as yourself, in one or two short lines. Do not prefix your name.",
@@ -2874,10 +2890,43 @@ function createStore(opts = {}) {
       }
       const posted = opened;
       const text = leftover || (posted ? "" : result.text);
-      if (bubble.images && bubble.images.length) {
-        return { text, images: bubble.images, posted };
+      // Directives that arrived BEFORE the bubble was committed.
+      //
+      // `commitBeat()` only fires on a tool or a subagent (see its call
+      // sites), so a plain-text turn never commits: every token lands in
+      // `bubble.text`, `leftover` is empty, and the directives were then
+      // parsed out of an empty string. MEASURED: a teammate answering
+      // `Adam it is.\nSELF: {"name":"Adam"}` with no tool call kept the name
+      // "New Bot" AND showed the raw SELF: line in the transcript. Renaming,
+      // pinging, hiring and memory only worked when the same turn happened to
+      // touch a tool, which is why they looked intermittent rather than broken.
+      //
+      // So: parse the spoken text too, and take the directive lines back out
+      // of the bubble the user is looking at.
+      const spokenRaw = opened ? String(bubble.text || "") : "";
+      let preDirs = null;
+      if (spokenRaw && /^\s*(PING|SELF|SKILL|ROUTINE|TEAMMATE|MEMORY|REACT|REPLY):/im.test(spokenRaw)) {
+        preDirs = extractDirectives(spokenRaw);
+        if (preDirs.text !== bubble.text) {
+          bubble.text = preDirs.text;
+          // An empty bubble is one whose whole content was directives.
+          if (!bubble.text.trim()) {
+            const list = threadOf(convId || agent.id);
+            const at = list.indexOf(bubble);
+            if (at >= 0) list.splice(at, 1);
+          }
+          flush(true);
+        }
       }
-      return { text, posted };
+      // The id of the bubble streaming already put in the thread. A caller
+      // that decides the turn was silent needs a way to take it back out --
+      // without this, a teammate answering SKIP left the word "SKIP" sitting
+      // in the transcript, which is the opposite of staying quiet.
+      const bubbleId = posted ? bubble.id : "";
+      if (bubble.images && bubble.images.length) {
+        return { text, images: bubble.images, posted, bubbleId, preDirs };
+      }
+      return { text, posted, bubbleId, preDirs };
     } catch (err) {
       if (opened) {
         const list = threadOf(agent.id);
@@ -3128,15 +3177,30 @@ function createStore(opts = {}) {
       let shots = [];
       let posted = false;
       let yielded = false;
+      let bubbleId = "";
+      let preDirs = null;
       if (out && typeof out === "object" && out.text != null) {
         shots = Array.isArray(out.images) ? out.images : [];
         posted = !!out.posted;
         yielded = !!out.yielded;
+        bubbleId = String(out.bubbleId || "");
+        preDirs = out.preDirs || null;
         out = out.text;
       }
       const done = extractDirectives(String(out || "").trim() || (posted ? "" : "Empty reply."));
+      // Merge the directives that were spoken before the bubble committed.
+      // Concatenated, not replaced: a turn can legitimately emit one directive
+      // in the streamed text and another after a tool call.
+      if (preDirs && preDirs.dirs && done.dirs) {
+        for (const key of Object.keys(done.dirs)) {
+          if (Array.isArray(done.dirs[key]) && Array.isArray(preDirs.dirs[key])) {
+            done.dirs[key] = preDirs.dirs[key].concat(done.dirs[key]);
+          }
+        }
+      }
       done.images = shots;
       done.posted = posted;
+      done.bubbleId = bubbleId;
       done.yielded = yielded;
       return done;
     }
@@ -4300,44 +4364,116 @@ function createStore(opts = {}) {
       }
       save();
 
-      // Members speak one at a time so each one can see what the others just
-      // said — that back-and-forth is the whole point of a channel. A round
-      // where nobody speaks ends the exchange, and CHANNEL_ROUNDS is the hard
-      // stop so a chatty pair can't talk forever on your budget.
+      // ── The channel is a wake queue, not a round-robin ──────────────────
+      //
+      // It used to be a nested loop: CHANNEL_ROUNDS rounds x every member,
+      // each `await`ed in turn. Six members was up to eighteen SEQUENTIAL
+      // model turns for one message -- eighteen turns of latency, and a full
+      // turn spent by every member that only wanted to say SKIP. The rounds
+      // existed to simulate a back-and-forth synchronously.
+      //
+      // Grok Bot's shape instead: a bot is IDLE until something wakes it, and
+      // being quiet costs nothing extra. So:
+      //
+      //   - one wake per member for a user message, run CONCURRENTLY. This is
+      //     correct here and would have been wrong in the old design: bots no
+      //     longer read each other's replies mid-round, they see them on a
+      //     later wake, which is exactly how an event bus behaves;
+      //   - no scheduled follow-up rounds at all. A second turn happens only
+      //     when a teammate actually addresses someone by name, which is an
+      //     event rather than a timer.
+      //
+      // Six members: 18 serial turns -> 6 concurrent, and a follow-up only if
+      // one is really owed. Silence is now free.
       const said = [];
-      for (let round = 0; round < CHANNEL_ROUNDS; round++) {
-        let spokeThisRound = false;
+      const woken = new Map(); // agent id -> how many times, this message
+      let queue = members.map((m) => ({ m, reason: "user" }));
+      let budget = CHANNEL_WAKE_BUDGET;
 
-        for (const m of members) {
-          const transcript = [`User: ${body}`]
-            .concat(said.map((s) => `${s.name}: ${s.text}`))
-            .join("\n");
-          setStatus(m.id, "working", undefined, ch.id);
-          save();
+      while (queue.length && budget > 0) {
+        // One wave: everyone in it was woken by the same thing and cannot see
+        // each other. A member already at its wake cap is dropped here rather
+        // than filtered at enqueue time, so a chain that loops back on itself
+        // still terminates.
+        const wave = queue
+          .filter((w) => (woken.get(w.m.id) || 0) < MAX_WAKES_PER_MEMBER)
+          .slice(0, budget);
+        queue = [];
+        if (!wave.length) break;
+        budget -= wave.length;
+        for (const w of wave) woken.set(w.m.id, (woken.get(w.m.id) || 0) + 1);
 
-          let extracted;
-          try {
-            extracted = await speak(
-              m,
-              prompt,
-              channelBrief(ch, members, m, history, transcript, round),
-              ch.id
-            );
-          } catch {
-            extracted = { text: "", dirs: { memory: [], ping: [], routine: [], react: [], reply: [] } };
-          }
-          // Cleared BEFORE the SKIP branch below: a member that stayed quiet
-          // must not be left spinning in the channel.
+        const transcript = [`User: ${body}`].concat(said.map((x) => `${x.name}: ${x.text}`)).join("\n");
+        for (const w of wave) setStatus(w.m.id, "working", undefined, ch.id);
+        save();
+
+        const results = await Promise.all(
+          wave.map(async (w) => {
+            try {
+              const ask = w.reason === "peer" && w.ask ? w.ask : prompt;
+              return {
+                w,
+                extracted: await speak(w.m, ask, channelBrief(ch, members, w.m, history, transcript, w), ch.id),
+              };
+            } catch {
+              // One member failing is not the channel failing.
+              return { w, extracted: { text: "", dirs: { memory: [], ping: [], routine: [], react: [], reply: [] } } };
+            }
+          })
+        );
+
+        // Everything below is applied in WAVE ORDER, not completion order, so
+        // the transcript reads the same way twice for the same inputs.
+        for (const { w, extracted } of results) {
+          const m = w.m;
           setStatus(m.id, "idle");
           applyBotReactions(m, userMsg, extracted.dirs.react || []);
 
-          const replyText = String(extracted.text || "").trim();
-          // SKIP is the quiet answer. It must leave no trace in the transcript.
-          if (!replyText || /^SKIP\.?$/i.test(replyText)) {
+          // What the member actually said is `extracted.text` when nothing was
+          // streamed, and the streamed bubble's own text when something was.
+          const streamed = extracted.bubbleId
+            ? (threadOf(ch.id).find((x) => x.id === extracted.bubbleId) || {}).text || ""
+            : "";
+          const replyText = String(extracted.text || streamed || "").trim();
+          const quiet = !replyText || /^SKIP\.?$/i.test(replyText);
+
+          // Pings are read BEFORE the silence check, and from the merged
+          // directives, because a member can stream its whole reply without
+          // ever committing a beat -- in which case `extracted.text` is empty
+          // and skipping here would drop the ping with it.
+          if (!quiet) {
+            for (const ping of extracted.dirs.ping || []) {
+              const peer = mentionTarget(`@${ping.name || ""}`, state.agents, m.id);
+              if (!peer) continue;
+              if (!members.some((x) => x.id === peer.id)) continue;
+              queue.push({
+                m: peer,
+                reason: "peer",
+                fromName: m.name,
+                ask: `${m.name} said to you in the channel: ${ping.text || replyText}`,
+              });
+            }
+          }
+
+          // SKIP is the quiet answer. It must leave no trace in the
+          // transcript -- including the bubble streaming already posted,
+          // which is why a silent member used to leave the word "SKIP" behind.
+          if (quiet) {
+            if (extracted.bubbleId) {
+              const list = threadOf(ch.id);
+              const at = list.findIndex((x) => x.id === extracted.bubbleId);
+              if (at >= 0) list.splice(at, 1);
+            }
             save();
             continue;
           }
-          spokeThisRound = true;
+          if (extracted.bubbleId) {
+            // Streaming already put this in the thread; do not post it twice.
+            applyBotReply(ch.id, extracted.dirs.reply || [], [], userMsg.replyTo, userMsg.id);
+            said.push({ name: m.name, text: replyText });
+            save();
+            continue;
+          }
           said.push({ name: m.name, text: replyText });
           const posted = [];
           for (const bubble of splitBubbles(replyText, { max: 1 })) {
@@ -4356,10 +4492,9 @@ function createStore(opts = {}) {
             posted[0].images = (posted[0].images || []).concat(extracted.images);
           }
           applyBotReply(ch.id, extracted.dirs.reply || [], posted, userMsg.replyTo, userMsg.id);
+
           save();
         }
-
-        if (!spokeThisRound) break;
       }
 
       for (const m of members) setStatus(m.id, "idle");

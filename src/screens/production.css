@@ -166,12 +166,13 @@
 
 .sand-transcript .sand-transcript-row--user .sand-bubble {
   background: var(--sand-fill-bubble-user);
-  /* --sand-fill-bubble-user is #070707 in light mode (an inverted black
-     pill, matching --sand-fill-primary) but the base .sand-bubble rule sets
-     color to --sand-text-primary, which is ALSO near-black in light — near
-     -zero contrast. Dark mode's #5a5a5a mid-grey never exposed this because
-     --sand-text-primary is near-white there. */
-  color: var(--sand-text-on-primary, var(--sand-text-primary));
+  /* The bubble is a near-black pill in light and a mid-grey one in dark, so
+     its text is light in BOTH. This used to borrow --sand-text-on-primary,
+     which is right for the primary FILL (light in dark mode, so dark text)
+     and wrong here: it put #141414 on #6a6a6a, about 3.2:1, which is the
+     washed-out user bubble. Its own token now, because the two surfaces only
+     looked the same in one theme. */
+  color: var(--sand-text-bubble-user, var(--sand-text-on-primary));
 }
 
 .sand-transcript .sand-bubble--sending {
@@ -293,6 +294,24 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: sand-shimmer 1.4s linear infinite;
+}
+
+/* While a teammate is actually WORKING, the label is the point.
+ *
+ * It was `display: none` unless hovered, so the shimmering "Messaging" /
+ * "Reading" line only existed for someone who happened to have the pointer
+ * over it -- the marker animated on its own and never said what it was doing.
+ * `work` and `read` are the two kinds that mean a turn is in flight
+ * (src/lib/presence.js); `wait` and `linger` keep the hover behaviour below,
+ * because there the dot IS the message and a label would be noise. */
+.sand-transcript .sand-inchat[data-kind="work"] .sand-inchat__idle,
+.sand-transcript .sand-inchat[data-kind="read"] .sand-inchat__idle {
+  display: none;
+}
+
+.sand-transcript .sand-inchat[data-kind="work"] .sand-inchat__busy,
+.sand-transcript .sand-inchat[data-kind="read"] .sand-inchat__busy {
+  display: inline;
 }
 
 .sand-transcript .sand-inchat:hover .sand-inchat__idle {

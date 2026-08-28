@@ -502,7 +502,19 @@ async function channels() {
   assert.ok(!store.getState().messages[cid], "channel thread deleted with it");
 }
 
-// --- channels: members answer each other, and silence ends the exchange ---
+// --- channels: members answer each other, and silence costs nothing ---
+//
+// This used to assert a SCHEDULED back-and-forth: CHANNEL_ROUNDS rounds x
+// every member, each seeing what the others had just said inside the same
+// round. That is the design the channel loop was rewritten away from -- six
+// members meant up to eighteen sequential turns for one message, most of them
+// spent saying SKIP.
+//
+// The contract now is the one Grok Bot uses: one concurrent wake per member,
+// and a second turn ONLY when a teammate is addressed by name. So members can
+// still answer each other -- that part was never in doubt and is still
+// asserted below -- but it happens because someone was actually spoken to,
+// not because a loop came round again.
 async function channelRounds() {
   const { createStore } = require(path.join(ROOT, "electron/store.cjs"));
 
@@ -514,27 +526,17 @@ async function channelRounds() {
     return id;
   };
 
-  // Scripted teammates reproducing the real Grok exchange: Dev opens, Nephew
-  // answers with a question, Dev answers that, then both go quiet.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydo-rounds-"));
   const store = createStore({
     dir,
     complete: async (system) => {
       const me = /You are ([^.,]+)/.exec(system)[1];
-      const seen = /This exchange so far:\n([\s\S]*?)\nReply as yourself/.exec(system);
-      const convo = seen ? seen[1] : "";
-      if (me === "Dev") {
-        if (!convo.includes("Dev:")) return "yo";
-        if (convo.includes("Nephew: yo, all good. you?") && !convo.includes("yeah, all good")) {
-          return "yeah, all good";
-        }
-        return "SKIP";
+      // A teammate woken BY another teammate is told so.
+      const pinged = /spoke to you directly/.test(system);
+      if (me === "Dev" && !pinged) {
+        return 'yo\nPING: {"name":"Nephew","text":"hru"}';
       }
-      if (me === "Nephew") {
-        return convo.includes("Dev: yo") && !convo.includes("Nephew:")
-          ? "yo, all good. you?"
-          : "SKIP";
-      }
+      if (me === "Nephew" && pinged) return "yo, all good. you?";
       return "SKIP";
     },
   });
@@ -552,11 +554,11 @@ async function channelRounds() {
     .map((m) => `${m.role === "user" ? "You" : names[m.fromId]}: ${m.text}`);
   assert.deepEqual(
     said,
-    ["You: hru guys", "Dev: yo", "Nephew: yo, all good. you?", "Dev: yeah, all good"],
-    "members must answer each other across rounds, in order"
+    ["You: hru guys", "Dev: yo", "Nephew: yo, all good. you?"],
+    "a teammate addressed by name must be woken and must answer, in order"
   );
 
-  // A round where nobody speaks ends the exchange immediately — no extra turns.
+  // Silence costs one wake each and nothing more -- no follow-up round.
   const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "hydo-quiet-"));
   let calls = 0;
   const quiet = createStore({
@@ -579,7 +581,7 @@ async function channelRounds() {
     0,
     "silence writes nothing to the transcript"
   );
-  assert.equal(calls, 2, "a fully silent round stops the exchange (2 members, 1 round)");
+  assert.equal(calls, 2, "two quiet members cost exactly two turns, never a second round");
 }
 
 stripCanned();

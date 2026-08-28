@@ -499,6 +499,12 @@
   --sand-fill-accent-subtle-hover: #1084fe2b;
   --sand-fill-bubble-agent: #eeeeee;
   --sand-fill-bubble-user: #070707;
+  /* Text ON the user bubble, which is NOT the same thing as text on the
+     primary fill. The bubble is a near-black pill in light and a mid-grey one
+     in dark, so its text is light in BOTH -- reusing --sand-text-on-primary
+     made it near-black on mid-grey in dark mode (~3.2:1, the washed-out look
+     in the transcript). */
+  --sand-text-bubble-user: #fcfcfc;
   --sand-fill-bubble-user-disabled: #14141426;
   --sand-fill-control-checked: #070707;
   --sand-fill-control-checked-disabled: #14141426;
@@ -1191,7 +1197,10 @@
   --sand-fill-accent-subtle-disabled: #1084fe24;
   --sand-fill-accent-subtle-hover: #1084fe52;
   --sand-fill-bubble-agent: #262626;
-  --sand-fill-bubble-user: #5a5a5a;
+  /* Lifted from #5a5a5a: with light text this reads as a deliberate pill
+     rather than a smudge, and it still clears 4.5:1 against #fcfcfc. */
+  --sand-fill-bubble-user: #6a6a6a;
+  --sand-text-bubble-user: #fcfcfc;
   --sand-fill-bubble-user-disabled: #fcfcfc26;
   --sand-fill-control-checked: #5a5a5a;
   --sand-fill-control-checked-disabled: #fcfcfc26;
