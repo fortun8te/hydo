@@ -14,6 +14,8 @@ Each teammate has its own memory, its own workspace on disk, its own tools and i
 - **One shared computer.** A single Ascii box the whole roster drives, billed by the second and stopped when idle.
 - **Nothing hidden.** MIT, no telemetry, no account. `npm test` is 119 suites and they assert behaviour, not vibes.
 
+If you came here looking for an **open-source Grok Bot alternative**, a **Grok Bot for Mac you can self-host**, a **multi-agent desktop app** for **Hermes Agent**, or a way to run **local LLM agents** (llama.cpp, LM Studio, Ollama, vLLM) with a real roster and a shared computer — that is what this is.
+
 Electron 42, React 19, Vite. Entry is `electron/main.cjs`; the renderer lives in `src/`.
 
 ## Screenshots
@@ -29,12 +31,40 @@ Light theme, same screen:
 
 Captured against the mock fixture (`?mock=1`) — a populated roster with no real personal data, not a live account.
 
+## How this differs from Grok Bot, and from a plain Hermes bot
+
+Three things get confused with each other, so here they are side by side.
+
+**Grok Bot** is xAI's desktop client: a roster of bots, a shared computer, a scheduler. Closed, hosted, and the model is xAI's. It is the product this is modelled on, and it got the shape right.
+
+**A Hermes bot** is one agent in a terminal. Enormously capable — tools, subagents, skills, memory, checkpoints — and completely unaware that any other agent exists. No roster, no rooms, nothing that keeps running when you close the window.
+
+**Hydo** is the roster around Hermes. Each teammate is its own Hermes profile with its own memory, workspace, tools and config; Hydo owns everything between them — who exists, who can talk to whom, who wakes up when, and which of them is currently allowed to touch the shared machine.
+
+| | Grok Bot | Hermes on its own | Hydo |
+| --- | --- | --- | --- |
+| Where turns run | xAI's servers | your machine | your machine |
+| Model | Grok | anything | Grok 4.6 by default, or your own endpoint, per teammate |
+| Teammates | yes | one agent | yes, each an isolated profile |
+| Rooms | group chats | none | channels + DMs, wake-based |
+| Shared computer | yes | no | yes, one box, billed per second |
+| Runs when you close it | yes | no | routines while the app is open |
+| Source | closed | open | open, MIT |
+
+**Why Hermes, and not a raw API.** A chat completion is a sentence; a teammate is a process. Hermes brings the parts that are tedious and easy to get subtly wrong: a real tool loop with approvals, subagents, skills, checkpointed file edits you can roll back, native compaction when a context fills, and per-profile isolation so one teammate's memory and MCP servers are genuinely not another's. Building that again on top of `/v1/chat/completions` would be most of a year, and the result would be a worse Hermes.
+
+What Hydo adds is precisely what Hermes does not have, because a single-agent CLI has no reason to: identity across sessions, a roster, rooms with wake semantics, a shared machine with a lease on it, and a UI where you can watch a teammate work and stop it.
+
 ## What makes it different
 
-- **Runs on your hardware if you want it to.** Point it at any OpenAI-compatible endpoint — an Unsloth server, LM Studio, Ollama — and switch between that and a hosted model with one control. The app tells you honestly whether your endpoint is answering *before* you send a message, because a local server that is off looks exactly like a broken model.
-- **One shared Linux machine for the whole team.** Files, installed software and browser logins live on its disk, so a teammate that signs into something once leaves it signed in for the next one. Billed by the second and switched off when idle.
+- **Runs on your hardware if you want it to.** Point it at any OpenAI-compatible endpoint — Unsloth, llama.cpp, LM Studio, Ollama, vLLM — and switch between that and a hosted model with one control, per teammate. The app tells you honestly whether your endpoint is answering *before* you send, because a local server that is off looks exactly like a broken model. If it is down it asks before running your message somewhere else.
+- **Silence is free.** A channel wakes its members once, concurrently, and a second turn only happens when someone is actually addressed by name. Six quiet members cost six turns, not eighteen.
+- **One shared Linux machine for the whole team.** Files, installed software and browser logins live on its disk, so a teammate that signs into something once leaves it signed in for the next one. Billed by the second, switched off when idle.
 - **It says what it is doing.** "Opening a pull request on GitHub", with the real brand mark — read from the actual tool call, not guessed.
+- **288 marks, drawn live.** 24 shapes × 12 colours, each one blinking, breathing and reacting on its own clock. Not a sprite sheet.
 - **Everything is measured.** `docs/` records what things cost and what was tested versus merely read. Several entries are corrections of earlier claims that turned out to be wrong.
+
+![Every mark Hydo can wear](docs/screenshots/faces.png)
 
 Turns run on [Hermes Agent](https://hermes-agent.nousresearch.com) over its `tui_gateway` JSON-RPC protocol (`electron/hermes-gateway.cjs`, `docs/HERMES-GATEWAY.md`). OpenRouter is a fallback only, used when Hermes is unavailable.
 
