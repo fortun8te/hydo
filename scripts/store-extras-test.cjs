@@ -448,16 +448,39 @@ async function main() {
     assert.ok(!/MEMORY:/.test(text));
   });
 
-  await test('blank lines do not create extra bubbles; --- can', async () => {
+  // A blank line in PROSE is a bubble break; inside structure it is not.
+  //
+  // This used to assert the opposite — that only an explicit `---` split. The
+  // model almost never emits `---` unprompted, so every reply arrived as one
+  // paragraph-shaped block, where the reference client this is modelled on
+  // sends several short bubbles, one thought each. That difference is most of
+  // what made replies read as a document rather than as someone texting.
+  //
+  // The structural exemption is the load-bearing half: a blank line inside a
+  // fenced code block, a list or a table is layout, and splitting there would
+  // hand each fragment to the markdown parser separately, so a half-open code
+  // fence renders as literal backticks.
+  await test('a blank line splits prose into bubbles, but never structure', async () => {
     const { splitBubbles } = require('../electron/store.cjs');
     assert.deepEqual(splitBubbles('one'), ['one']);
-    assert.equal(splitBubbles('para\n\nwith a blank').length, 1);
-    assert.equal(splitBubbles('- a\n- b\n\n- c').length, 1);
-    assert.equal(splitBubbles('see:\n\n```js\nconst x = 1;\n```').length, 1);
+    assert.deepEqual(splitBubbles('Research, drafts, files.\n\nThrow me whatever you have.'), [
+      'Research, drafts, files.',
+      'Throw me whatever you have.',
+    ]);
+    // Structure stays whole.
+    assert.equal(splitBubbles('- a\n- b\n\n- c').length, 1, 'a list was split');
+    assert.equal(splitBubbles('see:\n\n```js\nconst x = 1;\n```').length, 1, 'a code block was split');
+    assert.equal(splitBubbles('1. a\n\n2. b').length, 1, 'a numbered list was split');
+    assert.equal(splitBubbles('| a | b |\n\n| c | d |').length, 1, 'a table was split');
+    assert.equal(splitBubbles('# Heading\n\nbody').length, 1, 'a heading was split');
+    // `---` still works, and the cap still holds.
     const beats = splitBubbles('Checking the repo.\n---\nFound it.');
     assert.equal(beats.length, 2);
     const four = splitBubbles('a\n---\nb\n---\nc\n---\nd');
     assert.equal(four.length, 3);
+    assert.equal(splitBubbles('a\n\nb\n\nc\n\nd').length, 3, 'the three-bubble cap must still hold');
+    // max:1 callers (channel members) get one bubble regardless.
+    assert.equal(splitBubbles('a\n\nb', { max: 1 }).length, 1);
   });
 
   await test('a short question does not set backgroundTurn', async () => {

@@ -826,10 +826,28 @@ function splitBubbles(text, opts = {}) {
   if (!raw) return [];
   const max = Math.max(1, Math.min(3, Number(opts.max) || 3));
   if (max === 1) return [raw];
-  const parts = raw
+  let parts = raw
     .split(/^\s*---\s*$/m)
     .map((s) => s.trim())
     .filter(Boolean);
+  // A blank line is a bubble break too, not just an explicit `---`.
+  //
+  // Grok Bot's rhythm is several short bubbles, one thought each; ours put a
+  // paragraph break INSIDE one bubble, which reads as a paragraph rather than
+  // as someone texting. The model rarely emits `---` unprompted, so that was
+  // the only separator that ever fired.
+  //
+  // Prose only. A blank line inside a fenced code block, a list or a table is
+  // structure, and splitting there would cut a rendered block in half — the
+  // markdown would then be parsed per-bubble and come out as literal
+  // characters.
+  const structured = /```|^\s*[-*+]\s|^\s*\d+[.)]\s|^\s*#{1,6}\s|^\s*\|/m.test(raw);
+  if (parts.length <= 1 && !structured) {
+    parts = raw
+      .split(/\n\s*\n+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
   if (parts.length <= 1) return [raw];
   if (parts.length <= max) return parts;
   return [...parts.slice(0, max - 1), parts.slice(max - 1).join("\n")];
