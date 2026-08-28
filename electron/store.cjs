@@ -2291,6 +2291,17 @@ function createStore(opts = {}) {
       "",
       "## What you can reach",
       `Tools available this turn: ${(gatewayProfiles[agent.toolProfile || "chat"] || []).join(", ") || "conversation only"}${extras.length ? `, plus ${extras.join(", ")}` : ""}.`,
+      // WHICH SERVICES are connected, by name.
+      //
+      // A teammate could not tell whether Gmail, Slack or YouTube was reachable,
+      // so "can you get my YouTube stats" had no honest answer available: it
+      // could only guess, and guessing wrong in either direction is bad — a
+      // false "I can't" on a connected account, or a promise it cannot keep.
+      // The reference client opens that exact request with "checking what
+      // YouTube access I have", which is only possible if it knows.
+      Array.isArray(agent.mcp) && agent.mcp.length
+        ? `Connected services you can use: ${agent.mcp.map((m) => String((m && (m.name || m.id)) || "").trim()).filter(Boolean).join(", ")}. Check what you have before saying you cannot do something.`
+        : "No connected services on this teammate yet. Plugins are added in this Bot's panel, and that IS his switch, not yours.",
       "You can widen this yourself: `SELF: {\"toolsets\":[\"browser\"]}` adds a toolset for later turns (browser, search, x_search, vision, image_gen, desktop_ui, memory, cronjob). Take what the job needs.",
       "The shared Linux machine is NOT yours to switch on: that is the **Linux workspace** toggle in this Bot's panel, and only he can flip it. Name it when a job actually needs the machine.",
       "Everything else: if something is out of reach . a login only he has, an account nobody connected . say that in one sentence, say what you did up to that point, and hand him the next step. Never recite your tool profile and never send him to the **Advanced** panel for a toolset you could have taken yourself: that is a support ticket about yourself, not an answer. Do not improvise around a missing tool and do not fail silently.",
