@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stands in for the Hermes venv interpreter. hermes-gateway.cjs spawns
+# `$HERMES_PYTHON -m tui_gateway.entry`; the module args are ignored and the
+# JS fixture beside this file is run instead.
+exec node "$(dirname "$0")/fake-gateway.cjs"

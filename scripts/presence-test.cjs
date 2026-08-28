@@ -4,6 +4,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const assert = require("node:assert/strict");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 
@@ -156,7 +157,7 @@ async function main() {
   assert.ok(sb.includes("pipOf"), "roster asks pipOf");
   assert.ok(/\{!isChannel && pip \?/.test(sb), "pip is conditional on pipOf");
   assert.ok(sb.includes("sand-row__unread"), "unread badge is rendered");
-  const rail = fs.readFileSync(path.join(ROOT, "src/screens/BotRail.jsx"), "utf8");
+  const rail = stripComments(fs.readFileSync(path.join(ROOT, "src/screens/BotRail.jsx"), "utf8"));
   assert.ok(rail.includes("pipOf"), "the rail's pip is honest too");
   assert.ok(!/className="sand-row__dot bot-rail__online"/.test(rail), "no unconditional rail pip");
 
@@ -164,7 +165,7 @@ async function main() {
   assert.ok(USER_IDLE_MS >= 20000, `a paused draft holds him: ${USER_IDLE_MS}ms`);
   assert.ok(LINGER_MS >= 6000, `he lingers after his own turn: ${LINGER_MS}ms`);
 
-  const tx = fs.readFileSync(path.join(ROOT, "src/screens/Transcript.jsx"), "utf8");
+  const tx = stripComments(fs.readFileSync(path.join(ROOT, "src/screens/Transcript.jsx"), "utf8"));
   assert.ok(tx.includes("presenceOf"));
   assert.ok(tx.includes("composerExtrasForMember"));
   assert.ok(tx.includes("mood={presence.mood}"));

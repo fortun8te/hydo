@@ -60,6 +60,31 @@ function normalizeChatModel(id) {
   return s;
 }
 
+/**
+ * Is this provider id one of the user's own self-hosted endpoints?
+ *
+ * The name of a MODEL never decides where it runs. A local box can serve
+ * anything it likes -- including a GGUF someone named `grok-something` -- and
+ * the old `/grok/i` test would then hand that turn to xAI over the network.
+ * The provider id is the only thing that knows which machine answers, so it is
+ * the only thing allowed to decide.
+ *
+ * Lazily required and wrapped: this must never throw into a settings write,
+ * and a missing/garbage ~/.hermes/config.yaml simply means "no local
+ * endpoints", not "crash".
+ */
+function isLocalProvider(name) {
+  const id = String(name || "").trim();
+  if (!id) return false;
+  try {
+    const lp = require("./local-providers.cjs");
+    const file = process.env.HYDO_HERMES_CONFIG || lp.CONFIG;
+    return lp.list(file).some((p) => p.id === id);
+  } catch {
+    return false;
+  }
+}
+
 function firstNonEmpty(...vals) {
   for (const v of vals) {
     const s = String(v == null ? "" : v).trim();
@@ -75,6 +100,9 @@ function sessionModel(agent, settings) {
 function sessionProvider(agent, settings) {
   const model = sessionModel(agent, settings).toLowerCase();
   const named = firstNonEmpty(agent && agent.provider, settings && settings.provider);
+  // A local endpoint wins over every model-name rule below. See
+  // `isLocalProvider`: the model string is not evidence about the machine.
+  if (isLocalProvider(named)) return named;
   if (model.includes("muse")) return named || MUSE_PROVIDER;
   if (model.includes("grok")) {
     if (named === "xai" || named === MUSE_PROVIDER || !named) return DEFAULT_PROVIDER;
@@ -122,7 +150,18 @@ function agentsModelBlock(agent, settings) {
   const code = codingModel(agent, settings);
   const grok = grokFlag(code);
   const harness = harnessInfo(settings);
+  // And who the teammate ITSELF is. This was nowhere either, and it is the
+  // half that breaks: a bot renames itself, the roster changes, and the model
+  // never sees that it landed — so the next time the user pushes ("you are
+  // still called test") it believes them and picks a SECOND name. Michael
+  // watched one call itself Wes and the roster say Arlo. The name is written
+  // here, once, and it is the thing that says the rename worked.
+  const me = String((agent && agent.name) || "").trim();
+  const named = me && me !== "New Bot";
   const lines = [
+    ...(named
+      ? ["## Who you are", `The roster calls you **${me}**. That is your name, whatever an earlier message in this thread says.`, ""]
+      : []),
     ...(you ? ["## Who you are talking to", `Their name is **${you}**. Use it. Never ask for it.`, ""] : []),
     "## Models",
     chat ? `Hermes session model: \`${chat}\`.` : "Hermes session model: inherit from Hermes config.",
@@ -159,6 +198,7 @@ module.exports = {
   HARNESSES,
   DEFAULT_HARNESS,
   isBannedChatModel,
+  isLocalProvider,
   normalizeChatModel,
   normalizeHarness,
   harnessInfo,

@@ -27,6 +27,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
@@ -256,7 +257,7 @@ test("Delete still goes through the confirmed path, never straight to the store"
   // destroy a whole transcript.
   // Comments are stripped first: the note explaining this bug names the very
   // call it forbids, and matching that would pass forever by accident.
-  const code = sidebar.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const code = stripComments(sidebar);
   assert.ok(
     !/window\.hydo\.deleteAgent/.test(code),
     "the sidebar must hand entries up to Shell, not delete them itself"

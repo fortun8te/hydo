@@ -9,12 +9,16 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
-const card = fs.readFileSync(path.join(ROOT, "src/screens/PlanCard.jsx"), "utf8");
+// Comments stripped before every source scan: the rules below are written
+// down in the very files they police, and a scan that cannot tell prose
+// from code turns "explain why" into a test failure.
+const card = stripComments(fs.readFileSync(path.join(ROOT, "src/screens/PlanCard.jsx"), "utf8"));
 const comp = fs.readFileSync(path.join(ROOT, "src/screens/Composer.jsx"), "utf8");
 const shell = fs.readFileSync(path.join(ROOT, "src/screens/Shell.jsx"), "utf8");
-const tx = fs.readFileSync(path.join(ROOT, "src/screens/Transcript.jsx"), "utf8");
+const tx = stripComments(fs.readFileSync(path.join(ROOT, "src/screens/Transcript.jsx"), "utf8"));
 const css = fs.readFileSync(path.join(ROOT, "src/screens/composer.css"), "utf8");
 const store = fs.readFileSync(path.join(ROOT, "electron/store.cjs"), "utf8");
 

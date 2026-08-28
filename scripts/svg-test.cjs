@@ -3,9 +3,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
-const src = fs.readFileSync(path.join(ROOT, "src", "screens", "RichContent.jsx"), "utf8");
+// Comments stripped before every source scan: the rules below are written
+// down in the very files they police, and a scan that cannot tell prose
+// from code turns "explain why" into a test failure.
+const src = stripComments(fs.readFileSync(path.join(ROOT, "src", "screens", "RichContent.jsx"), "utf8"));
 
 // THE SAFETY PROPERTY.
 //

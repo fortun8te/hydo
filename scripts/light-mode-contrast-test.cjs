@@ -13,6 +13,7 @@
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 let fails = 0;
@@ -134,7 +135,7 @@ for (const theme of ["light", "dark"]) {
 const productionRaw = fs.readFileSync(path.join(ROOT, "src", "screens", "production.css"), "utf8");
 // Strip comments first — the fix's own comment names the token it moved away
 // from, which would otherwise self-trigger the "did it regress" check below.
-const production = productionRaw.replace(/\/\*[\s\S]*?\*\//g, "");
+const production = stripComments(productionRaw);
 ok('.hy-botcreate__to uses --hy-text-muted, not --hy-text-faint', () => {
   const m = production.match(/\.hy-botcreate__to\s*\{[^}]*\}/);
   assert.ok(m, "could not find .hy-botcreate__to rule");

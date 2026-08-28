@@ -4,6 +4,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const assert = require("node:assert/strict");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 
@@ -189,7 +190,7 @@ async function main() {
   }
 
   // ---- The grid scheduler must be gone from the renderer.
-  const uf = fs.readFileSync(path.join(ROOT, "src/umbra/UmbraFace.jsx"), "utf8");
+  const uf = stripComments(fs.readFileSync(path.join(ROOT, "src/umbra/UmbraFace.jsx"), "utf8"));
   assert.ok(uf.includes("idleStep"), "UmbraFace uses the scheduler");
   assert.ok(!uf.includes("FIDGET_SLOT_S"), "the fixed grid is gone");
   assert.ok(!/function fidgetKind/.test(uf), "and its slot picker with it");

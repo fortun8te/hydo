@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
+const { stripComments } = require("./lib/source-scan.cjs");
 const gw = require("../electron/hermes-gateway.cjs");
 
 const { pinFor, toolProfiles, TOOL_PROFILES } = gw;
@@ -81,7 +82,7 @@ const preload = fs.readFileSync(path.join(ROOT, "electron", "preload.cjs"), "utf
 assert.ok(preload.includes("hydo:toolsets"), "toolsets is on the preload bridge");
 const main = fs.readFileSync(path.join(ROOT, "electron", "main.cjs"), "utf8");
 assert.ok(main.includes('ipcMain.handle("hydo:toolsets"'), "and handled in main");
-const rail = fs.readFileSync(path.join(ROOT, "src", "screens", "BotRail.jsx"), "utf8");
+const rail = stripComments(fs.readFileSync(path.join(ROOT, "src", "screens", "BotRail.jsx"), "utf8"));
 assert.ok(rail.includes("window.hydo?.toolsets?.()"), "the rail asks Hermes for the list");
 assert.ok(rail.includes("toggleToolset"), "and can write it back");
 assert.ok(!/const\s+TOOLSETS\s*=\s*\[/.test(rail), "no hardcoded copy of Hermes' registry");

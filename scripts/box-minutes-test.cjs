@@ -24,6 +24,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const {
   createBoxRuntime,
@@ -233,7 +234,7 @@ async function main() {
   });
 
   await test("the quit budget is a race, not a bare await", () => {
-    const src = fs.readFileSync(path.join(__dirname, "../electron/box-runtime.cjs"), "utf8");
+    const src = stripComments(fs.readFileSync(path.join(__dirname, "../electron/box-runtime.cjs"), "utf8"));
     assert.ok(/Promise\.race\(/.test(src), "stop's budget has to be a race or it can hang the quit");
     assert.ok(QUIT_STOP_BUDGET_MS <= 3000, "a person hitting Cmd-Q must not notice this");
     // 0.22s measured; anything under a second would be racing the measurement.
@@ -246,7 +247,7 @@ async function main() {
   // outright, so every dev restart left the box billing with nothing left on
   // this Mac that knew how to stop it.
   await test("every exit path in main.cjs issues the box stop", () => {
-    const src = fs.readFileSync(path.join(__dirname, "../electron/main.cjs"), "utf8");
+    const src = stripComments(fs.readFileSync(path.join(__dirname, "../electron/main.cjs"), "utf8"));
     assert.ok(/function stopBoxOnExit\(/.test(src), "there is one memoised exit stop");
     assert.ok(
       /budgetMs: boxRuntime\.QUIT_STOP_BUDGET_MS/.test(src),
@@ -282,7 +283,7 @@ async function main() {
 
   // ---- the sweep must not overshoot its own window ------------------------
   await test("the idle sweep ticks fast enough for a 3-minute window", () => {
-    const src = fs.readFileSync(path.join(__dirname, "../electron/main.cjs"), "utf8");
+    const src = stripComments(fs.readFileSync(path.join(__dirname, "../electron/main.cjs"), "utf8"));
     const m = /idleTimer = setInterval\([\s\S]*?\}, (\d[\d_]*)\);/.exec(src);
     assert.ok(m, "the idle sweep is still a timer");
     const tick = Number(m[1].replace(/_/g, ""));
@@ -294,7 +295,7 @@ async function main() {
 
   // ---- the standing bans survive this pass -------------------------------
   await test("nothing here disabled auto-stop or unbounded a TTL", () => {
-    const src = fs.readFileSync(path.join(__dirname, "../electron/box-runtime.cjs"), "utf8");
+    const src = stripComments(fs.readFileSync(path.join(__dirname, "../electron/box-runtime.cjs"), "utf8"));
     assert.ok(!/--no-auto-stop/.test(src), "--no-auto-stop stays banned");
     assert.ok(!/28800/.test(src), "28800 stays banned");
     assert.ok(!/ttlSeconds:\s*null/.test(src), "a null ttl stays banned");

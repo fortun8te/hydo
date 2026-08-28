@@ -17,6 +17,7 @@
 const assert = require("node:assert");
 const fs = require("node:fs");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 const lp = require("../electron/local-providers.cjs");
 
 const ROOT = path.join(__dirname, "..");
@@ -71,7 +72,7 @@ const provider = { id: "x", api: "http://box:1/v1", host: "box:1", placeholder: 
   // crosses the bridge, and a check that cannot tell prose from code would ban
   // writing the explanation down — which is how a guarantee loses the note
   // saying why it exists. Third time this exact trap has fired in this repo.
-  const code = preload.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const code = stripComments(preload);
   assert.ok(!/api_key/.test(code), "no key on the bridge");
   assert.ok(!/sk-[A-Za-z0-9]{8}/.test(code), "and no literal key anywhere in it");
 

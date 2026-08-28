@@ -4,6 +4,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const assert = require("node:assert/strict");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 
@@ -109,7 +110,7 @@ async function main() {
   // A chained poke must not restart the eye motion; the renderer guards on
   // `poke.played`, which extra clicks preserve.
   {
-    const src = fs.readFileSync(path.join(ROOT, "src/umbra/UmbraFace.jsx"), "utf8");
+    const src = stripComments(fs.readFileSync(path.join(ROOT, "src/umbra/UmbraFace.jsx"), "utf8"));
     assert.ok(src.includes("poke.played"), "play() is called once per poke, not once per click");
     assert.ok(/live\.hops \+= 1/.test(src), "an extra click adds a hop to the live poke");
     assert.ok(!/pokeRef\.current = \{[^}]*\}\s*;\s*\n\s*setPoking/.test(src), "no unconditional reset");
@@ -121,7 +122,7 @@ async function main() {
   assert.ok(uf.includes("pokeFrame"), "UmbraFace uses the shared curve");
   assert.ok(/S\.hopY/.test(uf), "the paint group translates by hopY");
   assert.ok(uf.includes("pokeTimer"), "spam-poke uses one owned timer");
-  const rt = fs.readFileSync(path.join(ROOT, "src/umbra/character-runtime.js"), "utf8");
+  const rt = stripComments(fs.readFileSync(path.join(ROOT, "src/umbra/character-runtime.js"), "utf8"));
   assert.ok(!rt.includes("hopY"), "the vendored engine stays untouched");
 
   console.log("poke-test ok");

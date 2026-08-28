@@ -73,6 +73,7 @@ diff, green in the suite, and moves no pixels:
 So take a photograph:
 
 ```sh
+npm run shot -- /tmp/<topic>-after.png          # or, to pick the port:
 HYDO_SHOT_PORT=5207 npx electron scripts/shot.cjs /tmp/<topic>-after.png
 ```
 
@@ -84,6 +85,20 @@ change did not land — go fix it, do not report it.
 `HYDO_SHOT_WIDTH` / `HYDO_SHOT_HEIGHT` exist for responsive work (the rail
 collapses below 880px). For behaviour that only happens *while* a window
 resizes, `scripts/window-check.cjs` is the harness.
+
+### When Hermes tells you the work is unverified
+
+Hydo turns on Hermes' `agent.verify_on_stop` for every teammate
+(`electron/bot-home.cjs`, `VERIFY_DEFAULTS`). If you edit code and then try to
+finish in the same turn without fresh passing evidence, you get one synthetic
+follow-up naming your changed files and the project's verify commands. It is
+bounded — at most two — and it never fires on a turn that touched only prose.
+
+Answer it honestly, and note what it CANNOT ask for: it names `npm run test`
+and `npm run build`, because those are the commands `package.json` declares.
+Both of those go green on a CSS rule that renders nothing. If your change was
+visual, the nudge is satisfied by the suite and you are still not done — take
+the photograph and look at it.
 
 Add a test for what you changed. Every `scripts/*-test.cjs` is plain
 `node:assert` — copy the nearest one, and register it at the end of the `test`

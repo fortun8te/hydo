@@ -309,10 +309,36 @@ export default function Shell({ state }) {
    * to install.
    */
   const [updateBehind, setUpdateBehind] = useState(0);
+  // "", "running", "done", "failed" — the ticker's own state, so the whole
+  // update happens where the user noticed it instead of behind three more
+  // clicks in Settings.
+  const [updatePhase, setUpdatePhase] = useState("");
   useEffect(() => {
     const ask = window.hydo?.updateStatus;
     if (typeof ask !== "function") return undefined;
     let gone = false;
+    // Re-ask when the window is focused again, NOT on a timer. The launch-time
+    // cache is why someone can sit on an old build for a day: the answer was
+    // computed once, before the commits existed. But a poll would be a timer
+    // spawning git with nobody watching, which this file already refuses on
+    // principle (update-flow-test.cjs enforces it). Focus is the one moment
+    // the answer can matter and someone is there to see it, and it costs
+    // exactly nothing while the app sits in the background.
+    const recheck = () => {
+      if (gone) return;
+      Promise.resolve(ask({ fresh: true }))
+        .then((res) => {
+          if (gone || !res) return;
+          // Never overwrite a finished install with a stale count: once a
+          // build has landed, the ticker's job is to say "reopen".
+          setUpdatePhase((phase) => {
+            if (!phase) setUpdateBehind(res.available ? Number(res.behind) || 0 : 0);
+            return phase;
+          });
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("focus", recheck);
     Promise.resolve(ask())
       .then((res) => {
         if (gone || !res || !res.available) return;
@@ -324,7 +350,33 @@ export default function Shell({ state }) {
       .catch(() => {});
     return () => {
       gone = true;
+      window.removeEventListener("focus", recheck);
     };
+  }, []);
+
+  /**
+   * One press: build, install, then offer the reopen.
+   *
+   * The pane's flow keeps its confirm — someone who opened Settings has not
+   * necessarily decided to hand the machine over for ninety seconds. The
+   * ticker has: it only exists when an update exists, it is labelled "Update",
+   * and pressing it is the decision. The refusals that made the long path safe
+   * live in the main process (`hydo:updateNow`), not in the extra clicks.
+   */
+  const onUpdateNow = useCallback(() => {
+    const run = window.hydo?.updateNow;
+    if (typeof run !== "function") return;
+    setUpdatePhase((phase) => {
+      if (phase === "running") return phase;
+      if (phase === "done") {
+        window.hydo?.relaunch?.();
+        return phase;
+      }
+      Promise.resolve(run())
+        .then((res) => setUpdatePhase(res && res.ok ? "done" : "failed"))
+        .catch(() => setUpdatePhase("failed"));
+      return "running";
+    });
   }, []);
   // Straight to the Updates pane. `_pane` is a settings field (see Settings.jsx),
   // so the pane is chosen by writing it before the dialog mounts rather than by
@@ -801,6 +853,8 @@ export default function Shell({ state }) {
         onSettings={onOpenSettings}
         onUpdate={onUpdate}
         updateBehind={updateBehind}
+        updatePhase={updatePhase}
+        onUpdateNow={onUpdateNow}
         onAbout={onAbout}
         onHelp={onHelp}
         onFeedback={onFeedback}

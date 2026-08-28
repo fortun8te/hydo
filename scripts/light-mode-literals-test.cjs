@@ -8,6 +8,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..", "src");
 
@@ -62,7 +63,7 @@ for (const file of files) {
   // then strip var(--token, <fallback>) calls: a literal sitting in a
   // fallback slot is inert as long as the token itself is defined, which is
   // asserted separately below rather than by banning the fallback text.
-  const noComments = src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
+  const noComments = stripComments(src);
   const noVarFallbacks = noComments.replace(/var\(\s*--[\w-]+\s*,[^)]*\)/g, "var(--token)");
   const lines = noVarFallbacks.split("\n");
   const rawLines = src.split("\n");

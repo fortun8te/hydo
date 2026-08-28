@@ -200,6 +200,9 @@ function getRuntime(pin) {
       ready: false,
       reqCounter: 0,
       pending: new Map(),
+      // Requests this process timed out on, kept only until the child's late
+      // reply arrives so an orphaned session can be closed. See `request`.
+      abandoned: new Map(),
       sessionIndex: new Map(),
       // Highest event seq seen per session, and the gateway's replay epoch.
       // Both are the CLIENT half of Hermes' reconnect contract. `lastSeq` was
@@ -313,6 +316,22 @@ function handleLine(rt, raw) {
     return;
   }
   if (!msg || typeof msg !== 'object') return;
+
+  // A late reply to a request this process already gave up on.
+  if (msg.id != null && !rt.pending.has(msg.id) && rt.abandoned.has(msg.id)) {
+    const gone = rt.abandoned.get(msg.id);
+    rt.abandoned.delete(msg.id);
+    const sid = msg.result && msg.result.session_id;
+    if (sid) {
+      // Close it on the child that created it. Nothing in this process holds
+      // this id, so this is the only chance to release it.
+      pushLog(rt, `[session] reaping abandoned ${gone.method} session ${sid}`);
+      request('session.close', { session_id: sid }, 15_000, rt.pin).catch(() => {});
+    } else {
+      pushLog(rt, `[protocol] late reply to abandoned ${gone.method} (id ${msg.id})`);
+    }
+    return;
+  }
 
   // Response to one of our requests?
   if (msg.id != null && rt.pending.has(msg.id)) {
@@ -779,6 +798,18 @@ function request(method, params = {}, timeoutMs = REQUEST_TIMEOUT_MS, pin) {
         const id = `h${++rt.reqCounter}`;
         const timer = setTimeout(() => {
           rt.pending.delete(id);
+          // The local promise gives up here; the PYTHON side does not. It is
+          // still working on this request and will answer eventually, and for
+          // `session.create` that answer carries a session id for a session
+          // this process would otherwise never learn about and therefore never
+          // close -- a live session leaked per timed-out create. Remember the
+          // id so the reply can be reaped when it lands (see `reapAbandoned`).
+          rt.abandoned.set(id, { method, at: Date.now() });
+          if (rt.abandoned.size > 64) {
+            // Bounded: this map must never become the leak it exists to stop.
+            const oldest = rt.abandoned.keys().next().value;
+            rt.abandoned.delete(oldest);
+          }
           reject(new Error(`timeout after ${timeoutMs}ms: ${method}`));
         }, timeoutMs);
         timer.unref?.();
@@ -1141,6 +1172,36 @@ function createParams(cwd, title, opts) {
 function sessionFor(botId, opts = {}) {
   if (!botId) return Promise.reject(new Error('sessionFor: botId required'));
   const pin = pinFor(opts);
+  /**
+   * The close of the session being REPLACED, awaited before the new one is
+   * created.
+   *
+   * This used to be `close(botId).catch(() => {})` -- fired and dropped -- and
+   * then `session.create` went out immediately behind it. So a create raced a
+   * close over the same profile: two sessions briefly live on one child, and
+   * on a slow close the gateway could still be tearing the old python session
+   * down while the new one was being built on top of it. Awaiting costs one
+   * round trip on a path that already spawns a process.
+   */
+  let closing = null;
+  /**
+   * The stored session to RESUME instead of starting from nothing.
+   *
+   * A tool-profile change is a different child process, so the live session
+   * cannot survive it -- but the transcript is not in the child, it is in the
+   * bot's own `state.db`, and `session.resume` reads it back. Without this, a
+   * basic teammate asked to do something that widens its tools came back with
+   * no memory of the conversation that asked: the rebuild was invisible, so
+   * the amnesia looked like the model ignoring what had just been said.
+   *
+   * Only ever set when the MODEL is unchanged. Hermes binds the model at
+   * `session.create` (methods_session.py) and `session.resume`, `session.branch`
+   * and `prompt.submit` all take no model, so a model change genuinely cannot
+   * carry its history across -- that is a protocol limit, not a choice, and
+   * `sessionRebuildLoss` below is how the app is expected to say so rather
+   * than erasing the thread quietly.
+   */
+  let resumeKey = '';
   const existing = bots.get(botId);
   if (existing && !existing.stale) {
     // A tool profile change is a different CHILD, so the old session cannot be
@@ -1164,10 +1225,18 @@ function sessionFor(botId, opts = {}) {
         return Promise.resolve(publicSession(existing));
       }
       pushLog(null, `[session] ${botId} moving model "${haveProv}/${haveModel}" → "${wantProv}/${wantModel}"`);
-      close(botId).catch(() => {});
+      // A model change closes the session and stops here. Without this
+      // `else`, control fell through to the profile branch below and called
+      // `close` a SECOND time on a bot that had already been forgotten, while
+      // logging `moving profile "x" -> "x"` -- a line that has been read as
+      // evidence of a profile change that never happened.
+      closing = close(botId);
+    } else {
+      pushLog(null, `[session] ${botId} moving profile "${existing.pin}" → "${pin}"`);
+      // Same model, different child: the transcript can and must come across.
+      resumeKey = String(existing.storedSessionId || '');
+      closing = close(botId);
     }
-    pushLog(null, `[session] ${botId} moving profile "${existing.pin}" → "${pin}"`);
-    close(botId).catch(() => {});
   } else if (existing && existing.stale) {
     forget(botId);
   }
@@ -1193,13 +1262,31 @@ function sessionFor(botId, opts = {}) {
   const childWasReady = !!(rt.ready && rt.child && rt.child.exitCode === null);
   if (!childWasReady) safeCall(opts.onStage, 'gateway-start');
 
-  const creating = ensure(pin)
+  const creating = Promise.resolve(closing)
+    // A close that fails must not block the replacement: the old session is
+    // already forgotten locally either way, and refusing to build a new one
+    // would strand the teammate on a session nothing can reach.
+    .catch(() => undefined)
+    .then(() => ensure(pin))
     .then(() => {
       safeCall(opts.onStage, 'session-create');
       try {
         fs.mkdirSync(cwd, { recursive: true });
       } catch (err) {
         pushLog(null, `[session] could not create workspace ${cwd}: ${err.message}`);
+      }
+      if (resumeKey) {
+        pushLog(null, `[session] ${botId} resuming ${resumeKey} on profile "${pin}"`);
+        // A resume that fails must not lose the teammate: fall back to a fresh
+        // session rather than leaving the bot with none. The transcript is
+        // gone in that case, which is worth a log line and not worth a crash.
+        return request('session.resume', { session_id: resumeKey, cols: 80 }, REQUEST_TIMEOUT_MS, pin).catch(
+          (err) => {
+            pushLog(null, `[session] resume of ${resumeKey} failed (${err.message}); starting fresh`);
+            resumeKey = '';
+            return request('session.create', createParams(cwd, title, opts), REQUEST_TIMEOUT_MS, pin);
+          }
+        );
       }
       return request('session.create', createParams(cwd, title, opts), REQUEST_TIMEOUT_MS, pin);
     })
@@ -1311,6 +1398,23 @@ function submit(botId, text, handlers = {}, opts = {}) {
       const bot = requireBot(botId);
       if (bot.turn && !bot.turn.settled) {
         throw new Error(`bot ${botId} already has a turn in flight`);
+      }
+      // The same rule for the background slot, which had none.
+      //
+      // `bot.bg` is a single field, so a second background job simply
+      // overwrote the first. Three things then went wrong at once and none of
+      // them raised anything: the first job's promise was never settled (its
+      // caller waited forever), `turnForEvent` routed the FIRST job's
+      // `background.complete` to the SECOND job's handlers, and interrupt or
+      // steer aimed at "the background job" hit whichever one had overwritten
+      // the other. That is the whole of "jobs get orphaned" and "Hydo steers
+      // work that no longer exists".
+      //
+      // A foreground turn alongside a running background job is still allowed
+      // -- separate slots, and talking to a teammate while it works in the
+      // background is the point of the feature.
+      if (opts.background && bot.bg && !bot.bg.settled) {
+        throw new Error(`bot ${botId} already has a background job in flight`);
       }
       // A turn on the user's own hardware gets the local ceiling: ~16 tok/s
       // measured, and one Hermes compaction alone may legally run 1200s. See

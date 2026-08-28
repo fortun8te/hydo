@@ -212,6 +212,58 @@ compression:
 `;
 
 /**
+ * Verification-on-stop, the one `agent` setting Hydo has an opinion about.
+ *
+ * Hermes ships this and Hydo had never turned it on. When a teammate edits
+ * code and then tries to FINISH in the same turn without fresh passing
+ * verification evidence, `agent/verification_stop.py` appends one synthetic
+ * follow-up telling it to run the project's real verify command first. It is
+ * bounded by construction (max_attempts=2 inside Hermes) and it already
+ * suppresses itself when the turn touched only prose —
+ * `_NON_CODE_VERIFY_EXTENSIONS` means editing a README or a SKILL.md never
+ * demands a verification script. So it is not a per-turn nudge; it fires only
+ * on the exact shape Hydo keeps shipping bugs in.
+ *
+ * The default in this version of Hermes is OFF (config_defaults.py:262, and
+ * the v31/v32 migrations write `false` into existing installs), so nothing
+ * short of an explicit value here would have reached a teammate.
+ *
+ * WHY IT HAS TO BE HERE and not in ~/.hermes/config.yaml: Hermes reads it with
+ * a bare `load_config_readonly()` from inside the conversation loop
+ * (conversation_loop.py, the finalization gate), and tui_gateway binds
+ * HERMES_HOME to the SESSION's profile home for the duration of the turn
+ * (server.py:3194, `set_hermes_home_override(profile_home)`). The config that
+ * decision reads is therefore this file — the same trap that hid mcp_servers,
+ * providers and browser from every teammate.
+ */
+const VERIFY_DEFAULTS = { verify_on_stop: "true" };
+
+/**
+ * The ONLY `agent.*` keys mirrored out of the launch config.
+ *
+ * Deliberately not the whole `agent` block. That block carries `max_turns`,
+ * `disabled_toolsets`, `personalities` and the gateway timeouts, and two of
+ * those actively fight Hydo:
+ *
+ *  - `disabled_toolsets` is the user's list for his own CLI (it disables
+ *    code_execution, vision, image_gen, ...). Hydo already decides a
+ *    teammate's tools per bot, as a CHILD PROCESS pinned with
+ *    HERMES_TUI_TOOLSETS (hermes-gateway.cjs, TOOL_PROFILES). Mirroring the
+ *    block would let a config file silently subtract from a pin the UI shows
+ *    as enabled — a control that looks on and is off, which is the failure
+ *    this repo hunts.
+ *  - `max_turns` / the gateway timeouts are Hydo's own per-session business;
+ *    it sends them as RPC params, and a profile-file copy would be a second
+ *    source of truth that nobody edits.
+ *
+ * Mirroring something that fights the app's own settings is worse than not
+ * mirroring at all, so this is a SUBKEY allowlist: Hydo's default stands, and
+ * the user can still override it globally by writing the key in
+ * ~/.hermes/config.yaml.
+ */
+const AGENT_MIRROR_SUBKEYS = ["verify_on_stop", "verify_guidance", "max_verify_nudges"];
+
+/**
  * Read the `mode:` scalar out of a profile config's LAST `approvals:` block
  * (same "last block wins" rule as `withDeny` below — YAML honours the final
  * duplicate key, so a mode set by a Settings UI must land there, not in an
@@ -386,17 +438,64 @@ function yamlBlocks(text, keys) {
   return out.join("\n");
 }
 
+/**
+ * Lift named SCALAR subkeys out of one top-level YAML block, as {key: value}.
+ *
+ * The sibling of `yamlBlocks`, for the case where copying the whole block
+ * would be wrong (see AGENT_MIRROR_SUBKEYS). Scalars only and one level deep
+ * on purpose: the keys this is used for are booleans and small numbers, and a
+ * hand-rolled reader that tried to carry nested structure would be a YAML
+ * parser, which is exactly what this file refuses to grow.
+ */
+function yamlSubKeys(text, block, keys) {
+  const lines = String(text || "").split("\n");
+  const out = {};
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) if (new RegExp(`^${block}:`).test(lines[i])) at = i;
+  if (at < 0) return out;
+  for (let i = at + 1; i < lines.length && (/^\s/.test(lines[i]) || /^\s*$/.test(lines[i])); i++) {
+    // One level deep only: a two-space key. A deeper line belongs to a nested
+    // mapping (`personalities:`) and is none of our business.
+    const m = /^ {2}([A-Za-z_][\w-]*):[ \t]*(.*?)\s*(#.*)?$/.exec(lines[i]);
+    if (!m || !keys.includes(m[1])) continue;
+    const val = m[2].replace(/^["']|["']$/g, "");
+    if (val) out[m[1]] = val;
+  }
+  return out;
+}
+
+/**
+ * Hydo's `agent:` block for a profile: our verification defaults, with any
+ * explicit launch-config value winning.
+ *
+ * Emitted as ONE block. Two `agent:` keys in a YAML file is not a merge — the
+ * last one replaces the first outright, which is the same duplicate-key trap
+ * that once silently discarded the `approvals.deny` list here.
+ */
+function agentBlock(launchText) {
+  const merged = { ...VERIFY_DEFAULTS, ...yamlSubKeys(launchText, "agent", AGENT_MIRROR_SUBKEYS) };
+  const keys = Object.keys(merged);
+  if (!keys.length) return "";
+  return ["agent:", ...keys.map((k) => `  ${k}: ${merged[k]}`)].join("\n");
+}
+
 function writeProfileConfig(home) {
   const file = path.join(home, "config.yaml");
   let mirrored = "";
+  let launchText = "";
   try {
     const launch = path.join(os.homedir(), ".hermes", "config.yaml");
     if (fs.existsSync(launch)) {
-      mirrored = yamlBlocks(fs.readFileSync(launch, "utf8"), MIRROR_KEYS);
+      launchText = fs.readFileSync(launch, "utf8");
+      mirrored = yamlBlocks(launchText, MIRROR_KEYS);
     }
   } catch {
     /* no launch config: the bot runs on Hermes' defaults, as before */
   }
+  // Written even with no launch config at all: verify-on-stop is Hydo's own
+  // default, not something inherited.
+  const agent = agentBlock(launchText);
+  mirrored = mirrored ? `${mirrored}\n${agent}` : agent;
   const want = withDeny(mirrored ? `${PROFILE_CONFIG}\n${mirrored}\n` : PROFILE_CONFIG);
   try {
     // Only when it would change: this file is cheap, but a bot may have been
@@ -672,6 +771,8 @@ function revokeAllowlistEntry(botId, pattern) {
 }
 
 module.exports = {
+  agentBlock,
+  yamlSubKeys,
   profileName,
   profileDir,
   workspaceDir,

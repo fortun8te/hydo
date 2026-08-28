@@ -16,6 +16,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const lp = require("../electron/local-providers.cjs");
@@ -145,7 +146,7 @@ assert.equal(lp.probeUrl("http://host:1/v1/"), "http://host:1/v1/models");
   // The key is read on the main side of that boundary, nowhere else.
   assert.ok(main.includes("localProviders.keyFor("), "main must fetch the key itself");
   // Strip comments before checking: the renderer explains WHY it has no key.
-  const settingsCode = settings.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const settingsCode = stripComments(settings);
   assert.ok(
     !/api_key|keyFor|Authorization/.test(settingsCode),
     "no key handling in the renderer"

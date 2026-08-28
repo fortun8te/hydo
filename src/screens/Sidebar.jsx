@@ -217,6 +217,18 @@ function bornNow(entry) {
   return Number.isFinite(t) && Date.now() - t < BORN_MS;
 }
 
+/**
+ * What the one ticker button means in each of its four states. Kept beside the
+ * button rather than written inline so the tooltip and the label cannot drift
+ * apart -- a pair this codebase has already had disagree with each other.
+ */
+const UPDATE_TIP = {
+  running: "Building and installing. A minute or two.",
+  done: "Installed. Reopen Hydo to run the new build.",
+  failed: "The build failed. Nothing in /Applications was touched. Press to try again.",
+  "": "Install it now",
+};
+
 function Sidebar({
   entries,
   agents,
@@ -259,6 +271,8 @@ function Sidebar({
   // on every keystroke in the composer.
   onUpdate,
   updateBehind = 0,
+  updatePhase = "",
+  onUpdateNow,
   onAbout,
   onHelp,
   onFeedback,
@@ -923,19 +937,28 @@ function Sidebar({
             "unknown" answer arrives here as 0 and draws nothing at all, which
             is the correct output for "cannot tell". It is a real button, not
             an ornament — it opens the Updates pane, where the install lives. */}
-        {updateBehind > 0 ? (
+        {updateBehind > 0 || updatePhase ? (
           <button
             type="button"
             className="sand-update"
-            data-tip="An update is ready to install"
-            title="An update is ready to install"
-            onClick={() => onUpdate?.()}
+            data-phase={updatePhase || "ready"}
+            data-tip={UPDATE_TIP[updatePhase] || UPDATE_TIP[""]}
+            title={UPDATE_TIP[updatePhase] || UPDATE_TIP[""]}
+            // Busy is not clickable: a second press mid-build cannot help. The
+            // failure state deliberately stays pressable, so a retry does not
+            // need a trip through Settings.
+            disabled={updatePhase === "running"}
+            onClick={() => onUpdateNow?.()}
           >
             <span className="sand-update__dot" aria-hidden="true" />
             <span className="sand-update__label">
-              Update ready
-              {" · "}
-              {updateBehind} new
+              {updatePhase === "running"
+                ? "Updating…"
+                : updatePhase === "done"
+                  ? "Reopen to finish"
+                  : updatePhase === "failed"
+                    ? "Update failed · retry"
+                    : `Update · ${updateBehind} new`}
             </span>
           </button>
         ) : null}

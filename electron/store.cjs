@@ -367,7 +367,10 @@ function normalizeState(raw) {
   if (!settings.model || /muse/i.test(settings.model) || modelPick.isBannedChatModel(settings.model)) {
     settings.model = modelPick.DEFAULT_CHAT;
   }
-  if (/grok/i.test(settings.model)) settings.provider = modelPick.DEFAULT_PROVIDER;
+  // Never re-point a self-hosted endpoint because of what its model is CALLED.
+  if (modelPick.isLocalProvider(settings.provider)) {
+    // leave it alone
+  } else if (/grok/i.test(settings.model)) settings.provider = modelPick.DEFAULT_PROVIDER;
   else if (/muse/i.test(settings.model)) settings.provider = modelPick.MUSE_PROVIDER;
   const landing = cannedLandingTexts(settings.userName);
   const messages = raw.messages && typeof raw.messages === "object" ? raw.messages : {};
@@ -3633,9 +3636,15 @@ function createStore(opts = {}) {
         // stops every bot sounding the same: it has to come from something
         // true about THIS moment rather than from a template.
         "Say hello, and then say one more thing that is actually yours.",
-        "That second thing can be what you are curious about, something you noticed about how you were set up, or a real question about what they are working on. One question, asked because you want to know.",
+        // NOT "something you noticed about how you were set up". That licence is
+        // what produced the opening Michael flagged as presumptuous: a bot
+        // called test opened by commenting on the name he had been given. The
+        // second beat has to come from the work or from real curiosity, never
+        // from reading his setup back to him.
+        "That second thing is yours: what you are actually curious about, or a real question about the work in front of them.",
+        "At most one question, and only if you want the answer. A second line that asks nothing is also a complete opening.",
         `Not a menu. No "what can I help you with", no list of what you could do, no offer of categories.`,
-        "Do not describe yourself in the abstract and do not thank them for making you.",
+        "Do not describe yourself in the abstract, do not thank them for making you, and do not comment on the name they gave you or on how they set you up.",
         "Two short lines. Their name once, at most.",
         "No tools. No SKIP.",
       ]
@@ -3720,7 +3729,19 @@ function createStore(opts = {}) {
       state.settings = { ...state.settings, ...patch };
       if (Object.prototype.hasOwnProperty.call(patch, "model")) {
         state.settings.model = modelPick.normalizeChatModel(state.settings.model);
-        if (/muse/i.test(state.settings.model)) {
+        // Two things outrank the model name, in this order:
+        //   1. a provider named in THIS patch -- the user just picked a
+        //      machine, and a model string cannot outvote that;
+        //   2. a local provider already in effect -- changing which model your
+        //      own box serves must not move the turn onto the network.
+        // Only when neither holds does the name decide.
+        const pickedProvider =
+          Object.prototype.hasOwnProperty.call(patch, "provider") &&
+          String(patch.provider || "").trim();
+        const stayLocal = modelPick.isLocalProvider(state.settings.provider);
+        if (pickedProvider || stayLocal) {
+          // leave provider alone
+        } else if (/muse/i.test(state.settings.model)) {
           state.settings.provider = modelPick.MUSE_PROVIDER;
         } else if (/grok/i.test(state.settings.model)) {
           state.settings.provider = modelPick.DEFAULT_PROVIDER;

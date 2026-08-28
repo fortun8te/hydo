@@ -21,6 +21,7 @@ const assert = require("node:assert");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const store = fs.readFileSync(path.join(ROOT, "electron/store.cjs"), "utf8");
@@ -32,7 +33,7 @@ const settings = fs.readFileSync(path.join(ROOT, "src/screens/Settings.jsx"), "u
 // Strip comments first: these very files explain the bug BY NAMING IT, and a
 // test that cannot tell an explanation from a value would ban writing the
 // explanation down.
-const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const strip = stripComments;
 const codeOnly = strip(store);
 const shellCode = strip(shell);
 assert.ok(!/"Michael"/.test(codeOnly), "no hardcoded first name in the store");

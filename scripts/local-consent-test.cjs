@@ -36,6 +36,7 @@ const os = require("node:os");
 const path = require("node:path");
 const http = require("node:http");
 const net = require("node:net");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
@@ -255,7 +256,7 @@ async function main() {
   // later) rule already set the property, and nothing moves. So resolve it.
   // Comments stripped first: a `/* ... */` before a rule otherwise ends up
   // parsed as part of its selector, and every lookup silently misses.
-  const css = read("src/screens/rails.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const css = stripComments(read("src/screens/rails.css"));
   const rules = [];
   for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
     const body = m[2];

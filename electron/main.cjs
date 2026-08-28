@@ -183,6 +183,28 @@ function saveWindowState(win) {
   }
 }
 
+
+/**
+ * Is this the app itself, rather than somewhere the app was pushed to?
+ *
+ * Packaged builds load the bundle over file://; `npm run dev` loads it from
+ * the Vite dev server on localhost. Nothing else is Hydo.
+ */
+function isAppUrl(url) {
+  const raw = String(url || "");
+  if (!raw) return false;
+  if (raw.startsWith("file://")) return true;
+  try {
+    const u = new URL(raw);
+    return (
+      (u.protocol === "http:" || u.protocol === "https:") &&
+      (u.hostname === "localhost" || u.hostname === "127.0.0.1")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
   const saved = loadWindowState();
   const win = new BrowserWindow({
@@ -199,7 +221,7 @@ function createWindow() {
        (src/screens/rails.css), and the Settings nav drops its labels for its
        icons under 720 (src/kit/ui.css).
 
-       400 is measured, not chosen: scripts/overlay-narrow-glow-test.cjs drives
+       400 is measured, not chosen: scripts/overlay-narrow-glow-shot.cjs drives
        a real window down to 320px and asserts zero horizontal overflow, a
        full-width transcript with the rail open, and an unclipped Settings
        body at every step. 400 is the last width where the composer input is
@@ -237,9 +259,29 @@ function createWindow() {
     saveWindowState(win);
   });
 
+  // Same scheme gate as the `hydo:openExternal` IPC, for the same reason: the
+  // URL can come from an artifact a model wrote, and `shell.openExternal`
+  // hands file:// and custom schemes straight to the OS to open with whatever
+  // is registered for them. This handler had no gate while the IPC beside it
+  // did, so `window.open` was the way around the check.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:\/\//i.test(String(url || ""))) shell.openExternal(url);
     return { action: "deny" };
+  });
+  // The app window renders the app and nothing else. Without this, anything
+  // that can set `location` — injected artifact content included — replaces
+  // the whole renderer with a remote page that still sits behind the preload
+  // bridge. Only the app's own origin (file:// in a package, the Vite dev
+  // server otherwise) may load here; everything else is refused and, if it is
+  // a normal web link, opened in the real browser instead.
+  win.webContents.on("will-navigate", (e, url) => {
+    if (isAppUrl(url)) return;
+    e.preventDefault();
+    if (/^https?:\/\//i.test(String(url || ""))) shell.openExternal(url);
+  });
+  win.webContents.on("will-attach-webview", (e) => {
+    // Hydo has no <webview>. One appearing means content wrote it.
+    e.preventDefault();
   });
   win.webContents.on("console-message", (_e, level, message, line, sourceId) => {
     console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
@@ -832,6 +874,25 @@ app.whenReady().then(() => {
     desktopWin.on("closed", () => {
       desktopWin = null;
     });
+    // This window shows one remote screen. It opens no popups, and it does not
+    // follow the remote page anywhere else.
+    desktopWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    const vncOrigin = (() => {
+      try {
+        return new URL(got.url).origin;
+      } catch {
+        return "";
+      }
+    })();
+    desktopWin.webContents.on("will-navigate", (e, url) => {
+      let same = false;
+      try {
+        same = Boolean(vncOrigin) && new URL(url).origin === vncOrigin;
+      } catch {
+        same = false;
+      }
+      if (!same) e.preventDefault();
+    });
     await desktopWin.loadURL(got.url);
     return { ok: true, mode: got.mode };
   });
@@ -961,12 +1022,53 @@ app.whenReady().then(() => {
    * when something explicitly checks (the Updates pane's "Check now", which
    * calls hydo:checkBuild below and writes through to this cache).
    */
-  ipcMain.handle("hydo:updateStatus", () => {
-    if (!updateCache) {
+  ipcMain.handle("hydo:updateStatus", (_e, opts) => {
+    // `{ fresh: true }` is the periodic re-check: an app left open for a day
+    // was answering with the count it computed at launch, so an update that
+    // landed at noon stayed invisible until the next restart. The default is
+    // still the cached answer -- this runs `git fetch`-less local git, but it
+    // is still process spawning, and the ticker asks on every mount.
+    if (!updateCache || (opts && opts.fresh)) {
       const info = buildInfo.buildInfo(app.isPackaged);
       updateCache = statusFrom(info, buildInfo.check(info));
     }
     return ok(updateCache);
+  });
+
+  /**
+   * The whole update, in one call: check, build, install.
+   *
+   * The Settings pane's version asks for a confirm first, because someone who
+   * wandered into Updates has not necessarily decided to give the machine up
+   * for ninety seconds. The TICKER is different: it is mounted only when an
+   * update genuinely exists, it says "Update ready", and pressing it is
+   * already the deliberate act. Making that press open a pane containing
+   * another button that opens a confirm containing a third button was four
+   * clicks to do the thing the first click asked for.
+   *
+   * Everything that made the pane's path safe is kept -- the mid-turn refusal,
+   * the single-flight guard, and the rule that the running app is not replaced
+   * until the user chooses to reopen. Only the clicking is gone.
+   */
+  ipcMain.handle("hydo:updateNow", async () => {
+    const info = buildInfo.buildInfo(app.isPackaged);
+    const busy = (store.getState().agents || []).filter((a) => a.status === "working");
+    if (busy.length) {
+      return { ok: false, reason: "busy", detail: `${busy[0].name || "A teammate"} is mid-turn.` };
+    }
+    if (rebuilding) return { ok: false, reason: "already-running" };
+    rebuilding = true;
+    try {
+      const res = await buildInfo.rebuildAndInstall({ repo: info.repo });
+      if (res && res.ok) {
+        // The cache described the build we just replaced.
+        const next = buildInfo.buildInfo(app.isPackaged);
+        updateCache = statusFrom(next, buildInfo.check(next));
+      }
+      return res;
+    } finally {
+      rebuilding = false;
+    }
   });
 
   ipcMain.handle("hydo:readArtifact", (_e, id) => store.readArtifact(id));

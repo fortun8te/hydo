@@ -23,7 +23,11 @@
 const assert = require("assert");
 const fs = require("fs");
 const path = require("path");
-const read = (p) => fs.readFileSync(path.join(__dirname, "..", p), "utf8");
+const { stripComments } = require("./lib/source-scan.cjs");
+// Comments stripped before every source scan: the rules below are written
+// down in the very files they police, and a scan that cannot tell prose
+// from code turns "explain why" into a test failure.
+const read = (p) => stripComments(fs.readFileSync(path.join(__dirname, "..", p), "utf8"));
 
 const shell = read("src/screens/Shell.jsx");
 const transcript = read("src/screens/Transcript.jsx");

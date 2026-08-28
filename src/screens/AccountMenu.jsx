@@ -88,7 +88,14 @@ export default function AccountMenu({
           role="menuitem"
           onClick={() => pick(onSignOut)}
         >
-          <i className="gb-icon gb-icon-arrow-right" />
+          {/* REASONED (not measured): the kit has no literal "sign-out" or
+              "door" glyph (checked src/kit/icons.css). arrow-bracket-from-right
+              is an arrow leaving a bracket frame — the standard exit mark —
+              rather than gb-icon-arrow-right, a plain forward arrow that reads
+              as "go forward" and was the reference complaint. VERIFIED the
+              class has a matching rule (icons.css:19, content \F359) so this
+              isn't the empty-glyph bug. */}
+          <i className="gb-icon gb-icon-arrow-bracket-from-right" />
           Log out
         </button>
       </div>

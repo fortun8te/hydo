@@ -15,6 +15,7 @@
 //     `trial_auto_stop_required`, so the clamp has to happen before the call.
 
 const assert = require("node:assert/strict");
+const { stripComments } = require("./lib/source-scan.cjs");
 const {
   createBoxRuntime,
   DEFAULT_TYPE,
@@ -322,7 +323,7 @@ async function main() {
   // ---- the id lives on the app, never on an agent --------------------------
   const fs = require("node:fs");
   const path = require("node:path");
-  const src = fs.readFileSync(path.join(__dirname, "../electron/box-runtime.cjs"), "utf8");
+  const src = stripComments(fs.readFileSync(path.join(__dirname, "../electron/box-runtime.cjs"), "utf8"));
   assert.ok(!/agent\.boxId|agentId.*boxId/.test(src), "a box id must never be stored per agent");
 
 

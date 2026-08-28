@@ -14,6 +14,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
@@ -196,10 +197,7 @@ const missing = [];
 for (const file of jsxFiles) {
   // Comments name these classes constantly (including the one right above
   // the fix for this very bug), so strip them first or the test flags prose.
-  const src = fs
-    .readFileSync(file, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^[ \t]*\/\/.*$/gm, "");
+  const src = stripComments(fs.readFileSync(file, "utf8"));
   for (const m of src.matchAll(/gb-icon-[a-z0-9-]+/g)) {
     // `gb-icon-chevron-${open ? "down" : "up"}` — the literal half is a
     // prefix, not a name. Those families are asserted explicitly below.

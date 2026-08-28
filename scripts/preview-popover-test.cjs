@@ -18,9 +18,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
-const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
+// Comments stripped before every source scan: the rules below are written
+// down in the very files they police, and a scan that cannot tell prose
+// from code turns "explain why" into a test failure.
+const read = (p) => stripComments(fs.readFileSync(path.join(ROOT, p), "utf8"));
 
 const art = read("src/screens/Artifact.jsx");
 const rails = read("src/screens/rails.css");

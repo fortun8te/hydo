@@ -19,15 +19,14 @@
 const assert = require("node:assert");
 const fs = require("node:fs");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 // Strip comments before parsing selectors. The comment above the fixed rule
 // quotes the broken selector to explain it, and a scan that cannot tell prose
 // from a selector would forbid writing the explanation down — which is how a
 // fix loses the reason it existed.
-const styles = fs
-  .readFileSync(path.join(ROOT, "src/styles.css"), "utf8")
-  .replace(/\/\*[\s\S]*?\*\//g, "");
+const styles = stripComments(fs.readFileSync(path.join(ROOT, "src/styles.css"), "utf8"));
 const sidebar = fs.readFileSync(path.join(ROOT, "src/screens/sidebar.css"), "utf8");
 
 // The avatar's own rule still says "fill me".

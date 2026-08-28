@@ -3,12 +3,13 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const preload = fs.readFileSync(path.join(ROOT, "electron/preload.cjs"), "utf8");
 const main = fs.readFileSync(path.join(ROOT, "electron/main.cjs"), "utf8");
 const gateway = fs.readFileSync(path.join(ROOT, "electron/hermes-gateway.cjs"), "utf8");
-const store = fs.readFileSync(path.join(ROOT, "electron/store.cjs"), "utf8");
+const store = stripComments(fs.readFileSync(path.join(ROOT, "electron/store.cjs"), "utf8"));
 // Almost every handler lives in main.cjs (excluded from this pass), but
 // approval-settings.cjs registers its own three via ipcMain.handle directly —
 // see its header comment for why (registered from store.cjs's own module

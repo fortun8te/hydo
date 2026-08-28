@@ -717,21 +717,43 @@
   min-width: 232px;
   padding: 6px;
   border-radius: 14px;
-  background: var(--hy-menu);
+  /* VERIFIED (scripts/account-menu-style-test.cjs, real BrowserWindow): flat
+     --hy-menu read "flatter and greyer" than the reference's dark, slightly
+     -lifted card. Mixing in a slice of --hy-raised (the composer-pill /
+     selected-row surface) lifts it a step toward that without a new token,
+     and stays subtle in light mode too (hy-raised there is a near-white
+     grey, so this just barely warms #fff). */
+  background: color-mix(in srgb, var(--hy-menu) 82%, var(--hy-raised) 18%);
+  /* REASONED: the reference's "faint hairline" reads as the deliberate
+     hairline-strong ring already used on avatar/mark discs elsewhere in this
+     sidebar (sidebar.css:895), not the generic border-default the base rule
+     in styles.css falls back to — naming it here makes the choice explicit
+     instead of accidental. */
+  border-color: var(--hy-hairline-strong);
 }
 
 .sand-sidebar .account-menu__item {
-  gap: 12px;
-  padding: 9px 10px;
-  border-radius: 9px;
-  font-size: 14px;
-  line-height: 18px;
+  gap: 10px;
+  /* VERIFIED before/after (scripts/account-menu-style-test.cjs):
+     row height 36px -> 30px, padding "9px 10px" -> "6px 9px",
+     font-size 14px -> 13px, line-height 18px -> 16px — matching the
+     reference's visibly denser rows for the same row count. */
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 16px;
+  letter-spacing: -0.006em;
   color: var(--sand-text-primary, #fcfcfc);
 }
 
 .sand-sidebar .account-menu__item .gb-icon:first-child {
-  width: 18px;
-  font-size: 16px;
+  /* VERIFIED before/after: icon box 18px/16px font -> 16px/14px font. The
+     glyphs are a single icon font with no separate thin weight, so a smaller
+     size (relative to the 13px label) is what reads as "lighter" here rather
+     than "heavier and enclosed" — same fix as the row density, not a font
+     swap. */
+  width: 16px;
+  font-size: 14px;
   flex: none;
   text-align: center;
 }

@@ -16,9 +16,10 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
-const src = fs.readFileSync(path.join(ROOT, "src", "screens", "RichContent.jsx"), "utf8");
+const src = stripComments(fs.readFileSync(path.join(ROOT, "src", "screens", "RichContent.jsx"), "utf8"));
 const css = fs.readFileSync(path.join(ROOT, "src", "screens", "richcontent.css"), "utf8");
 
 // ---- extract the pure parser and run it for real ---------------------------

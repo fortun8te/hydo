@@ -123,7 +123,8 @@ contextBridge.exposeInMainWorld("hydo", {
   checkBuild: () => ipcRenderer.invoke("hydo:checkBuild"),
   // The sidebar ticker's one question. Cached in main so the footer costs no
   // git per render, and never polled — see the handler in main.cjs.
-  updateStatus: () => ipcRenderer.invoke("hydo:updateStatus"),
+  updateStatus: (opts) => ipcRenderer.invoke("hydo:updateStatus", opts),
+  updateNow: () => ipcRenderer.invoke("hydo:updateNow"),
   rebuildAndInstall: () => ipcRenderer.invoke("hydo:rebuildAndInstall"),
   relaunch: () => ipcRenderer.invoke("hydo:relaunch"),
 

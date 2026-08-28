@@ -71,6 +71,10 @@ app.whenReady().then(async () => {
     const js = (src) => win.webContents.executeJavaScript(src);
     const shot = async (name) => {
       const img = await win.capturePage();
+      // Re-assert the directory on every write. Cheap, and it means a single
+      // missing directory can never turn a passing UI assertion into an ENOENT
+      // that looks like the feature broke.
+      fs.mkdirSync(SHOTS, { recursive: true });
       fs.writeFileSync(path.join(SHOTS, `${name}.png`), img.toPNG());
     };
 

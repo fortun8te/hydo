@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { stripComments } = require("./lib/source-scan.cjs");
 
 const ROOT = path.join(__dirname, "..");
 
@@ -156,7 +157,7 @@ mustInclude("electron/store.cjs", [
   // Comments stripped first: the fix's own explanation quotes the pattern it
   // bans, and a scan that cannot tell prose from code would forbid writing
   // down why the rule exists. That has now caught me four times in this repo.
-  const storeCode = storeSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const storeCode = stripComments(storeSrc);
   assert.ok(
     !/flags\.lean \? "minimal"/.test(storeCode),
     "the landing turn must not move reasoningEffort; it is the session key"

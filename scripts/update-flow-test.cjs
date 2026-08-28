@@ -98,8 +98,33 @@ assert.ok(
   /if \(gone \|\| !res \|\| !res\.available\) return;/.test(shell),
   "Shell must trust main's `available` flag rather than re-deriving it from `behind`"
 );
-// And the ticker is mounted on a positive count, not on truthiness of an object.
-assert.ok(/\{updateBehind > 0 \? \(/.test(sidebar), "the ticker must be mounted on a positive commit count");
+// And the ticker is mounted on a positive count, not on truthiness of an
+// object. The second clause is the one-press update: once a build is running,
+// finished, or has failed, the ticker must STAY mounted to say so -- the count
+// goes to zero the moment the install lands, and unmounting there would make a
+// successful update look like the button vanished mid-press.
+assert.ok(
+  /\{updateBehind > 0 \|\| updatePhase \? \(/.test(sidebar),
+  "the ticker must be mounted on a positive commit count, or on an update in progress"
+);
+// The phase must never be derived from `behind`: those are different facts,
+// and conflating them is what would resurrect the vanishing-button bug above.
+assert.ok(
+  /disabled=\{updatePhase === "running"\}/.test(sidebar),
+  "a build in flight must not be re-pressable"
+);
+assert.ok(
+  /onClick=\{\(\) => onUpdateNow\?\.\(\)\}/.test(sidebar),
+  "the ticker must run the update itself, not just open the Updates pane"
+);
+// One press means the main process keeps every refusal the long path had.
+assert.ok(
+  /ipcMain\.handle\("hydo:updateNow"/.test(main),
+  "the one-press update handler is gone"
+);
+const now = main.slice(main.indexOf('ipcMain.handle("hydo:updateNow"'));
+assert.ok(/reason: "busy"/.test(now.slice(0, 1200)), "updateNow must refuse while a teammate is mid-turn");
+assert.ok(/already-running/.test(now.slice(0, 1200)), "updateNow must be single-flight");
 assert.ok(
   /const behind = Number\(updateBehind\) \|\| 0;/.test(menu),
   "the account-menu badge must coerce its count, so undefined cannot render"
@@ -112,17 +137,47 @@ assert.ok(askAt > 0, "Shell must hold the update count");
 const askBlock = shell.slice(askAt, shell.indexOf("const onUpdate", askAt));
 assert.ok(/useEffect\(/.test(askBlock), "the check runs in an effect");
 assert.ok(/\}, \[\]\);/.test(askBlock), "with an EMPTY dependency list — once per launch, not per render");
-for (const banned of ["setInterval", "setTimeout", "addEventListener", "fetch("]) {
+// The rule is NO POLLING and NO NETWORK. `addEventListener` used to be banned
+// here as a stand-in for polling, which it is not: a listener that fires when
+// the user comes back to the window costs nothing while the app is idle and
+// spawns git only at the one moment the answer can matter. Keeping the proxy
+// ban would have forced the launch-time cache to stay the only answer, and
+// that cache is precisely why someone can sit on a stale build all day — the
+// count was computed before the commits existed.
+//
+// So: timers and network stay banned outright, and the ONLY listener allowed
+// is `focus`. Anything else is asserted against below.
+for (const banned of ["setInterval", "setTimeout", "fetch("]) {
   assert.ok(
     !askBlock.includes(banned),
     `the update check must not ${banned} — there is no server to poll and no timer to justify`
   );
 }
+
+// One listener, one event, and it is removed on unmount.
+const listeners = askBlock.match(/addEventListener\("([^"]+)"/g) || [];
+assert.deepEqual(
+  listeners,
+  ['addEventListener("focus"'],
+  "focus is the only event the update check may listen for"
+);
+assert.ok(
+  /removeEventListener\("focus", recheck\)/.test(askBlock),
+  "the focus listener must be removed on unmount, or every remount adds another git spawn"
+);
+// A re-check must never clobber a finished install with a stale count.
+assert.ok(
+  /if \(!phase\) setUpdateBehind/.test(askBlock),
+  "a re-check must not overwrite a running/done/failed update with a commit count"
+);
 // The cache in main is what makes "once" cheap even if something asks twice.
 assert.ok(/let updateCache = null;/.test(main), "main must cache the answer");
+// Cached by default; refreshed only when a caller explicitly asks for a fresh
+// answer (the focus re-check above). The cache is still what makes a second
+// unasked-for call free.
 assert.ok(
-  /if \(!updateCache\) \{/.test(main),
-  "hydo:updateStatus must shell out to git at most once per launch"
+  /if \(!updateCache \|\| \(opts && opts\.fresh\)\) \{/.test(main),
+  "hydo:updateStatus must serve the cache unless the caller explicitly asked for a fresh answer"
 );
 assert.ok(
   /updateCache = statusFrom\(info, res\);/.test(main),
@@ -288,7 +343,10 @@ for (const [theme, page] of Object.entries(shot)) {
   const m = page.menu;
 
   assert.ok(t.present, where("the ticker must be in the sidebar foot when there is an update"));
-  assert.match(t.text, /Update ready/, where("and say what it is"));
+  // "Update · N new" rather than "Update ready": the button now performs the
+  // update instead of routing to a pane that performs it, so its label is a
+  // verb the press makes true, not a status the press navigates to.
+  assert.match(t.text, /Update\s+·\s+\d+ new/, where("and say what it is and what it will do"));
   assert.match(t.text, /3 new/, where("with the count the mock reports, not a hardcoded one"));
 
   // "a lil blue ticker" — both halves, measured.
