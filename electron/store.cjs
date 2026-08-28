@@ -561,6 +561,19 @@ function fileToShot(p) {
   }
 }
 
+/**
+ * Every directive keyword, in ONE place.
+ *
+ * This used to be a second hardcoded list inside the streaming pre-parse, and
+ * it drifted the first time a directive was added: `RULE:` was parsed by
+ * `extractDirectives` and NOT stripped by the pre-parse, so a standing rule
+ * was silently ignored and the raw `RULE: {...}` line was shown to the user.
+ * Exactly the failure the pre-parse exists to prevent, reintroduced by a copy
+ * of its own keyword list.
+ */
+const DIRECTIVE_NAMES = ["PING", "SELF", "SKILL", "ROUTINE", "TEAMMATE", "MEMORY", "REACT", "REPLY", "RULE"];
+const DIRECTIVE_LINE = new RegExp(`^\\s*(${DIRECTIVE_NAMES.join("|")}):`, "im");
+
 /** Pull screenshot/image extras off a Hermes tool event (computer_use). */
 function toolImages(evt) {
   if (!evt || typeof evt !== "object") return [];
@@ -653,9 +666,14 @@ const LOOSE_DIRECTIVE =
 function extractDirectives(text) {
   const lines = String(text || "").split("\n");
   const keep = [];
-  const dirs = { memory: [], ping: [], routine: [], react: [], reply: [], teammate: [], self: [], skill: [] };
+  const dirs = { memory: [], ping: [], routine: [], react: [], reply: [], teammate: [], self: [], skill: [], rule: [] };
   for (const line of lines) {
     const ping = line.match(/^\s*PING:\s*(\{.*\})\s*$/i);
+    // RULE: {"text":"..."} — something true for the WHOLE roster from now on.
+    // Shared memory is passive: everyone reads it, nothing tells anyone. A
+    // standing rule is the active half, and it is what makes a roster behave
+    // like a team rather than six separate chats.
+    const rule = line.match(/^\s*RULE:\s*(?:set\s*)?(\{.*\})\s*$/i);
     // TEAMMATE: {"name":"...","description":"...","brief":"..."} — hire a NEW
     // permanent teammate, not a throwaway `delegate_task` worker. A worker
     // dies with the job and has no thread; a teammate gets a row in the
@@ -692,6 +710,10 @@ function extractDirectives(text) {
       }
       if (self) {
         dirs.self.push(JSON.parse(self[1]));
+        continue;
+      }
+      if (rule) {
+        dirs.rule.push(JSON.parse(rule[1]));
         continue;
       }
       if (skill) {
@@ -1808,6 +1830,37 @@ function createStore(opts = {}) {
     return !!(res && res.ok);
   }
 
+  /**
+   * A standing rule: true for the whole roster, from now on.
+   *
+   * Two halves, and the second is the point. Writing it to shared/RULES.md
+   * makes every teammate READ it on every turn. Owing every other teammate a
+   * note makes them be TOLD, on their next turn, once. Shared memory alone is
+   * passive — "log everything to ClickUp" would sit in a file that a bot
+   * mid-conversation has no reason to re-read, and the user would find out it
+   * had not landed by watching it not happen.
+   *
+   * @returns {number} how many teammates were told, or -1 when the rule was
+   *   already on the board (a bot restating a rule must not re-notify five
+   *   people every turn).
+   */
+  function applyRule(agent, spec) {
+    if (!agent || !spec) return -1;
+    const text = String((typeof spec === "string" ? spec : spec.text || spec.rule) || "").trim();
+    if (!text) return -1;
+    if (!botHome.appendRule(dir, text)) return -1;
+
+    const others = state.agents.filter((a) => a.id !== agent.id);
+    for (const peer of others) {
+      oweNote(
+        peer.id,
+        `Standing rule from ${state.settings.userName || DEFAULT_USER_NAME}, via ${agent.name}: ${text}. It applies to you too, from now on, without being asked again.`
+      );
+    }
+    logAction(agent.id, "rule", text.slice(0, 120));
+    return others.length;
+  }
+
   function applySelf(agent, spec) {
     if (!agent || !spec || typeof spec !== "object") return false;
     const patch = {};
@@ -2307,7 +2360,17 @@ function createStore(opts = {}) {
       "Everything else: if something is out of reach . a login only he has, an account nobody connected . say that in one sentence, say what you did up to that point, and hand him the next step. Never recite your tool profile and never send him to the **Advanced** panel for a toolset you could have taken yourself: that is a support ticket about yourself, not an answer. Do not improvise around a missing tool and do not fail silently.",
       "",
     ].join("\n");
-    const agentsWant = `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n${boxBlock}${reachBlock}`;
+    // Standing rules go in AGENTS.md, NOT in the `standing()` string.
+    //
+    // `standing()` only feeds the non-Hermes `complete` path; the real path is
+    // streamThroughHermes, which passes the soul and this file. Rules put in
+    // the wrong one reached a code path the app does not use, which is a
+    // feature that works in tests and never once in the product.
+    const rulesText = botHome.readRules(dir);
+    const rulesBlock = rulesText
+      ? `\n## Standing rules\nSet by ${state.settings.userName || DEFAULT_USER_NAME}, true for every teammate. Follow them without being asked.\n${rulesText.replace(/^#.*$/gm, "").trim()}\n`
+      : "";
+    const agentsWant = `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n${boxBlock}${reachBlock}${rulesBlock}`;
     try {
       if (fs.readFileSync(agentsPath, "utf8") !== agentsWant) {
         fs.writeFileSync(agentsPath, agentsWant);
@@ -2953,7 +3016,7 @@ function createStore(opts = {}) {
       // of the bubble the user is looking at.
       const spokenRaw = opened ? String(bubble.text || "") : "";
       let preDirs = null;
-      if (spokenRaw && /^\s*(PING|SELF|SKILL|ROUTINE|TEAMMATE|MEMORY|REACT|REPLY):/im.test(spokenRaw)) {
+      if (spokenRaw && DIRECTIVE_LINE.test(spokenRaw)) {
         preDirs = extractDirectives(spokenRaw);
         if (preDirs.text !== bubble.text) {
           bubble.text = preDirs.text;
@@ -3244,12 +3307,20 @@ function createStore(opts = {}) {
     // they are announced exactly once, whichever backend answers the turn.
     const notes = drainNotes(agent.id);
     const shared = botHome.readSharedMemory(dir);
+    // Standing rules ride on every turn, for every teammate. That is the whole
+    // difference between a rule and a note someone left in a file.
+    const rules = botHome.readRules(dir);
     const system = standing(
       agent,
       state.settings,
       soul,
       memory,
-      [extra || "", shared ? `Shared team memory (SHARED.md):\n${shared}` : "", ...notes]
+      [
+        extra || "",
+        rules ? `Standing rules for every teammate. Follow them without being asked:\n${rules}` : "",
+        shared ? `Shared team memory (SHARED.md):\n${shared}` : "",
+        ...notes,
+      ]
         .filter(Boolean)
         .join("\n") || undefined
     );
@@ -4319,6 +4390,21 @@ function createStore(opts = {}) {
       // addressed by the new name in everything below.
       for (const spec of extracted.dirs.self || []) applySelf(agent, spec);
       for (const spec of extracted.dirs.skill || []) applySkill(agent, spec);
+      // Standing rules before hiring: a teammate created in this same turn
+      // should already be under the rule its creator just set.
+      for (const spec of extracted.dirs.rule || []) {
+        const told = applyRule(agent, spec);
+        if (told >= 0) {
+          pushMsg(agent.id, {
+            id: uuid(),
+            role: "system",
+            kind: "tally",
+            fromId: agent.id,
+            text: told === 0 ? "Saved as a standing rule" : `Told ${told} teammate${told === 1 ? "" : "s"}`,
+            at: now(),
+          });
+        }
+      }
       // Hiring runs BEFORE pings so a bot can create someone and message them
       // in the same turn — `mentionTarget` below then resolves the new name.
       for (const spec of extracted.dirs.teammate || []) {

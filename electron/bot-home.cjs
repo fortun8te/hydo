@@ -60,6 +60,49 @@ function sharedMemoryFile(hydoDir) {
   return path.resolve(String(hydoDir), "shared", "MEMORY.md");
 }
 
+/**
+ * Standing rules: things that are true for EVERY teammate, forever.
+ *
+ * Deliberately a separate file from shared MEMORY.md. Memory is a scratchpad
+ * teammates rewrite as they learn; a rule the user laid down ("log every job
+ * to ClickUp") must not be lost because someone tidied their notes. Different
+ * lifetime, different file.
+ */
+function rulesFile(hydoDir) {
+  return path.resolve(String(hydoDir), "shared", "RULES.md");
+}
+
+function readRules(hydoDir) {
+  try {
+    return fs.readFileSync(rulesFile(hydoDir), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Add one standing rule. Returns false when it is already there, so a
+ * teammate repeating itself does not grow the file every turn.
+ */
+function appendRule(hydoDir, text) {
+  const line = String(text || "").trim().replace(/\s+/g, " ").slice(0, 400);
+  if (!line) return false;
+  const file = rulesFile(hydoDir);
+  const existing = readRules(hydoDir);
+  // Case-insensitive: "Log to ClickUp" and "log to clickup" are one rule.
+  if (existing.toLowerCase().includes(line.toLowerCase())) return false;
+  try {
+    ensureDir(path.dirname(file));
+    const head = existing
+      ? ""
+      : "# Standing rules\n\nSet by Michael, and true for every teammate. Follow them without being reminded.\n";
+    fs.appendFileSync(file, `${head}${existing ? "" : "\n"}- ${line}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function lstatSafe(p) {
   try {
     return fs.lstatSync(p);
@@ -803,6 +846,9 @@ module.exports = {
   prepare,
   appendSubagentLog,
   readSharedMemory,
+  rulesFile,
+  readRules,
+  appendRule,
   profileRoot,
   AGENTS_STAMP,
 };

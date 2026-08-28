@@ -148,9 +148,14 @@ console.log("agents-md-test (box section) ok");
   // Still one writer. This block goes in the same single assembly as the rest;
   // a second writer would put AGENTS.md back to being rewritten twice a turn.
   assert.ok(
-    /agentsWant = `\$\{botHome\.AGENTS_STAMP\}[\s\S]{0,120}\$\{reachBlock\}`/.test(store),
+    /agentsWant = `\$\{botHome\.AGENTS_STAMP\}[\s\S]{0,160}\$\{reachBlock\}\$\{rulesBlock\}`/.test(store),
     "appended to the one authoritative agentsWant"
   );
+  // Standing rules ride here too, and it has to be THIS file rather than the
+  // `standing()` string: that string only feeds the non-Hermes `complete`
+  // path, so a rule put there reaches a code path the app does not use.
+  assert.ok(/const rulesBlock =/.test(store), "standing rules are not in AGENTS.md");
+  assert.ok(/botHome\.readRules\(dir\)/.test(store), "rules are not read from the shared board");
 }
 
 console.log("agents-md-test (reach) ok");

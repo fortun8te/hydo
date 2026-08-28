@@ -100,7 +100,9 @@ assert.ok(/if \(outcome === "noop"\) return publicState\(\)/.test(store), "a no-
 assert.ok(store.includes("function oweNote"), "notes can be queued for a teammate");
 assert.ok(store.includes("function drainNotes"), "and are drained once delivered");
 assert.ok(/const notes = drainNotes\(agent\.id\)/.test(store), "the turn builder drains them");
-assert.ok(/\.\.\.notes\]/.test(store), "and folds them into the prompt");
+// Trailing comma and newline allowed: the array gained a standing-rules entry
+// and got reformatted across lines. What matters is that notes are still IN it.
+assert.ok(/\.\.\.notes,?\s*\]/.test(store), "and folds them into the prompt");
 assert.ok(store.includes("MAX_REACTION_NOTES"), "the queue is bounded");
 
 // The note has to name the emoji AND quote the message, or "the user reacted"
