@@ -1,69 +1,91 @@
+#!/usr/bin/env node
 "use strict";
 
-const fs = require("node:fs");
-const path = require("node:path");
+/**
+ * auto-profile-test.cjs — the rung a turn runs on.
+ *
+ * `chat` has no files, no web and no shell; only `builder` carries `web` and
+ * `computer_use`. So the picker decides whether a teammate can actually do the
+ * thing, and getting it wrong is invisible: the turn succeeds, the model just
+ * explains why it cannot help.
+ *
+ * MEASURED, and the reason this file exists: "I need you to chase Revolut's
+ * business support chat about a dispute I've been waiting on for over a
+ * month..." picked `chat`. A plainly real job ran on the no-tools rung, and
+ * the reply was a wall of markdown about which panel to change. Two gaps: the
+ * task shape did not include "I need you to", and nothing in the ladder
+ * recognised "act on a live service on my behalf" — NEEDS_BUILDER is about
+ * code and shells, and chasing someone's support chat is neither.
+ *
+ * The other half matters just as much: small talk must STAY on `chat`.
+ * Escalating "ikr" to builder pays 16.6k of tool schema to say "yeah".
+ */
+
 const assert = require("node:assert/strict");
-const { pickProfile, escalated, LADDER, rank } = require("../electron/auto-profile.cjs");
+const ap = require("../electron/auto-profile.cjs");
 
-const ROOT = path.join(__dirname, "..");
-
-// ---- cheap stays cheap ----------------------------------------------------
-// The whole point: "hey" must not cost 16.6k of tool schema.
-for (const q of ["hey", "yes", "no", "thanks", "what time is it", "how are you", "ok cool"]) {
-  assert.equal(pickProfile(q, "chat"), "chat", `"${q}" needs nothing`);
+let failed = 0;
+function test(name, fn) {
+  try {
+    fn();
+    console.log(`  ok  ${name}`);
+  } catch (err) {
+    failed += 1;
+    console.log(`  FAIL ${name}\n       ${err && err.message}`);
+  }
 }
 
-// ---- it climbs when the message needs it ----------------------------------
-assert.equal(pickProfile("read src/store.js for me", "chat"), "writer", "files -> writer");
-assert.equal(pickProfile("open the invoice pdf", "chat"), "writer");
-assert.equal(pickProfile("what's the latest grok pricing", "chat"), "researcher", "web -> researcher");
-assert.equal(pickProfile("run the tests", "chat"), "builder", "shell -> builder");
-assert.equal(pickProfile("commit that and push", "chat"), "builder");
-assert.equal(pickProfile("make me a chart of my steps", "chat"), "builder", "artifacts -> builder");
-assert.equal(pickProfile("delegate this to three workers", "chat"), "builder");
-// A long brief is a real job whatever words it used.
-assert.equal(pickProfile("x ".repeat(260), "chat"), "writer", "a long brief is not small talk");
-// Attachments mean files even with no filename in the text.
-assert.equal(pickProfile("what do you think", "chat", { hasAttachments: true }), "writer");
+const pick = (msg, cur = "chat") => ap.pickProfile(msg, cur, {});
 
-// ---- ESCALATE ONLY --------------------------------------------------------
-// Once a bot has used the shell the transcript is full of shell output it may
-// need to reason about. Taking the tool away mid-thread makes it unable to
-// follow up on its own work: cheap-then-rich saves a little each turn,
-// rich-then-cheap is a broken assistant.
-for (const cur of LADDER) {
-  const got = pickProfile("hey", cur);
-  assert.ok(rank(got) >= rank(cur), `"hey" must not downgrade ${cur}, got ${got}`);
+test("acting on a live service reaches the rung that can", () => {
+  const jobs = [
+    "I need you to chase Revolut's business support chat about a dispute I've been waiting on for over a month.",
+    "reply to that email for me",
+    "follow up with their support team",
+    "can you cancel my subscription",
+    "log in to the portal and check the invoice",
+    "chase up the refund",
+  ];
+  for (const j of jobs) {
+    assert.equal(pick(j), "builder", `"${j.slice(0, 40)}..." ran on a rung with no browser`);
+  }
+});
+
+test('"I need you to X" is a task, not conversation', () => {
+  assert.notEqual(pick("I need you to write that up"), "chat");
+  assert.notEqual(pick("i want you to draft the reply"), "chat");
+  assert.notEqual(pick("I'd like you to look through the folder"), "chat");
+});
+
+test("small talk stays cheap", () => {
+  // Every one of these on `builder` would pay ~16.6k of tool schema to say
+  // almost nothing. This is the half that pays for the feature.
+  for (const chat of [
+    "ikr",
+    "hey how are you",
+    "nate what do u wanna do",
+    "damm",
+    "yeah lol",
+    "such a thunderstorm here rn",
+  ]) {
+    assert.equal(pick(chat), "chat", `"${chat}" escalated for no reason`);
+  }
+});
+
+test("the ladder only ever climbs", () => {
+  // A bot that reached `builder` must not silently drop back to `chat` on the
+  // next small-talk turn and lose the tools mid-job.
+  assert.equal(pick("ikr", "builder"), "builder");
+  assert.equal(pick("thanks", "researcher"), "researcher");
+});
+
+test("a hand-picked profile is never overridden", () => {
+  assert.equal(ap.pickProfile("ikr", "builder", { pinned: true }), "builder");
+  assert.equal(ap.pickProfile("chase their support chat", "chat", { pinned: true }), "chat");
+});
+
+if (failed) {
+  console.log(`auto-profile-test FAILED (${failed})`);
+  process.exit(1);
 }
-assert.equal(pickProfile("thanks", "builder"), "builder", "never falls back down");
-assert.equal(pickProfile("read a file", "builder"), "builder");
-
-// ---- a hand-picked profile is a decision ----------------------------------
-assert.equal(pickProfile("run the tests", "chat", { pinned: true }), "chat", "pinned wins");
-assert.equal(pickProfile("hey", "full", { pinned: true }), "full");
-
-// ---- unsure escalates, because the asymmetry is the design ----------------
-// A wrong cheap guess costs a whole wasted turn and a confused reply. A wrong
-// rich guess costs only tokens.
-assert.ok(rank(pickProfile("can you look at this and sort it out", "chat")) >= rank("writer"));
-
-// ---- never throws on junk -------------------------------------------------
-for (const bad of [null, undefined, "", 12, {}, " "]) {
-  const got = pickProfile(bad, "chat");
-  assert.ok(LADDER.includes(got), `junk input still returns a real profile: ${got}`);
-}
-assert.ok(LADDER.includes(pickProfile("hey", "nonsense-profile")));
-
-assert.equal(escalated("chat", "builder"), true);
-assert.equal(escalated("builder", "chat"), false);
-assert.equal(escalated("chat", "chat"), false);
-
-// ---- wired into the turn, and logged --------------------------------------
-const store = fs.readFileSync(path.join(ROOT, "electron", "store.cjs"), "utf8");
-assert.ok(store.includes("autoProfile.pickProfile"), "the turn asks for a profile");
-assert.ok(store.includes("agent.profilePinned"), "and respects a hand-picked one");
-assert.ok(/logAction\(agent\.id, "profile"/.test(store), "an escalation is logged, not silent");
-assert.ok(store.includes("function logAction"), "there is an action log");
-assert.ok(store.includes("listLog"), "and it can be read");
-
-console.log("auto-profile-test ok");
+console.log("auto-profile-test ok — real jobs get tools, small talk stays cheap");

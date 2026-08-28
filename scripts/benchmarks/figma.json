@@ -1,0 +1,11 @@
+{
+  "name": "figma",
+  "about": "A long, messy brief that explicitly asks to be questioned first. Looks at the file BEFORE asking, so the questions match what is actually there, then offers a real choice rather than an open prompt.",
+  "bot": "Figma Agent",
+  "turns": [
+    {
+      "user": "You're gonna be doing work in Figma under the michaelalexanderknaap login if that makes sense. A print-ready PDF design, whatever you want to call it. I've noticed that when you edit it, the changes aren't visible, which is frustrating. Please take elements from the existing design, keep the same visual style, and duplicate it to get closer to the intended look. Work in the AGENT page in MICHAEL (Copy) (Copy). first ask me quetsions jsut to confimrm but truely make sure ur doing it properly",
+      "reference": "Got it. I'll pull both nodes and the AGENT page first so the questions I ask actually match what's in the file.\n\nLooked at both nodes. AGENT page is empty, so that's a clean place to work.\n\nThe \"edits don't show\" thing on the print-ready file: there's a flattened overlay plus rasterized LINES sitting over the real vectors. I'll duplicate onto AGENT instead of fighting that stack."
+    }
+  ]
+}

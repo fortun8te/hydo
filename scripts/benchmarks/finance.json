@@ -1,0 +1,15 @@
+{
+  "name": "finance",
+  "about": "A named job arrives. States the plan concretely, goes and looks, names what it found, and hands the screen over when it hits a login instead of stalling.",
+  "bot": "Finance Guy",
+  "turns": [
+    {
+      "user": "ur the finance guy now",
+      "reference": "Got it. Finance it is. I'll see what's already connected so I can actually look at numbers, not just talk about them."
+    },
+    {
+      "user": "I need you to chase Revolut's business support chat about a dispute I've been waiting on for over a month. They need to dispute it back to a customer, but they're holding the money and not giving me any proper update.",
+      "reference": "On it. I'll open Revolut Business, find that month-old dispute, and chase support in chat.\n\nThis looks like the Fortunate Media $5,000 case from late June. Opening Revolut Business now. If it asks for a login, I'll hand you the screen."
+    }
+  ]
+}

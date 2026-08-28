@@ -50,7 +50,24 @@ const NEEDS_WEB =
 // Deliberately does NOT include bare questions ("what time is it", "how are
 // you") — those are answerable from conversation and are the common case.
 const TASK_SHAPE =
-  /\b(can you|could you|would you|please|go ahead|sort (?:it|this|that)|deal with|handle|figure out|work out|look (?:at|into|through)|check|fix|make|build|set up|clean up|sort out|take care of|get (?:it|this|that) (?:done|working)|help me)\b/i;
+  // "i need you to", "i want you to" and bare imperatives ("chase X", "email
+  // them") were all missing. MEASURED: "I need you to chase Revolut's business
+  // support chat about a dispute..." picked `chat` — the no-tools rung — so a
+  // plainly real job was answered by a teammate with no file access and no
+  // web, which produced a wall of markdown about which panel to change.
+  /\b(can you|could you|would you|please|go ahead|i need (?:you )?to|i want (?:you )?to|i'?d like you to|sort (?:it|this|that)|deal with|handle|figure out|work out|look (?:at|into|through)|check|fix|make|build|set up|clean up|sort out|take care of|get (?:it|this|that) (?:done|working)|help me)\b/i;
+
+/**
+ * Acting on a live service on the user's behalf.
+ *
+ * This is the rung nothing reached: chasing a support chat, replying to
+ * someone in an app, working inside an account. It needs a browser and often
+ * the shared machine, which is `builder` (the only rung carrying `web` and
+ * `computer_use`). `NEEDS_BUILDER` below is about code and shells, so a job
+ * that is entirely about someone else's website matched none of it.
+ */
+const NEEDS_SERVICE =
+  /\b(chase|chase up|follow up (?:on|with)|support (?:chat|ticket|team)|customer service|dispute|chargeback|refund|invoice them|log ?in|sign ?in|my account|portal|dashboard|inbox|reply to|respond to|message them|email them|book|order|cancel (?:my|the) (?:order|subscription)|unsubscribe|checkout)\b/i;
 
 /**
  * @param {string} text        the user's message
@@ -71,6 +88,7 @@ function pickProfile(text, current, opts = {}) {
   if (NEEDS_WEB.test(s)) want = Math.max(want, rank("researcher"));
   if (NEEDS_FILE.test(s) || opts.hasAttachments) want = Math.max(want, rank("writer"));
   if (NEEDS_BUILDER.test(s)) want = Math.max(want, rank("builder"));
+  if (NEEDS_SERVICE.test(s)) want = Math.max(want, rank("builder"));
 
   // A long message is usually a real brief, and a real brief usually needs
   // more than conversation. Cheap on a 400-word ask is a false economy.
