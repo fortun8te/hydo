@@ -1,9 +1,9 @@
 {
   "name": "hydo",
-  "version": "0.1.126",
+  "version": "0.1.127",
   "author": "Michael Knaap",
   "private": true,
-  "description": "Hydo \u2014 an open-source desktop app for a team of AI teammates, running on Hermes Agent.",
+  "description": "Hydo — an open-source desktop app for a team of AI teammates, running on Hermes Agent.",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && electron .\"",
