@@ -100,6 +100,36 @@
   color: var(--sand-text-primary, #fcfcfc);
 }
 
+/* -- DialogNav on a narrow window ----------------------------------------
+   VERIFIED at 320px in a real BrowserWindow before this rule existed: the nav
+   is a fixed 198px and the card is `100vw - 40px`, so the Settings BODY came
+   out around 80px wide and every string in it was clipped mid-word ("Gene…",
+   "Accou…"). The dialog was unusable long before the window stopped fitting.
+
+   Under 720px the nav keeps its icons and drops its labels — the same trade
+   the roster already makes at 880px — and hands ~146px back to the body. No
+   pane becomes unreachable: each is still one click, and `title` (set in
+   ui.jsx) still names it.
+
+   Width and padding are BOTH overridden. Dropping the label alone would have
+   left the 198px column exactly as wide as it was, with the icons floating in
+   it — a rule that changes a class and no pixels. */
+@media (max-width: 720px) {
+  .hy-dialog__nav {
+    width: 52px;
+    padding: 12px 8px;
+  }
+
+  .hy-dialog__nav-btn {
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  .hy-dialog__nav-btn > span {
+    display: none;
+  }
+}
+
 /* -- SectionLabel --------------------------------------------------------- */
 
 .hy-section-label {

@@ -29,6 +29,12 @@ function seed() {
   const bots = [
     {
       id: "b1", name: "Dev", label: "engineering", blob: "gray", shape: "hex",
+      // Pinned to the user's own machine, which is what the reroute question
+      // below is about — and the only way the rail's "Local · unsloth" state
+      // is reachable in the fixture. Every other bot here is unpinned, so the
+      // "inherits the app default" state is reachable too.
+      provider: "unsloth",
+      model: "unsloth/Qwen3.8-Flash-Next-GGUF",
       // A plan mid-execution, so PlanCard has something real to render. The
       // shape matches what `captureTodos` lifts off the Hermes todo tool.
       todos: (() => {
@@ -224,6 +230,31 @@ function seed() {
             { id: "C", text: "Ask me each time" },
           ],
           at: iso(24),
+        },
+        {
+          // Hydo's own question, asked when a teammate pinned to a local
+          // endpoint has no local endpoint to run on. Same clarify card as
+          // above; `reroute` is what makes it Hydo's to answer.
+          id: "m-reroute",
+          role: "system",
+          kind: "clarify",
+          fromId: "b1",
+          requestId: "",
+          text: "unsloth isn't answering — your local endpoint (192.168.1.24:8888) is not answering. Run this on grok-4.6 instead?",
+          choices: [
+            { id: "Yes", text: "Run it on grok-4.6" },
+            { id: "No", text: "Leave it for unsloth" },
+          ],
+          reroute: {
+            agentId: "b1",
+            convId: "b1",
+            prompt: "can you check the build?",
+            providerId: "unsloth",
+            provider: "xai-oauth",
+            model: "grok-4.6",
+            endpoint: "unsloth",
+          },
+          at: iso(23),
         },
         {
           id: "m-files",

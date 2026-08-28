@@ -1270,7 +1270,8 @@ function Transcript({
                      Saying "carrying on" here would be false in both
                      directions. */
                   msg.reroute
-                    ? msg.dismissed || (answered && !/^yes/i.test(answered))
+                    ? msg.dismissed ||
+                      (answered && answered !== (msg.choices || [])[0]?.text)
                       ? `Nothing ran. Your message is still here — send it again when ${msg.reroute.endpoint} is back.`
                       : answered
                       ? `Running on ${msg.reroute.model}. Asked once — the rest of this session goes there too until ${msg.reroute.endpoint} answers again.`

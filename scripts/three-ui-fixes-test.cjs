@@ -46,7 +46,7 @@ const electron = require(path.join(ROOT, "node_modules", "electron"));
 execFileSync(electron, [path.join(__dirname, "three-ui-fixes-shot.cjs"), OUTDIR, UD, OUT], {
   cwd: ROOT,
   stdio: "inherit",
-  timeout: 60 * 1000,
+  timeout: 90 * 1000,
 });
 
 const r = JSON.parse(fs.readFileSync(OUT, "utf8"));

@@ -42,7 +42,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function fixtureIndex() {
   const index = path.join(OUTDIR, "index.html");
   if (!fs.existsSync(index)) {
-    throw new Error(`no fixture bundle at ${index} — build it first (see scripts/update-ticker-test.cjs)`);
+    throw new Error(`no fixture bundle at ${index} — build it first (see scripts/update-flow-test.cjs)`);
   }
   return index;
 }
@@ -50,12 +50,16 @@ function fixtureIndex() {
 // Get into the app and open the account menu the way a person does: click the
 // account row in the sidebar foot. Driving React state would prove nothing
 // about whether the control is reachable.
-const OPEN = `(async () => {
+const SIGN_IN = `(async () => {
   const signIn = [...document.querySelectorAll("button")].find((b) => /sign in/i.test(b.textContent || ""));
   if (signIn) {
     signIn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     await new Promise((r) => setTimeout(r, 1400));
   }
+  return document.querySelector(".sand-account") ? "in" : "no shell";
+})()`;
+
+const OPEN = `(async () => {
   const acct = document.querySelector(".sand-account");
   if (!acct) return "no account button";
   acct.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -150,6 +154,16 @@ app.whenReady().then(async () => {
         `window.hydo.setSettings({ appearance: ${JSON.stringify(theme)} }).then(() => 1)`
       );
       await sleep(700);
+      const signedIn = await win.webContents.executeJavaScript(SIGN_IN);
+      if (signedIn !== "in") throw new Error(`could not reach the shell: ${signedIn}`);
+      await sleep(400);
+      // Two frames per theme. The account menu is an overlay anchored to the
+      // foot and it COVERS the ticker, so a single photograph can only ever
+      // show one of the two things this change adds. The closed frame is the
+      // one that proves the ticker reads as small and quiet in place.
+      const closed = (await win.webContents.capturePage()).toPNG();
+      if (closed.length < 5000) throw new Error("blank frame");
+      fs.writeFileSync(`${PREFIX}-${theme}-closed.png`, closed);
       const opened = await win.webContents.executeJavaScript(OPEN);
       if (opened !== "open") throw new Error(`could not open the account menu: ${opened}`);
       await sleep(400);
@@ -163,7 +177,7 @@ app.whenReady().then(async () => {
       fs.writeFileSync(`${PREFIX}-${theme}.png`, png);
     }
     fs.writeFileSync(`${PREFIX}.json`, `${JSON.stringify(out, null, 2)}\n`);
-    console.log(`update-ticker-shot ok — ${PREFIX}-{dark,light}.png, ${PREFIX}.json`);
+    console.log(`update-ticker-shot ok — ${PREFIX}-{dark,light}{,-closed}.png, ${PREFIX}.json`);
   } catch (err) {
     console.error(`update-ticker-shot failed — ${(err && err.message) || err}`);
     code = 1;

@@ -1592,3 +1592,39 @@ aside.routine-rail .routine-rail__toolbar {
   font-size: 12.5px;
   line-height: 16px;
 }
+
+
+/* -- The narrow window ---------------------------------------------------
+   VERIFIED in a real BrowserWindow (scripts/overlay-narrow-glow-shot.cjs):
+   the rail is a fixed 320px column beside the transcript, so on a window
+   dragged thin it did not shrink — it ate the transcript. At 440px the
+   measured `.sand-main` was 48px wide and `.sand-composer__input` was 0px:
+   the message box was gone while the rail sat there at full width. That, and
+   not the sidebar, is what `minWidth: 980` in electron/main.cjs was holding
+   up.
+
+   Below the SAME breakpoint the sidebar already collapses at (880px — the
+   `tooNarrow` media query in Shell.jsx; one number, not two that can drift
+   apart), the rail stops being a column and becomes the pane: laid over
+   `.sand-main`, capped so the 72px icon rail behind it stays reachable. Every
+   rail — bot, channel, routines, computer, undo — carries `.bot-rail`, so
+   this is one rule and not five.
+
+   `.sand-shell > .bot-rail` (0,2,0) is deliberately more specific than the
+   `.bot-rail { width: … }` base rule in styles.css (0,1,0): this app's
+   signature bug is a rule that applies its class and moves no pixels because
+   a more specific one already won. */
+@media (max-width: 880px) {
+  .sand-shell > .bot-rail {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    width: min(320px, calc(100% - 72px));
+    min-width: 0;
+    /* It is a layer now, so it needs the shadow a layer has — without it the
+       rail and the transcript behind it are the same flat black. */
+    box-shadow: -16px 0 32px -12px rgb(0 0 0 / 55%);
+  }
+}

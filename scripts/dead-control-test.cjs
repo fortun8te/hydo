@@ -30,13 +30,17 @@ const composer = read("src/screens/Composer.jsx");
 // one command whose whole job is to toggle that state was undone in the same
 // batch. Fully wired (KEYMAP -> matchEvent -> runCommand -> <CommandPalette
 // open={paletteOpen}/>) and completely dead.
+// The per-surface booleans were later replaced by ONE `overlay` state, so the
+// bug can no longer be spelled the same way — but it can still be MADE. What
+// must hold is unchanged: the palette's own command toggles it, and the
+// trailing close that runs after every other command skips it.
 assert.ok(
-  shell.includes('case "sand.commandPalette": setPaletteOpen((v) => !v);'),
-  "Shell no longer toggles paletteOpen for sand.commandPalette"
+  /case "sand\.commandPalette": toggleOverlay\("palette"\);/.test(shell),
+  "Shell no longer toggles the palette for sand.commandPalette"
 );
 assert.ok(
-  /if \(id !== "sand\.commandPalette"\) setPaletteOpen\(false\);/.test(shell),
-  "runCommand's trailing setPaletteOpen(false) must skip the palette's own command, or ⌘K is dead again"
+  /if \(id !== "sand\.commandPalette"\)\s*closers\.palette\(\);/.test(shell),
+  "runCommand's trailing close must skip the palette's own command, or Cmd-K is dead again"
 );
 assert.ok(
   !/\n\s*setPaletteOpen\(false\);\n\s*\}/.test(shell),
@@ -48,16 +52,30 @@ assert.ok(
 // all; the only way out was a small chevron in their header.
 const escBlock = shell.slice(shell.indexOf('if (e.key === "Escape") {'));
 assert.ok(escBlock.length > 0, "Shell has no Escape handler at all");
-assert.ok(escBlock.includes("setArtifactId(null)"), "Escape must close the artifact viewer");
+// Spelled `closers.artifact()` since the per-surface booleans became one
+// `overlay` slot. The rule is the same one the original bug broke: the two
+// surfaces that cover the transcript longest must have a way out that is not a
+// small chevron in their header.
+assert.ok(/closers\.artifact\(\)/.test(escBlock), "Escape must close the artifact viewer");
 assert.ok(escBlock.includes("setRail(null)"), "Escape must close the open rail");
 // …but never over the top of a modal that owns its own Escape, and never
 // while the caret is in a field.
 assert.ok(escBlock.includes("e.defaultPrevented"), "Escape must yield to a handler that already claimed it");
 assert.ok(escBlock.includes("isTypingTarget(e.target)"), "Escape must not fire while typing");
-assert.ok(
-  /document\.querySelector\("\.hy-dialog, \.hy-palette, \.hy-find, \.hy-sheet, \[role='dialog'\]"\)/.test(escBlock),
-  "Escape must not collapse the rail behind an open dialog/palette/find/sheet"
-);
+// Each surface asserted separately, not as one exact string. The selector has
+// since grown `[role='alertdialog']` for the confirm dialog — a STRICTER guard
+// that the old verbatim match would have rejected. Pin the surfaces that must
+// be covered; adding another is an improvement, not a regression.
+{
+  const sel = /document\.querySelector\("([^"]+)"\)/.exec(escBlock);
+  assert.ok(sel, "Escape must ask the DOM what is on screen");
+  for (const surface of [".hy-dialog", ".hy-palette", ".hy-find", ".hy-sheet", "role='dialog'"]) {
+    assert.ok(
+      sel[1].includes(surface),
+      `Escape must not collapse the rail behind ${surface}`
+    );
+  }
+}
 assert.ok(
   /export function isTypingTarget/.test(shortcuts),
   "isTypingTarget must stay exported so Shell and matchEvent share ONE definition of 'the caret is in a field'"

@@ -624,6 +624,15 @@ function toolFiles(evt, cwd) {
   return found;
 }
 
+// A directive that did not land on its own bare line: after prose, or wrapped
+// in the backticks a model reaches for whenever something looks like code.
+// Group 1 is everything before it, which is real text and must survive.
+const LOOSE_DIRECTIVE =
+  // The lookbehind keeps a quoted key out of it: a JSON blob the bot is showing
+  // him that happens to contain "SELF": {...} is data on the screen, not a
+  // directive, and mangling it would be a new bug in place of the old one.
+  /^(.*?)[`*_\s]*(?<!["'\w])(PING|TEAMMATE|SELF|SKILL|ROUTINE|REACT|REPLY):\s*(create\s+|set\s+|install\s+)?(\{.*\})[`*_\s]*$/i;
+
 function extractDirectives(text) {
   const lines = String(text || "").split("\n");
   const keep = [];
@@ -686,6 +695,30 @@ function extractDirectives(text) {
       }
     } catch {
       /* keep the line */
+    }
+    // Salvage pass. The exact patterns above demand a directive alone on its
+    // own bare line, and a model that puts one anywhere else loses it twice
+    // over: the roster never changes AND the raw protocol leaks into a bubble.
+    // Both real shapes seen in the wild: the directive trailing a sentence
+    // ("Wes. that'll do. SELF: {...}") and the directive wrapped in backticks,
+    // which is what a model does to anything that looks like code. Same
+    // effect either way, and it reads to Michael as being ignored.
+    const loose = line.match(LOOSE_DIRECTIVE);
+    if (loose) {
+      const kind = loose[2].toLowerCase();
+      // ROUTINE is the one directive whose verb is load-bearing: the strict
+      // pattern requires `create`, and nothing else is implemented.
+      const okVerb = kind !== "routine" || /create/i.test(loose[3] || "");
+      if (okVerb && dirs[kind]) {
+        try {
+          dirs[kind].push(JSON.parse(loose[4]));
+          const prefix = line.slice(0, loose.index + loose[1].length).replace(/\s+$/, "");
+          if (prefix.trim()) keep.push(prefix);
+          continue;
+        } catch {
+          /* not JSON after all — fall through and keep the line */
+        }
+      }
     }
     keep.push(line);
   }
@@ -2966,8 +2999,8 @@ function createStore(opts = {}) {
       requestId: "",
       text: decision.question,
       choices: [
-        { id: "Cloud", text: `Yes, run it on ${decision.model}` },
-        { id: "Wait", text: `No, leave it for ${decision.endpoint}` },
+        { id: "Yes", text: `Run it on ${decision.model}` },
+        { id: "No", text: `Leave it for ${decision.endpoint}` },
       ],
       reroute: {
         agentId: agent.id,

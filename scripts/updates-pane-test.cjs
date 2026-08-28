@@ -166,6 +166,41 @@ try {
   // No debris: the staging and backup directories must both be gone.
   assert.equal(fs.existsSync(path.join(sandbox, ".Hydo.app.staged")), false);
   assert.equal(fs.existsSync(path.join(sandbox, ".Hydo.app.previous")), false);
+
+  // ── the install must leave something the reopen can actually launch ────
+  // The two halves of "update and reopen" are written in different files and
+  // agree only by convention: install() puts a bundle at <apps>/Hydo.app, and
+  // the relaunch handler in main.cjs re-execs
+  // <INSTALLED>/Contents/MacOS/Hydo. If either side moves, the app quits and
+  // never comes back — the single worst outcome this feature can produce, and
+  // one no source-text assertion on either file alone would catch.
+  //
+  // So: build a bundle with a real executable in it, install it, and check the
+  // exact path the handler computes.
+  const withExec = path.join(sandbox, "exec.app");
+  fs.mkdirSync(path.join(withExec, "Contents", "MacOS"), { recursive: true });
+  fs.writeFileSync(path.join(withExec, "Contents", "MacOS", "Hydo"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  buildInfo.install(withExec, sandbox);
+  const relaunchTarget = path.join(sandbox, "Hydo.app", "Contents", "MacOS", "Hydo");
+  assert.ok(
+    fs.existsSync(relaunchTarget),
+    `the reopen re-execs <bundle>/Contents/MacOS/Hydo; the install produced no such file`
+  );
+  // ditto, not cp: the executable bit has to survive the staging copy, or the
+  // relaunch fails with EACCES after the app has already quit.
+  assert.ok(fs.statSync(relaunchTarget).mode & 0o111, "the installed executable must still be executable");
+  // And the path the handler builds must be built from INSTALLED, so the two
+  // files cannot drift apart silently.
+  const relaunchSrc = main.slice(main.indexOf('ipcMain.handle("hydo:relaunch"'));
+  assert.ok(
+    /path\.join\(buildInfo\.INSTALLED, "Contents", "MacOS", "Hydo"\)/.test(relaunchSrc),
+    "the reopen must derive its executable from buildInfo.INSTALLED, not from a second hardcoded path"
+  );
+  assert.equal(
+    path.basename(buildInfo.INSTALLED),
+    "Hydo.app",
+    "INSTALLED and install()'s target must be the same bundle name"
+  );
 } finally {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

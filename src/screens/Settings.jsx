@@ -80,6 +80,16 @@ function buildPill(info, check) {
   return "Unknown";
 }
 
+// The one button's label. Only "behind" may say "Update" — everything else
+// ("current", "dirty", "dev", "unknown", or no check back yet) would be
+// claiming an update exists when it might not, which is the one thing this
+// pane is not allowed to get wrong. Computed once so the Row label and the
+// Button label (shown in different branches of `rebuild`) can't drift apart.
+function updateActionLabel(check, rebuild) {
+  if (check?.state === "behind") return "Update";
+  return rebuild === "done" ? "Rebuild again" : "Rebuild…";
+}
+
 function detectedZone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -896,70 +906,54 @@ export default function Settings({
 
             {pane === "updates" && (
               <>
+                {/* One question — "am I current, and if not, update me" — one
+                    section. This used to be a Version group, a separate
+                    "Check the working copy" button, and an Install group: four
+                    controls and five explanations for what the user actually
+                    asked for ("just make this a simpler update thing"). The
+                    check itself is not a control anymore: the useEffect above
+                    (keyed on `pane`) already re-reads the build every time
+                    this pane opens, so there is nothing left for a "Check now"
+                    button to do that opening the pane didn't already do. */}
                 <section className="settings__section">
-                  <SectionLabel>Version</SectionLabel>
+                  <SectionLabel>Update</SectionLabel>
                   <RowGroup>
-                    {/* Not a literal. `buildLabel` formats what
-                        electron/build-info.cjs measured: package.json's
-                        version, the commit COUNT as the build number, and the
-                        short sha, stamped into the bundle at build time by
+                    {/* Not a literal. `buildLabel`/`buildDesc` format what
+                        electron/build-info.cjs measured — package.json's
+                        version, the commit COUNT as the build number, the
+                        short sha — stamped into the bundle at build time by
                         scripts/stamp-build.cjs because a packaged app has no
-                        .git of its own. The old row carried a
-                        dotted date typed into JSX as its label, and was wrong
-                        two days later. */}
+                        .git of its own. buildDesc is also the ONLY place
+                        allowed to claim a state ("behind"/"dirty"/"current"/
+                        "dev"/"unknown"); a confident wrong status here is
+                        treated as a bug, not a UI nit. */}
                     <Row strong label={buildLabel(build)} description={buildDesc(build, buildCheck)}>
                       <span className="settings__pct">{buildPill(build, buildCheck)}</span>
                     </Row>
+                    {/* The whole flow — check, confirm, build, install — lives
+                        behind this one row now. Two clicks survive on
+                        purpose: the second one is a ~90 second build that
+                        swaps the bundle in /Applications, and a control that
+                        takes the machine away for that long on one click is a
+                        trap. But the confirm text is one sentence, not the
+                        old four-sentence wall with an absolute repo path
+                        nobody was going to read before clicking anyway. */}
                     <Row
                       divided
-                      label="Check the working copy"
-                      description="Compares this build's commit against the repo it was built from. Offline — there is no server to ask."
-                    >
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          const check = window.hydo?.checkBuild;
-                          if (typeof check !== "function") return;
-                          setBuildCheck(null);
-                          Promise.resolve(check())
-                            .then((res) => {
-                              if (!res) return;
-                              setBuild(res.info || null);
-                              setBuildCheck(res.check || null);
-                            })
-                            .catch(() => setBuildCheck({ state: "unknown", reason: "git could not be read." }));
-                        }}
-                      >
-                        Check now
-                      </Button>
-                    </Row>
-                  </RowGroup>
-                </section>
-
-                <section className="settings__section">
-                  <SectionLabel>Install</SectionLabel>
-                  <RowGroup>
-                    {/* Two clicks, deliberately. The first only says what the
-                        second will do — a ~90 second build followed by a swap
-                        of the bundle in /Applications — because a control that
-                        takes the machine away for that long on one click is a
-                        trap. The main process refuses outright while any
-                        teammate is mid-turn. */}
-                    <Row
-                      strong
-                      label="Rebuild and install"
+                      label={updateActionLabel(buildCheck, rebuild)}
                       description={
                         rebuild === "running"
                           ? "Building… a minute or two."
                           : rebuild === "confirm"
-                            ? // Short enough to actually read. The old copy spelled out an
-                              // absolute repo path and four sentences of caveats, which is a
-                              // wall nobody reads before clicking anyway. What matters at the
-                              // moment of deciding is what gets replaced and that nothing
-                              // restarts; the rest is true and belongs below, once.
-                              "Runs npm run pack, then replaces /Applications/Hydo.app. You choose whether to reopen."
+                            ? "Runs npm run pack, then swaps the app in /Applications. You choose whether to reopen."
                             : rebuildNote ||
-                              "Builds this machine's copy of the source and installs it."
+                              // Only "behind" may say an update exists —
+                              // update-flow-test.cjs's statusFrom cases are
+                              // the same rule enforced on the main-process
+                              // side; this is its renderer-side twin.
+                              (buildCheck?.state === "behind"
+                                ? `${buildCheck.behind} commit${buildCheck.behind === 1 ? "" : "s"} ahead — rebuilds and installs from source.`
+                                : "Builds this machine's copy of the source and installs it, even though nothing changed.")
                       }
                     >
                       {rebuild === "running" ? (
@@ -993,6 +987,10 @@ export default function Settings({
                                     }
                                   } else {
                                     setRebuild("failed");
+                                    // "The build failed. /Applications was not
+                                    // touched." — kept verbatim in spirit: the
+                                    // failure state must stay visible and say
+                                    // plainly that nothing was swapped.
                                     setRebuildNote(
                                       res && res.reason === "busy"
                                         ? `${res.detail || "A teammate is mid-turn."} Nothing was built.`
@@ -1010,8 +1008,8 @@ export default function Settings({
                           </Button>
                         </div>
                       ) : (
-                        <Button variant="secondary" onClick={() => setRebuild("confirm")}>
-                          {rebuild === "done" ? "Rebuild again" : "Rebuild…"}
+                        <Button variant="primary" onClick={() => setRebuild("confirm")}>
+                          {updateActionLabel(buildCheck, rebuild)}
                         </Button>
                       )}
                     </Row>

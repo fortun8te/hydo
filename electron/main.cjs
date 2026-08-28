@@ -156,7 +156,9 @@ function loadWindowState() {
     const raw = JSON.parse(fs.readFileSync(WINDOW_STATE_FILE(), "utf8"));
     const { x, y, width, height } = raw || {};
     if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
-    if (width < 980 || height < 640) return null;
+    // Must match the BrowserWindow floor below, or a legitimately narrow
+    // saved window is thrown away and the app reopens at 1280 every launch.
+    if (width < 400 || height < 640) return null;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return { width, height };
     const onScreen = screen.getAllDisplays().some((d) => {
       const b = d.workArea;
@@ -187,7 +189,22 @@ function createWindow() {
     ...(saved || {}),
     width: (saved && saved.width) || 1280,
     height: (saved && saved.height) || 860,
-    minWidth: 980,
+    /* 980 forbade a narrow window outright: half a 1440 screen is 720, and the
+       app simply refused. What 980 was really holding up was the RIGHT-HAND
+       RAIL, a fixed 320px column that did not shrink — measured in a real
+       window at 440px, `.sand-main` came out 48px wide and the composer input
+       0px, i.e. the message box was gone. That is fixed in CSS, not by this
+       number: below 880 (the same breakpoint the roster already collapses at)
+       the rail lays itself over the transcript instead of pushing it out
+       (src/screens/rails.css), and the Settings nav drops its labels for its
+       icons under 720 (src/kit/ui.css).
+
+       400 is measured, not chosen: scripts/overlay-narrow-glow-test.cjs drives
+       a real window down to 320px and asserts zero horizontal overflow, a
+       full-width transcript with the rail open, and an unclipped Settings
+       body at every step. 400 is the last width where the composer input is
+       still ~192px — wide enough to be a message box rather than a slot. */
+    minWidth: 400,
     minHeight: 640,
     title: "Hydo",
     // Windows and Linux take the window icon from here. macOS reads it from
@@ -887,14 +904,22 @@ app.whenReady().then(() => {
    * succeed. What changed is that this used to be three lines that were each
    * subtly wrong:
    *
-   *  - `app.exit(0)` SKIPS `will-quit`. That is the only place the shared box
-   *    is stopped and `gateway.shutdown()` is awaited, so every relaunch left
-   *    the OLD bundle's Hermes children running against the same profile while
-   *    the new one started its own. Two gateways over one profile is a real
-   *    bug and the single-instance lock does not catch it - that lock is an
-   *    Electron primitive and these are python grandchildren. `app.quit()`
-   *    runs `will-quit`, which reaps both and THEN calls `app.exit(0)` itself.
-   *    The relaunch is armed before the quit and survives it.
+   *  - `app.exit(0)` SKIPS `will-quit`, and `will-quit` is the ONLY place the
+   *    shared box is stopped. The box is billed PER SECOND and the idle sweep
+   *    dies with the process, so a relaunch through app.exit left a machine
+   *    awake with nothing on this Mac that would ever stop it - the same bug
+   *    `stopBoxOnExit` was written for, reached through the one exit path that
+   *    skipped it. `app.quit()` runs `will-quit`, which awaits `box stop` and
+   *    `gateway.shutdown()` and THEN calls `app.exit(0)` itself. The relaunch
+   *    is armed before the quit and survives it.
+   *
+   *    MEASURED, 2026-08-28, on the Hermes side specifically: a parent that
+   *    hard-exits without calling `gateway.shutdown()` does NOT orphan its
+   *    python child - the child (pid 80267) was gone within one second. So the
+   *    "two gateways over one profile" failure this was expected to fix does
+   *    not occur; the box, which is remote and cannot notice a dead parent, is
+   *    the resource that actually leaked. Both are handled by going through
+   *    will-quit, but only one of them was ever broken.
    *  - No `execPath`. A relaunch re-execs whatever binary is running, which
    *    after "Rebuild and install" may be the pre-swap bundle the user is
    *    trying to leave. Pointing at /Applications/Hydo.app is what makes this

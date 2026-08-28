@@ -29,10 +29,19 @@ assert.ok(/window\.json/.test(main), "kept beside the store, not inside it — g
 
 // Never trust a saved rect.
 assert.ok(/getAllDisplays\(\)/.test(main), "the rect is checked against the CURRENT displays");
-assert.ok(
-  /width < 980 \|\| height < 640/.test(main),
-  "a rect under the app's own minimums is discarded rather than fought with"
-);
+// The two floors have to be the SAME number, or a legitimately narrow saved
+// window is discarded and the app reopens at its default size every launch.
+// Read out of the source rather than pinned to a literal: `minWidth` was 980
+// and is now 400, and a test that hardcodes it just has to be edited again.
+{
+  const floor = main.match(/minWidth:\s*(\d+)/);
+  const height = main.match(/minHeight:\s*(\d+)/);
+  assert.ok(floor && height, "main.cjs names a minWidth and a minHeight");
+  assert.ok(
+    new RegExp(`width < ${floor[1]} \\|\\| height < ${height[1]}`).test(main),
+    `a rect under the app's own minimums (${floor[1]}x${height[1]}) is discarded rather than fought with`
+  );
+}
 assert.ok(
   /getNormalBounds\(\)/.test(main) && !/win\.getBounds\(\)/.test(main),
   "save the NORMAL bounds; persisting a fullscreen rect opens an unreachable window next time"

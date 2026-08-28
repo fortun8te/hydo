@@ -124,12 +124,9 @@ export default function Shell({ state }) {
   const [since, setSince] = useState(0);
   const [clock, setClock] = useState(0);
   const [sending, setSending] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [rail, setRail] = useState(null);
   const [routineId, setRoutineId] = useState(null);
-  const [pluginsOpen, setPluginsOpen] = useState(false);
-  const [sheet, setSheet] = useState(null);
   const [menu, setMenu] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   // Below this the roster cannot show a name, a time and a preview line
@@ -145,15 +142,81 @@ export default function Shell({ state }) {
   const [lingerSince, setLingerSince] = useState(0);
   const [composerMenu, setComposerMenu] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
-  // The entry a Delete is waiting on. Deleting takes the whole transcript with
-  // it and the store has no undo, so it goes through a modal.
-  const [confirmDelete, setConfirmDelete] = useState(null);
-  // The artifact currently open in the right-hand pane.
-  const [artifactId, setArtifactId] = useState(null);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [findOpen, setFindOpen] = useState(false);
-  const [channelCreate, setChannelCreate] = useState(false);
-  const [botCreate, setBotCreate] = useState(false);
+  /* ------------------------------------------------------------------------
+     ONE owner for "which overlay is up".
+
+     Settings and the New-Bot composer were on screen at the same time: the
+     Settings rail sat over the sidebar while the bot picker owned the rest of
+     the window, and neither read as the top layer. The cause was structural,
+     not a missed line — every surface had its own boolean, so every entrance
+     had to remember to clear all the others by hand (the `sand.openSettings`
+     case below used to carry three `setX(false)` calls, one per surface that
+     existed on the day it was written). The next entrance forgets one, and
+     two modals stack.
+
+     There is now exactly one piece of state and a single door. Exclusivity is
+     a property of the representation — you cannot express "two overlays" —
+     rather than a rule each call site is trusted to follow.
+
+     `null`, or { kind, ...payload }. Rails (bot/channel/routines/computer/
+     undo) are deliberately NOT in here: they are a layout column beside the
+     transcript, not a layer over it, and they coexist with everything by
+     design. Anchored popovers (account menu, composer +, context menu) are
+     their own state but are dismissed by `openOverlay` — a menu left hanging
+     under a modal is the same incoherence in miniature.
+     ---------------------------------------------------------------------- */
+  const [overlay, setOverlay] = useState(null);
+  const overlayKind = overlay ? overlay.kind : null;
+  const openOverlay = useCallback((kind, payload) => {
+    setOverlay(kind ? { kind, ...(payload || null) } : null);
+    setAccountOpen(false);
+    setComposerMenu(false);
+    setMenu(null);
+  }, []);
+  /* "Close ME", never "close whatever is up".
+     The CommandPalette calls `row.run()` and then `onClose()` (see pick() in
+     CommandPalette.jsx). With one shared slot and a blind close, picking the
+     "Settings" row opened Settings and then immediately shut it — VERIFIED: no
+     dialog on screen afterwards. Every surface therefore closes ITSELF, by
+     kind, so a component unmounting cannot take a newer overlay with it.
+     Memoised into stable identities because several of these are props on
+     memoised children. */
+  const closers = useMemo(() => {
+    const make = (kind) => () => setOverlay((o) => (o && o.kind === kind ? null : o));
+    return {
+      settings: make("settings"),
+      plugins: make("plugins"),
+      palette: make("palette"),
+      find: make("find"),
+      sheet: make("sheet"),
+      artifact: make("artifact"),
+      botCreate: make("botCreate"),
+      channelCreate: make("channelCreate"),
+      confirmDelete: make("confirmDelete"),
+    };
+  }, []);
+  // Toggles go through the functional form so a command that opens a DIFFERENT
+  // overlay in the same batch is not undone by a stale read of `overlayKind`.
+  const toggleOverlay = useCallback((kind) => {
+    setOverlay((o) => (o && o.kind === kind ? null : { kind }));
+    setAccountOpen(false);
+    setComposerMenu(false);
+    setMenu(null);
+  }, []);
+
+  // Derived, never stored. Each of these used to be its own useState.
+  const settingsOpen = overlayKind === "settings";
+  const pluginsOpen = overlayKind === "plugins";
+  const paletteOpen = overlayKind === "palette";
+  const findOpen = overlayKind === "find";
+  const botCreate = overlayKind === "botCreate";
+  const channelCreate = overlayKind === "channelCreate";
+  const sheet = overlayKind === "sheet" ? overlay.name : null;
+  // The artifact currently open in the file-preview modal.
+  const artifactId = overlayKind === "artifact" ? overlay.id : null;
+  // The entries a Delete is waiting on. Deleting takes the whole transcript
+  // with it and the store has no undo, so it goes through a modal.
+  const confirmDelete = overlayKind === "confirmDelete" ? overlay.entries : null;
   const [titleEdit, setTitleEdit] = useState(false);
   const [titleName, setTitleName] = useState("");
 
@@ -214,12 +277,12 @@ export default function Shell({ state }) {
      handlers below: stable setters and `window.hydo` only, so `[]` is honest.
      ---------------------------------------------------------------------- */
   const onToggleSidebar = useCallback(() => setCollapsed((v) => !v), []);
-  const onCreateBot = useCallback(() => setBotCreate(true), []);
-  const onCreateChannel = useCallback(() => setChannelCreate(true), []);
+  const onCreateBot = useCallback(() => openOverlay("botCreate"), [openOverlay]);
+  const onCreateChannel = useCallback(() => openOverlay("channelCreate"), [openOverlay]);
   const onSelectEntry = useCallback((id) => window.hydo.select(id), []);
   const onDeleteEntries = useCallback(
-    (list) => setConfirmDelete(Array.isArray(list) ? list : [list]),
-    []
+    (list) => openOverlay("confirmDelete", { entries: Array.isArray(list) ? list : [list] }),
+    [openOverlay]
   );
   const onPinEntry = useCallback((entry) => window.hydo.setPinned?.(entry.id, !entry.pinned), []);
   const onMarkUnread = useCallback((entry) => window.hydo.setUnread?.(entry.id, true), []);
@@ -230,8 +293,8 @@ export default function Shell({ state }) {
     setRail(entry.kind === "channel" ? "channel" : "bot");
   }, []);
   const onCopyId = useCallback((entry) => navigator.clipboard?.writeText(entry.id), []);
-  const onPlugins = useCallback(() => setPluginsOpen(true), []);
-  const onOpenSettings = useCallback(() => setSettingsOpen(true), []);
+  const onPlugins = useCallback(() => openOverlay("plugins"), [openOverlay]);
+  const onOpenSettings = useCallback(() => openOverlay("settings"), [openOverlay]);
   /**
    * How many commits the running build is behind the working copy, or 0.
    *
@@ -268,11 +331,11 @@ export default function Shell({ state }) {
   // adding a second way to address the same state.
   const onUpdate = useCallback(() => {
     window.hydo.setSettings?.({ _pane: "updates" });
-    setSettingsOpen(true);
-  }, []);
-  const onAbout = useCallback(() => setSheet("about"), []);
-  const onHelp = useCallback(() => setSheet("help"), []);
-  const onFeedback = useCallback(() => setSheet("feedback"), []);
+    openOverlay("settings");
+  }, [openOverlay]);
+  const onAbout = useCallback(() => openOverlay("sheet", { name: "about" }), [openOverlay]);
+  const onHelp = useCallback(() => openOverlay("sheet", { name: "help" }), [openOverlay]);
+  const onFeedback = useCallback(() => openOverlay("sheet", { name: "feedback" }), [openOverlay]);
   const onSignOut = useCallback(() => window.hydo.signOut(), []);
   // `state.sections || []` minted a fresh array on every render, which on its
   // own was enough to defeat the memo above.
@@ -313,9 +376,9 @@ export default function Shell({ state }) {
     []
   );
   const onOpenArtifact = useCallback((id) => {
-    setArtifactId(id);
+    openOverlay("artifact", { id });
     setRail(null);
-  }, []);
+  }, [openOverlay]);
   const onOpenRoutine = useCallback((id) => {
     setRoutineId(id);
     setRail("routines");
@@ -351,7 +414,10 @@ export default function Shell({ state }) {
     setDraft(selected?.draft || "");
     setRoutineId(null);
     setDmPeerId(null);
-    setArtifactId(null);
+    // Only the artifact: switching threads must not slam a Settings dialog
+    // shut just because selecting a row in the roster behind it changed
+    // `selected.id`. Narrowed to the one overlay that belongs to a thread.
+    setOverlay((o) => (o && o.kind === "artifact" ? null : o));
     setComposerMenu(false);
     setReplyTo(null);
     setTitleEdit(false);
@@ -549,8 +615,8 @@ export default function Shell({ state }) {
       if (next) window.hydo.select(next.id);
     };
     switch (id) {
-      case "sand.commandPalette": setPaletteOpen((v) => !v); break;
-      case "sand.findInChat": setFindOpen((v) => !v); break;
+      case "sand.commandPalette": toggleOverlay("palette"); break;
+      case "sand.findInChat": toggleOverlay("find"); break;
       case "sand.newAgent": window.hydo.createAgent(); break;
       // Settings replaces whatever modal you were in, it does not stack on it.
       //
@@ -558,10 +624,7 @@ export default function Shell({ state }) {
       // left the Bot picker sitting UNDER the Settings dialog — two dialogs at
       // once, and from the user's side the picker simply "didn't disappear".
       case "sand.openSettings":
-        setBotCreate(false);
-        setPaletteOpen(false);
-        setFindOpen(false);
-        setSettingsOpen(true);
+        openOverlay("settings");
         break;
       // Same reason as Sidebar's hidden toggle button: below the breakpoint
       // the rail is forced, so flipping `collapsed` here changes nothing on
@@ -603,7 +666,9 @@ export default function Shell({ state }) {
     // "Command Palette" row itself, could never open it. Fully wired end to
     // end (KEYMAP -> matchEvent -> runCommand -> <CommandPalette open=…/>)
     // and silently dead.
-    if (id !== "sand.commandPalette") setPaletteOpen(false);
+    // Functional, and narrowed to the palette: with one shared overlay slot a
+    // blind `close` here would shut the Settings dialog the row just opened.
+    if (id !== "sand.commandPalette") closers.palette();
   }
 
   useEffect(() => {
@@ -618,10 +683,12 @@ export default function Shell({ state }) {
       if (e.key === "Escape") {
         if (e.defaultPrevented) return;
         if (isTypingTarget(e.target)) return;
-        if (document.querySelector(".hy-dialog, .hy-palette, .hy-find, .hy-sheet, [role='dialog']")) return;
+        // `[role='alertdialog']` is the ConfirmDialog, which is a modal that
+        // handles its own Escape and must not ALSO collapse the rail behind it.
+        if (document.querySelector(".hy-dialog, .hy-palette, .hy-find, .hy-sheet, [role='dialog'], [role='alertdialog']")) return;
         if (artifactId) {
           e.preventDefault();
-          setArtifactId(null);
+          closers.artifact();
           return;
         }
         if (rail) {
@@ -745,14 +812,14 @@ export default function Shell({ state }) {
         {botCreate && (
           <BotCreate
             agents={agents}
-            onClose={() => setBotCreate(false)}
+            onClose={closers.botCreate}
             onCreate={(patch) => {
               window.hydo.createAgent(patch);
-              setBotCreate(false);
+              closers.botCreate();
             }}
             onOpen={(id) => {
               window.hydo.select(id);
-              setBotCreate(false);
+              closers.botCreate();
             }}
           />
         )}
@@ -913,14 +980,14 @@ export default function Shell({ state }) {
             artifacts={state.artifacts || []}
             userName={state.settings?.userName}
             onOpen={(id) => window.hydo?.select?.(id)}
-            onNewBot={() => setBotCreate(true)}
-            onNewChannel={() => setChannelCreate(true)}
+            onNewBot={() => openOverlay("botCreate")}
+            onNewChannel={() => openOverlay("channelCreate")}
             onOpenRoutine={(botId, routineId) => {
               window.hydo?.select?.(botId);
               setRoutineId(routineId);
               setRail("routines");
             }}
-            onOpenArtifact={(id) => setArtifactId(id)}
+            onOpenArtifact={(id) => openOverlay("artifact", { id })}
           />
         )}
 
@@ -946,14 +1013,8 @@ export default function Shell({ state }) {
             menuOpen={composerMenu}
             onMenuToggle={setComposerMenu}
             onPickMention={pickMention}
-            onNewBot={() => {
-              setComposerMenu(false);
-              setBotCreate(true);
-            }}
-            onNewChannel={() => {
-              setComposerMenu(false);
-              setChannelCreate(true);
-            }}
+            onNewBot={() => openOverlay("botCreate")}
+            onNewChannel={() => openOverlay("channelCreate")}
             onAttach={attachFiles}
             todos={planOwner?.todos}
             planOwner={planOwner?.name}
@@ -991,7 +1052,7 @@ export default function Shell({ state }) {
 
       {artifactId ? (
         <Suspense fallback={null}>
-          <Artifact artifactId={artifactId} onClose={() => setArtifactId(null)} />
+          <Artifact artifactId={artifactId} onClose={closers.artifact} />
         </Suspense>
       ) : null}
 
@@ -1062,12 +1123,12 @@ export default function Shell({ state }) {
         open={paletteOpen}
         agents={agents}
         onRun={runCommand}
-        onClose={() => setPaletteOpen(false)}
+        onClose={closers.palette}
       />
       <FindInChat
         open={findOpen}
         thread={thread}
-        onClose={() => setFindOpen(false)}
+        onClose={closers.find}
         onJump={(id) => {
           const el = document.getElementById(`msg-${id}`);
           el?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -1081,7 +1142,7 @@ export default function Shell({ state }) {
           selectedId={selected?.id}
           selectedKind={selected?.kind}
           members={isChannel ? selected?.members : null}
-          onClose={() => setSettingsOpen(false)}
+          onClose={closers.settings}
           onChange={(patch) => window.hydo.setSettings(patch)}
           onSignOut={() => window.hydo.signOut()}
         />
@@ -1089,28 +1150,28 @@ export default function Shell({ state }) {
       )}
       {pluginsOpen && (
         <Suspense fallback={null}>
-          <Plugins onClose={() => setPluginsOpen(false)} />
+          <Plugins onClose={closers.plugins} />
         </Suspense>
       )}
       {channelCreate && (
         <ChannelCreate
           agents={agents}
-          onClose={() => setChannelCreate(false)}
+          onClose={closers.channelCreate}
           onCreate={(patch) => {
             window.hydo.createChannel?.(patch);
-            setChannelCreate(false);
+            closers.channelCreate();
           }}
         />
       )}
       {sheet === "about" && (
-        <Sheet title="About" onClose={() => setSheet(null)}>
+        <Sheet title="About" onClose={closers.sheet}>
           <Suspense fallback={null}>
             <About />
           </Suspense>
         </Sheet>
       )}
       {sheet === "help" && (
-        <Sheet title="Help Center" onClose={() => setSheet(null)}>
+        <Sheet title="Help Center" onClose={closers.sheet}>
           <p className="mute">Local help. No Cursor docs loaded.</p>
           <ul className="sheet__list">
             <li>Chat with a Bot from the roster</li>
@@ -1120,7 +1181,7 @@ export default function Shell({ state }) {
         </Sheet>
       )}
       {sheet === "feedback" && (
-        <Sheet title="Send Feedback" onClose={() => setSheet(null)}>
+        <Sheet title="Send Feedback" onClose={closers.sheet}>
           <p className="mute">This is a label. Nothing is billed or mailed.</p>
         </Sheet>
       )}
@@ -1143,10 +1204,10 @@ export default function Shell({ state }) {
               : "This permanently deletes them and their chat history. This can't be undone."
           }
           confirmLabel="Delete"
-          onCancel={() => setConfirmDelete(null)}
+          onCancel={closers.confirmDelete}
           onConfirm={() => {
             const list = confirmDelete;
-            setConfirmDelete(null);
+            closers.confirmDelete();
             const ids = list.map((e) => e.id);
             if (typeof window.hydo.deleteEntries === "function") {
               window.hydo.deleteEntries(ids);

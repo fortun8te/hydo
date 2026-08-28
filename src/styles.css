@@ -84,6 +84,10 @@ textarea {
   display: flex;
   height: 100%;
   background: var(--sand-bg-base);
+  /* The containing block for the narrow-window rail, which stops being a
+     column and becomes a pane over the transcript under 880px. Positioning
+     context only — nothing here is offset. See rails.css. */
+  position: relative;
 }
 
 .sand-sidebar {

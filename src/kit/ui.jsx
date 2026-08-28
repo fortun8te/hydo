@@ -31,6 +31,10 @@ export function DialogNav({ items, activeId, onSelect, ariaLabel = "Sections" })
           type="button"
           aria-current={item.id === activeId ? "page" : undefined}
           className={item.id === activeId ? "hy-dialog__nav-btn is-on" : "hy-dialog__nav-btn"}
+          /* The label is hidden on a narrow window (ui.css), where the icon is
+             all that is left of the row — so the name has to survive
+             somewhere a pointer can still find it. */
+          title={item.label}
           onClick={() => onSelect?.(item.id)}
         >
           {item.icon && <i className={`gb-icon gb-icon-${item.icon}`} aria-hidden="true" />}

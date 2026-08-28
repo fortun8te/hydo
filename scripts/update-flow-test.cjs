@@ -21,13 +21,17 @@
  *     answer changes when someone commits.
  *
  *  3. THE REOPEN GOES THROUGH THE REAL SHUTDOWN. `app.exit(0)` skips
- *     `will-quit`, which is the ONLY place `box stop` is awaited and
- *     `gateway.shutdown()` is called. The old handler used it, so every
- *     relaunch left the previous bundle's Hermes children alive against the
- *     same profile while the new instance started its own. Two gateways over
- *     one profile is a genuinely nasty bug and the single-instance lock does
- *     not catch it — that lock is an Electron primitive; these are python
- *     grandchildren. `app.quit()` is the fix and it is pinned here.
+ *     `will-quit`, which is the ONLY place `box stop` is awaited. The box is
+ *     billed per second and the idle sweep dies with the process, so the old
+ *     relaunch handler left a remote machine awake with nothing left on this
+ *     Mac that knew how to stop it. `app.quit()` runs will-quit — box stop and
+ *     `gateway.shutdown()`, awaited — and exits from there.
+ *
+ *     MEASURED while writing this: a parent that hard-exits without calling
+ *     gateway.shutdown() does NOT orphan its python child (it was gone inside
+ *     a second). The Hermes half was never leaking; the box half was. Both are
+ *     covered by going through will-quit, and this suite pins the route rather
+ *     than either symptom.
  *
  *  4. A TURN INTERRUPTED BY THE RESTART COMES BACK HONEST. Measured, not
  *     assumed, against a real store on a temp directory: before this pass a
@@ -342,7 +346,11 @@ assert.ok(
   !same(shot.dark.ticker.labelColor, shot.light.ticker.labelColor),
   "dark and light must use different blues — a single blue fails contrast in one of them"
 );
-assert.ok(fs.existsSync(`${PREFIX}-dark.png`) && fs.existsSync(`${PREFIX}-light.png`), "both frames were captured");
+for (const f of ["dark", "light", "dark-closed", "light-closed"]) {
+  // Four frames, not two: the account menu covers the ticker, so the closed
+  // frame is the only one that shows the ticker sitting in the foot.
+  assert.ok(fs.existsSync(`${PREFIX}-${f}.png`), `${f} frame was not captured`);
+}
 
 // ── 6. the tokens and the icon actually exist ─────────────────────────────
 // --hy-update must be defined in BOTH theme blocks. A token defined only in

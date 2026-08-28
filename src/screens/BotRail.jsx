@@ -478,20 +478,40 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
             </button>
           ))}
         </div>
-        {/* Glow is APPEARANCE, same tier as Color and Shape above it, not a
-            headline switch — it used to reuse the notifications toggle's full
-            title+description row, which gave a cosmetic option the same
-            visual weight as things that change what a bot can do. A single
-            small checkbox (the same markup Abilities/Connections use below)
-            reads as a minor affordance instead. */}
-        <label className={agent?.glow ? "bot-rail__check is-on" : "bot-rail__check"}>
-          <input
-            type="checkbox"
-            checked={!!agent?.glow}
-            onChange={() => onChange({ glow: !agent?.glow })}
-          />
-          <span>Glow</span>
-        </label>
+      </div>
+      {/* Glow is APPEARANCE — the same tier as Color and Shape, so it is
+          rendered in their idiom: a `bot-rail__field` with a label and a
+          `bot-rail__swatches` group of pressable faces, exactly like Shape.
+          It has been a full title+description notification-style row (which
+          gave a cosmetic option the weight of something that changes what a
+          bot can DO), then a labelled checkbox, which still read as a
+          settings line rather than an appearance pick. Two faces, off and on,
+          are also the only honest preview: the choice IS what the face looks
+          like. */}
+      <div className="bot-rail__field">
+        <span className="bot-rail__field-label">Glow</span>
+        <div className="bot-rail__swatches bot-rail__shapes" role="group" aria-label="Glow">
+          {[false, true].map((on) => (
+            <button
+              key={on ? "on" : "off"}
+              type="button"
+              className={!!agent?.glow === on ? "shape-pick is-on" : "shape-pick"}
+              title={on ? "Glow" : "No glow"}
+              aria-label={on ? "Glow" : "No glow"}
+              aria-pressed={!!agent?.glow === on}
+              onClick={() => onChange({ glow: on })}
+            >
+              <UmbraFace
+                tint={agent?.blob || "gray"}
+                shape={agent?.shape}
+                size={26}
+                mood="idle"
+                glow={on}
+                fit
+              />
+            </button>
+          ))}
+        </div>
       </div>
       <label className="bot-rail__field">
         <span className="bot-rail__field-label">Label (optional)</span>

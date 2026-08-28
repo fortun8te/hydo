@@ -183,7 +183,12 @@ mustInclude("src/screens/AccountMenu.jsx", ["Settings", "About", "Help Center", 
   assert.ok(!menu.includes("iOS"), "no fake iOS row");
 }
 mustInclude("src/screens/ChannelCreate.jsx", ["New channel", "Ex: Project Falcon", "Add Bots", "Create"]);
-mustInclude("src/screens/Shell.jsx", ["ChannelCreate", "setChannelCreate", "BotCreate"]);
+// Was ["ChannelCreate", "setChannelCreate", "BotCreate"]. The per-surface
+// booleans became ONE `overlay` slot so that two modals cannot be on screen at
+// once, which is what `setChannelCreate` used to be half of. The components
+// must still be mounted and reachable; how their visibility is stored is not
+// the thing worth pinning.
+mustInclude("src/screens/Shell.jsx", ["ChannelCreate", "BotCreate", 'openOverlay("channelCreate")', 'openOverlay("botCreate")']);
 // The composer placeholder is owned by Shell, which knows who is selected.
 mustInclude("src/screens/Shell.jsx", ["Sidebar", "Composer", "Transcript", "Message "]);
 mustInclude("src/screens/Transcript.jsx", ["presenceOf", "mood={presence.mood}"]);
