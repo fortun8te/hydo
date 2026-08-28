@@ -173,7 +173,11 @@ try {
 // ── 6. the thing it cannot do is said, not drawn ──────────────────────────
 // There is no git remote, no valid gh token and no electron-updater, so a
 // "Check for updates" button would fail every time it was pressed.
-assert.ok(/There is no auto-updater/.test(pane), "the pane must say plainly that there is no auto-updater");
+// Matched case-insensitively and without leading words: the sentence was
+// shortened once already ("There is no auto-updater and no download..." ->
+// "No auto-updater — ..."), and a test that pins prose verbatim blocks every
+// edit that makes the prose better. What must survive is the FACT.
+assert.ok(/no auto-updater/i.test(pane), "the pane must say plainly that there is no auto-updater");
 assert.equal(
   Object.keys(pkg.dependencies || {}).includes("electron-updater"),
   false,

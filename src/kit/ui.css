@@ -413,7 +413,16 @@
   background: var(--cursor-bg-secondary, #77777752);
 }
 
-.hy-btn--primary {
+/* Doubled deliberately: `.hy-dialog button { color: inherit }` above is
+   (0,1,1) and a bare `.hy-btn--primary` is (0,1,0), so inside any dialog the
+   primary button inherited the dialog's near-WHITE text onto its near-white
+   fill and its label vanished. Seen for real on Settings' "Rebuild and
+   install" confirm — an unreadable button next to a readable Cancel.
+   `plugins.css` and `settings.css` each already carried a local patch for this
+   same rule; fixing it on the component means the next dialog does not need a
+   third. Repeating the class is the smallest thing that outranks it. */
+.hy-btn--primary,
+.hy-btn.hy-btn--primary {
   background: var(--sand-fill-primary, #fcfcfc);
   color: var(--sand-text-on-primary, #141414);
 }

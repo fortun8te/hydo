@@ -493,8 +493,15 @@ export default function Settings({
   const runningLocal = localIds.has(String(settings.provider || "")) || localByModel.has(chatModel);
   // Remember the hosted pick so the switch back is the same one click. Written
   // during render only while NOT local, so flipping to local cannot overwrite it.
+  //
+  // Gated on the provider list having LOADED. `localList` starts empty and is
+  // filled by an async IPC call, so on the first render every model looks
+  // hosted — including a local one. The Cloud pill then captured
+  // `Qwen3.8-Flash-Next-GGUF` and offered it as the way back to the cloud,
+  // which is both wrong and the single most confusing thing the control could
+  // say. Nothing is remembered until we can actually tell the two apart.
   const cloudRef = useRef({ model: DEFAULT_CHAT, provider: DEFAULT_PROVIDER });
-  if (!runningLocal && chatModel) {
+  if (localList.length && !runningLocal && chatModel) {
     cloudRef.current = { model: chatModel, provider: settings.provider || DEFAULT_PROVIDER };
   }
   const activeStatus = (activeLocal && localState[activeLocal.id]) || { state: "unknown", detail: "" };
@@ -913,11 +920,16 @@ export default function Settings({
                       label="Rebuild and install"
                       description={
                         rebuild === "running"
-                          ? "Running npm run pack, then swapping /Applications/Hydo.app. This takes a minute or two."
+                          ? "Building… a minute or two."
                           : rebuild === "confirm"
-                            ? `This runs npm run pack in ${(build && build.repo) || "the working copy"}, then replaces /Applications/Hydo.app with the result. The running app is not restarted. It will refuse while a teammate is mid-turn.`
+                            ? // Short enough to actually read. The old copy spelled out an
+                              // absolute repo path and four sentences of caveats, which is a
+                              // wall nobody reads before clicking anyway. What matters at the
+                              // moment of deciding is what gets replaced and that nothing
+                              // restarts; the rest is true and belongs below, once.
+                              "Runs npm run pack, then replaces /Applications/Hydo.app. Nothing restarts."
                             : rebuildNote ||
-                              "Builds the current working copy and swaps the result into /Applications. Nothing is downloaded."
+                              "Builds this machine's copy of the source and installs it."
                       }
                     >
                       {rebuild === "running" ? (
@@ -992,8 +1004,7 @@ export default function Settings({
                       drawn as a button that would always fail: there is no git
                       remote, no release feed and no electron-updater here. */}
                   <p className="settings__note">
-                    There is no auto-updater and no download. Hydo has no release server to check — updating means
-                    rebuilding from the copy of the source on this machine.
+                    No auto-updater — there is no release server, so updating means rebuilding from source.
                   </p>
                 </section>
               </>
