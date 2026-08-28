@@ -1,10 +1,20 @@
-# Hydo
+# Hydo — an open Grok Bot
 
-**An open-source desktop app for a team of AI teammates — an alternative to Grok Bot's desktop client that you can run on your own hardware, on Hermes Agent.**
+**A team of AI teammates on your own machine. Open-source, MIT, and a drop-in alternative to Grok Bot's desktop client — running on Hermes Agent and your own hardware instead of someone else's.**
 
-Not a chatbot with one window. A roster of named, always-on teammates: each has its own memory, its own workspace on disk, its own tools, and its own animated face. You talk to them in threads, they talk to each other in channels, and they get on with things on a schedule while you are not looking.
+Grok Bot gave people the right idea: not one chat window, but a roster of named bots that keep working while you get on with something else. This is that idea, open, on your desk, with the model of your choosing — Grok 4.6 by default, any OpenAI-compatible endpoint (llama.cpp, LM Studio, Ollama, vLLM) when you would rather it never left the building.
 
-MIT licensed. Electron 42, React 19, Vite. Entry is `electron/main.cjs`; the renderer lives in `src/`.
+Each teammate has its own memory, its own workspace on disk, its own tools and its own face. You talk to them in threads, they talk to each other in channels, and they get on with things on a schedule while you are not looking.
+
+**Why you might want this instead**
+
+- **Your machine, your model.** Cloud or local per teammate, switchable per session, and it asks before it moves your work somewhere else.
+- **Real teammates, not tabs.** Named, persistent, with memory that survives restarts, and a shared team memory they all read.
+- **A channel that does not cost six turns to stay quiet.** Members are woken, not polled: silence is free.
+- **One shared computer.** A single Ascii box the whole roster drives, billed by the second and stopped when idle.
+- **Nothing hidden.** MIT, no telemetry, no account. `npm test` is 119 suites and they assert behaviour, not vibes.
+
+Electron 42, React 19, Vite. Entry is `electron/main.cjs`; the renderer lives in `src/`.
 
 ## Screenshots
 

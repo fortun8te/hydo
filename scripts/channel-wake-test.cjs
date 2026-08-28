@@ -14,11 +14,13 @@
  * One concurrent wake per member, and a SECOND turn only when a teammate
  * actually addresses someone by name -- an event, not a timer.
  *
- * These assertions COUNT REAL TURNS through a stub gateway and measure their
- * overlap in wall-clock, because "18 -> 6" and "sequential -> concurrent" are
- * claims about behaviour that a structural test cannot make. The stub is the
- * only fake part: the store, the channel loop and the directive parsing are
- * the real ones.
+ * These assertions COUNT REAL TURNS through a stub gateway and observe when
+ * each one started and finished, because "18 -> 6" and "sequential ->
+ * concurrent" are claims about behaviour that a structural test cannot make.
+ * They do NOT time the run: two earlier versions asserted wall-clock and both
+ * flaked under suite load while passing alone, which measures the machine
+ * rather than the change. The stub is the only fake part: the store, the
+ * channel loop and the directive parsing are the real ones.
  */
 
 const assert = require("node:assert/strict");
@@ -65,10 +67,12 @@ function stubGateway(reply, delay = 60) {
     submit: (botId, text, handlers) => {
       live += 1;
       peakLive = Math.max(peakLive, live);
-      turns.push({ botId, text, at: Date.now() });
+      const turn = { botId, text, at: Date.now(), started: Date.now(), ended: 0 };
+      turns.push(turn);
       return new Promise((resolve) => {
         setTimeout(() => {
           live -= 1;
+          turn.ended = Date.now();
           const out = { text: reply(names.get(botId) || botId, String(text || "")) };
           handlers.onDelta(out.text);
           handlers.onComplete(out);
@@ -125,26 +129,34 @@ function channelOf(store, n) {
   });
 
   await test("all six are woken at once, not one after another", async () => {
-    // 200ms per turn, so the RATIO between serial and concurrent dominates the
-    // fixed overhead of six real store turns. An earlier version used 80ms and
-    // an absolute 300ms bar, which passed alone and failed inside the full
-    // suite at 304ms -- a machine-load flake dressed up as a regression. The
-    // overlap count below is the deterministic proof; the clock is the
-    // sanity check, and it needs room.
+    // 200ms per turn, purely so the overlap window is wide enough to observe.
+    // Nothing below depends on how long the whole run took.
     const gw = stubGateway(() => "SKIP", 200);
     const store = freshStore();
     store.signIn();
     const { ch } = channelOf(store, 6);
     store.select(ch.id);
-    const t0 = Date.now();
     await store.send("hello");
-    const elapsed = Date.now() - t0;
+
+    // Concurrency is measured DIRECTLY, not inferred from a stopwatch.
+    //
+    // Two earlier versions asserted wall-clock (under 300ms, then under
+    // 600ms) and both flaked inside the full suite while passing alone --
+    // 304ms once, 853ms once -- because the surrounding per-turn work is
+    // serial and scales with machine load. That measures the machine, not the
+    // change. The assertions below cannot be affected by load at all: every
+    // turn was in flight simultaneously, and the LAST one started before the
+    // FIRST one finished. Neither can be true of a serial run.
     assert.equal(gw.peak(), 6, `only ${gw.peak()} turns overlapped — the wave is still serial`);
-    // Serial would be 6 x 200ms = 1200ms. Concurrent is ~200ms plus overhead;
-    // anything under half the serial time cannot be a sequential run.
+    const t = gw.turns;
+    assert.equal(t.length, 6, `expected six turns, got ${t.length}`);
+    const firstStart = Math.min(...t.map((x) => x.started));
+    const lastStart = Math.max(...t.map((x) => x.started));
+    const firstEnd = Math.min(...t.map((x) => x.ended));
     assert.ok(
-      elapsed < 600,
-      `six concurrent 200ms turns took ${elapsed}ms — serial would be ~1200ms, so this is sequential`
+      lastStart < firstEnd,
+      `the last turn started at +${lastStart - firstStart}ms, after the first had already ` +
+        `finished at +${firstEnd - firstStart}ms — that is a sequential run`
     );
   });
 

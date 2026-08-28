@@ -38,9 +38,17 @@ let updateCache = null;
 function statusFrom(info, check) {
   const c = check || {};
   const behind = Number(c.behind) || 0;
+  const stale = Number(c.stale) || 0;
   return {
-    available: c.state === "behind" && behind > 0,
+    // Two ways an installed build can genuinely be out of date, and only one
+    // of them was ever reported. "behind" is commits it does not have;
+    // "stale" is source edited since it was built, which is the common case
+    // here and was invisible against HEAD. Everything else -- "current",
+    // "dirty", "dev", and above all "unknown" -- still shows nothing, because
+    // a badge for an update that does not exist is a confident wrong status.
+    available: (c.state === "behind" && behind > 0) || (c.state === "stale" && stale > 0),
     behind,
+    stale,
     state: c.state || "unknown",
     channel: (info && info.channel) || "dev",
   };

@@ -92,11 +92,40 @@ assert.equal(statusFrom(null, null).available, false, "no check at all is not an
 assert.equal(statusFrom(null, undefined).behind, 0, "a missing count is 0, never NaN");
 assert.equal(statusFrom({}, { state: "behind", behind: "3" }).behind, 3, "the count reaches the UI as a number");
 
+// "stale" — source edited since the bundle was built. Comparing COMMITS alone
+// was the real hole: source changed without being committed is invisible
+// against HEAD, so the app sat silent while the installed build was genuinely
+// out of date. That is the common case on a machine where the user (or a
+// teammate) edits without committing.
+assert.equal(
+  statusFrom({}, { state: "stale", stale: 2 }).available,
+  true,
+  "an installed build older than the working copy must offer an update"
+);
+assert.equal(statusFrom({}, { state: "stale", stale: 2 }).stale, 2);
+// And the asymmetry holds: nothing else may claim an update exists.
+for (const st of ["current", "dirty", "dev", "unknown"]) {
+  assert.equal(
+    statusFrom({}, { state: st, behind: 0, stale: 0 }).available,
+    false,
+    `state "${st}" must not claim an update exists`
+  );
+}
+assert.equal(
+  statusFrom({}, { state: "stale", stale: 0 }).available,
+  false,
+  "stale with a zero count is not an update"
+);
+
 // The renderer must not widen that gate on its own. Shell only ever sets the
 // count when main said `available`.
 assert.ok(
   /if \(gone \|\| !res \|\| !res\.available\) return;/.test(shell),
   "Shell must trust main's `available` flag rather than re-deriving it from `behind`"
+);
+assert.ok(
+  /Number\(res\.behind\) \|\| Number\(res\.stale\)/.test(shell),
+  "the ticker must count a stale build too, not only commits it is behind"
 );
 // And the ticker is mounted on a positive count, not on truthiness of an
 // object. The second clause is the one-press update: once a build is running,

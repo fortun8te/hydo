@@ -114,6 +114,49 @@ function buildInfo(packaged) {
   };
 }
 
+
+/**
+ * How many source files changed after this bundle was built.
+ *
+ * Only the directories that actually end up IN the bundle, so a doc edit or a
+ * new test does not offer someone a ninety-second rebuild for nothing. Cheap
+ * by construction: a bounded walk of two trees, no git, no spawning.
+ */
+function newerThanBuild(repo, builtAt) {
+  const at = Date.parse(builtAt || "");
+  if (!repo || !at) return 0;
+  let count = 0;
+  const walk = (dir, depth) => {
+    if (depth > 6 || count > 50) return;
+    let items = [];
+    try {
+      items = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const it of items) {
+      if (it.name === "node_modules" || it.name.startsWith(".")) continue;
+      const full = path.join(dir, it.name);
+      if (it.isDirectory()) {
+        walk(full, depth + 1);
+        continue;
+      }
+      if (!/\.(cjs|js|jsx|css|html)$/.test(it.name)) continue;
+      // The stamp is written BY the build, so it is always newer than the
+      // build and would make every bundle look stale forever.
+      if (it.name === "build-stamp.json") continue;
+      try {
+        if (fs.statSync(full).mtimeMs > at) count += 1;
+      } catch {
+        /* vanished mid-walk */
+      }
+    }
+  };
+  walk(path.join(repo, "electron"), 0);
+  walk(path.join(repo, "src"), 0);
+  return count;
+}
+
 /**
  * How far behind the working copy is this build.
  *
@@ -151,10 +194,21 @@ function check(info) {
     return { ok: true, state: "unknown", behind: 0, dirty: false, reason: "git could not be read." };
   }
   const behind = Number(count) || 0;
+  // Source edited SINCE this bundle was built.
+  //
+  // Comparing commits alone was the real hole: the overwhelmingly common case
+  // on this machine is source that changed without being committed — the user
+  // editing, or a teammate editing on their behalf — and against `HEAD` that
+  // is invisible. The app then sat there with nothing to say while the
+  // installed build was genuinely out of date, which is exactly what "the
+  // updating is dodgy" describes. `behind` still wins when it applies; this
+  // only speaks when the commit count cannot.
+  const stale = behind === 0 ? newerThanBuild(i.repo, i.builtAt) : 0;
   return {
     ok: true,
-    state: behind > 0 ? "behind" : workDirty ? "dirty" : "current",
+    state: behind > 0 ? "behind" : stale > 0 ? "stale" : workDirty ? "dirty" : "current",
     behind,
+    stale,
     dirty: workDirty !== "",
     head,
     headShort: head.slice(0, 7),

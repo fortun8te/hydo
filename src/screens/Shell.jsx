@@ -332,7 +332,7 @@ export default function Shell({ state }) {
           // Never overwrite a finished install with a stale count: once a
           // build has landed, the ticker's job is to say "reopen".
           setUpdatePhase((phase) => {
-            if (!phase) setUpdateBehind(res.available ? Number(res.behind) || 0 : 0);
+            if (!phase) setUpdateBehind(res.available ? Number(res.behind) || Number(res.stale) || 0 : 0);
             return phase;
           });
         })
@@ -342,7 +342,10 @@ export default function Shell({ state }) {
     Promise.resolve(ask())
       .then((res) => {
         if (gone || !res || !res.available) return;
-        setUpdateBehind(Number(res.behind) || 0);
+        // Either kind of out-of-date counts. `behind` is commits; `stale` is
+        // source edited since the build, which is what most often makes the
+        // installed app older than the working copy.
+        setUpdateBehind(Number(res.behind) || Number(res.stale) || 0);
       })
       // A packaged app on a machine with no repo answers "unknown" and lands
       // here or in the guard above. Either way: nothing is shown, and nothing
