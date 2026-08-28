@@ -1,6 +1,6 @@
 {
   "name": "hydo",
-  "version": "0.1.122",
+  "version": "0.1.123",
   "author": "Michael Knaap",
   "private": true,
   "description": "Hydo — an open-source desktop app for a team of AI teammates, running on Hermes Agent.",
