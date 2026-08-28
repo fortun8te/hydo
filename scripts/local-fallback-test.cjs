@@ -155,15 +155,26 @@ async function main() {
   {
     const file = writeConfig({ box: `http://127.0.0.1:${dead}/v1` });
     const fb = freshFallback();
-    const out = await fb.check("box", { file, hostedReady: () => true });
-    await test("a local endpoint with nothing listening routes to the hosted model", () => {
-      assert.equal(out.run, "hosted");
+    // CHANGED with the ask: a dead endpoint no longer routes anywhere by
+    // itself, it asks. The hosted answer is still the one on offer.
+    const out = await fb.check("box", { file, hostedReady: () => true, agentId: "bot-1" });
+    await test("a local endpoint with nothing listening ASKS instead of rerouting", () => {
+      assert.equal(out.run, "ask");
       assert.equal(out.provider, "xai-oauth");
-      assert.match(out.note, /grok/i);
+      assert.match(out.question, /grok-4\.6/i);
+      assert.match(out.question, /\?$/, "it has to actually be a question");
     });
-    await test("the note names the endpoint that was skipped, not just 'an error'", () => {
-      assert.ok(out.note.includes("box"), `note must name the provider: ${out.note}`);
-      assert.ok(out.note.includes("127.0.0.1"), `note must name the host: ${out.note}`);
+    await test("the question names the endpoint that is down, not just 'an error'", () => {
+      assert.ok(out.question.includes("box"), `must name the provider: ${out.question}`);
+      assert.ok(out.question.includes("127.0.0.1"), `must name the host: ${out.question}`);
+    });
+    await test("with the session yes already given it reroutes, and still says so", () => {
+      fb.grant("bot-1", "box");
+      return fb.check("box", { file, hostedReady: () => true, agentId: "bot-1" }).then((yes) => {
+        assert.equal(yes.run, "hosted");
+        assert.match(yes.note, /instead of box/i);
+        fb.forget("bot-1");
+      });
     });
   }
 
@@ -234,6 +245,7 @@ async function main() {
     store.select(id);
     const state = await store.send("does this survive the box being off?");
     const msgs = threadOf(state, id);
+    const card = msgs.find((m) => m.kind === "clarify" && m.reroute);
 
     await test("the user's message is in the transcript even though the box was off", () => {
       assert.ok(
@@ -241,18 +253,85 @@ async function main() {
         "the typed message must never be lost"
       );
     });
-    await test("the transcript says, in plain words, that the turn ran elsewhere", () => {
-      const note = msgs.find((m) => m.kind === "event" && /instead of box/i.test(m.text || ""));
-      assert.ok(note, `expected a substitution note, got ${JSON.stringify(msgs.map((m) => m.text))}`);
-      assert.match(note.text, /grok-4\.6/);
+    // CHANGED: it asks first. Running anywhere else before this card is
+    // answered is the exact thing the user asked to stop.
+    await test("the transcript ASKS before running anywhere else", () => {
+      assert.ok(card, `expected a question, got ${JSON.stringify(msgs.map((m) => m.text))}`);
+      assert.match(card.text, /box/);
+      assert.match(card.text, /grok-4\.6/);
+      assert.equal(card.choices.length, 2);
     });
-    await test("the turn was actually built on the hosted provider, not the dead one", () => {
+    await test("and nothing has been built or answered while the question stands", () => {
+      assert.equal(built.length, 0, "no session may exist before the user agrees");
+      assert.ok(!msgs.some((m) => m.role === "bot" && m.kind === "chat"), "no bubble either");
+    });
+    await test("the bot is not left spinning on an unanswered question", () => {
+      assert.equal(store.getState().agents.find((x) => x.id === id).status, "idle");
+    });
+
+    // ── answering yes ────────────────────────────────────────────────────
+    const after = await store.answerClarify(card.id, card.choices[0].text);
+    const msgs2 = threadOf(after, id);
+    await test("saying yes runs the ORIGINAL message on the hosted model", () => {
       assert.ok(built.length, "a session must have been built");
       assert.equal(built[built.length - 1].provider, "xai-oauth");
       assert.equal(built[built.length - 1].model, "grok-4.6");
     });
+    await test("the substitution is still announced in plain words", () => {
+      const note = msgs2.find((m) => m.kind === "event" && /instead of box/i.test(m.text || ""));
+      assert.ok(note, `expected a substitution note, got ${JSON.stringify(msgs2.map((m) => m.text))}`);
+      assert.match(note.text, /grok-4\.6/);
+    });
     await test("and the user got an answer", () => {
-      assert.ok(msgs.some((m) => m.role === "bot" && m.text === "answered"));
+      assert.ok(msgs2.some((m) => m.role === "bot" && m.text === "answered"));
+    });
+
+    // ── the session memory: it does not ask again ────────────────────────
+    const again = await store.send("and this one too");
+    const msgs3 = threadOf(again, id);
+    await test("a second message this session is not re-asked", () => {
+      assert.equal(
+        msgs3.filter((m) => m.kind === "clarify" && m.reroute).length,
+        1,
+        "asking once per message would be intolerable"
+      );
+      assert.equal(built[built.length - 1].provider, "xai-oauth");
+    });
+    await test("but it still says so every time — consent is not permission to be quiet", () => {
+      assert.equal(
+        msgs3.filter((m) => m.kind === "event" && /instead of box/i.test(m.text || "")).length,
+        2
+      );
+    });
+
+    // ── and declining ────────────────────────────────────────────────────
+    // A different teammate, because the first one has already said yes.
+    const id2 = store.createAgent({ name: "Bo" }).selectedId;
+    store.setAgent(id2, { provider: "box", model: "local-model" });
+    store.select(id2);
+    const builtBefore = built.length;
+    const s4 = await store.send("no thanks, wait for my machine");
+    const card2 = threadOf(s4, id2).find((m) => m.kind === "clarify" && m.reroute);
+    const s5 = await store.answerClarify(card2.id, card2.choices[1].text);
+    const msgs5 = threadOf(s5, id2);
+    await test("declining runs NOTHING, anywhere", () => {
+      assert.equal(built.length, builtBefore, "a no must not build a session");
+      assert.ok(!msgs5.some((m) => m.role === "bot" && m.kind === "chat"));
+    });
+    await test("declining says so in a plain sentence, and the message is still there", () => {
+      const said = msgs5.find((m) => m.kind === "event" && /Nothing ran/i.test(m.text || ""));
+      assert.ok(said, `expected a plain refusal, got ${JSON.stringify(msgs5.map((m) => m.text))}`);
+      assert.match(said.text, /send it again/i);
+      assert.ok(msgs5.some((m) => m.role === "user" && m.text.includes("no thanks")));
+    });
+    await test("a no is not remembered as a yes for the next message", () => {
+      return store.send("second try").then((s6) => {
+        assert.equal(
+          threadOf(s6, id2).filter((m) => m.kind === "clarify" && m.reroute).length,
+          2,
+          "declining must leave the next turn asking again, not silently routed"
+        );
+      });
     });
   } finally {
     delete require.cache[gwPath];
@@ -302,17 +381,30 @@ async function main() {
     store.select(id);
     const state = await store.send("die halfway through this one");
     const msgs = threadOf(state, id);
-    await test("a turn that dies mid-stream is retried on the hosted model", () => {
-      assert.equal(built[built.length - 1].provider, "xai-oauth");
-      assert.ok(msgs.some((m) => m.role === "bot" && m.text === "answered"), "the user gets an answer");
+    // CHANGED with the ask: a mid-stream death is not silently retried
+    // somewhere else either. The rule is "never run a turn somewhere the user
+    // did not agree to", and it does not stop applying because the box died
+    // halfway through instead of before the start.
+    const midCard = msgs.find((m) => m.kind === "clarify" && m.reroute);
+    await test("a turn that dies mid-stream asks instead of retrying elsewhere", () => {
+      assert.ok(midCard, `expected a question, got ${JSON.stringify(msgs.map((m) => m.text))}`);
+      assert.match(midCard.text, /box/);
+      assert.match(midCard.text, /Connection error/);
+      assert.match(midCard.text, /grok-4\.6/);
     });
-    await test("the retry is announced too", () => {
-      const note = msgs.find((m) => m.kind === "event" && /Retried on/i.test(m.text || ""));
-      assert.ok(note, `expected a retry note, got ${JSON.stringify(msgs.map((m) => m.text))}`);
-      assert.match(note.text, /box/);
+    await test("nothing was resubmitted while the question stood", () => {
+      assert.equal(submits(), 1, "one local attempt, and no unapproved second one");
+      assert.equal(built[built.length - 1].provider, "box");
     });
-    await test("the retry is ONE retry, not a loop against a machine that is off", () => {
-      assert.equal(submits(), 2, "exactly one local attempt and one hosted attempt");
+    await test("saying yes finishes the job the box dropped", () => {
+      return store.answerClarify(midCard.id, midCard.choices[0].text).then((after) => {
+        const t = threadOf(after, id);
+        assert.equal(submits(), 2, "exactly one more attempt — not a loop");
+        assert.ok(
+          t.some((m) => m.role === "bot" && m.text === "answered"),
+          "the dropped turn must actually get answered"
+        );
+      });
     });
   } finally {
     delete require.cache[gwPath];

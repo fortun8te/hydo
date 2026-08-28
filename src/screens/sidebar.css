@@ -645,6 +645,70 @@
   flex: none;
 }
 
+/* -- update ticker ----------------------------------------------------- */
+/* Small on purpose: this sits directly above two 40px rows (Plugins and the
+   account), and at their weight it would read as a third permanent item in
+   the foot rather than as something that appeared. It is the only element
+   here that is ever coloured, so it does not need size as well.
+
+   Every property is stated on this selector rather than inherited from
+   .sand-plugins: the two `.sand-sidebar .sand-plugins, .sand-sidebar
+   .sand-account` rules above are (0,2,0), and a (0,1,0) `.sand-update` that
+   tried to share them would lose every declaration it meant to override —
+   which is exactly how `.hy-dialog button` (0,1,1) beat `.hy-btn--primary`
+   (0,1,0) and painted a white label onto a white button. */
+.sand-sidebar .sand-update {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--hy-update-soft);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--sand-font-family-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+
+.sand-sidebar .sand-update:hover {
+  background: var(--hy-update-soft);
+  box-shadow: inset 0 0 0 1px var(--hy-update);
+}
+
+.sand-sidebar .sand-update__dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--hy-update);
+}
+
+.sand-sidebar .sand-update__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--hy-update);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* The badge on the account menu's Software Update row.
+   `.sand-sidebar .account-menu__meta` is (0,2,0) and sets
+   `color: var(--sand-text-secondary)`. A bare `.account-menu__meta--update`
+   at (0,1,0) would apply its class, change no pixels, and look like a
+   styling bug — the same shape as the invisible-button-label bug. Three
+   classes deep puts this at (0,3,0) and settles it whatever the source
+   order ends up being. */
+.sand-sidebar .account-menu__item .account-menu__meta--update {
+  color: var(--hy-update);
+  font-weight: 600;
+}
+
 /* -- account menu ------------------------------------------------------ */
 
 .sand-sidebar .account-menu {

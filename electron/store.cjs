@@ -292,7 +292,23 @@ function normalizeAgent(agent) {
     ...rest,
     blob: isBlobTint(agent.blob) ? agent.blob : blob,
     shape: SHAPES.includes(agent.shape) ? agent.shape : shape,
-    status: agent.status === "working" ? "working" : "idle",
+    // MEASURED, 2026-08-28: a state.json written mid-turn came back with
+    // `status: "working"` intact, so a teammate interrupted by a relaunch (or
+    // a crash) sat spinning in the roster FOREVER — nothing ever clears it,
+    // because the turn that would have called setStatus("idle") died with the
+    // old process. `workingIn` was already cleared below and the comment
+    // claimed the problem was handled; it was handled halfway.
+    //
+    // Nothing is in flight the instant a process starts, so a reload has
+    // exactly one honest answer for every teammate and it is "idle".
+    status: "idle",
+    // Same claim, same lie. `activity` ("Reading files"), `activityDetail`
+    // ("rg --files") and `activityIcon` (a Figma mark) describe a tool call in
+    // a process that no longer exists. Cleared for the same reason setStatus
+    // clears them on the idle transition.
+    activity: "",
+    activityDetail: "",
+    activityIcon: "",
     // A crashed run can leave a stale `workingIn` in state.json. Nothing is in
     // flight after a reload, so a bot must never come back looking busy in a
     // conversation — the id is always cleared on load.
@@ -378,6 +394,29 @@ function normalizeState(raw) {
       messages[a.id] = [];
     }
   }
+  // A half-written answer must not come back looking live.
+  //
+  // MEASURED, 2026-08-28: a bot bubble persisted with `streaming: true` (the
+  // flag set in streamThroughHermes and only ever cleared by commitBeat when
+  // the turn ENDS) survives a reload untouched, and Transcript renders it with
+  // `hy-streaming` — an animated bubble for text that will never gain another
+  // character. That is the confident-wrong-state bug: the UI insists an answer
+  // is still arriving from a process that died.
+  //
+  // The flag is dropped and `interrupted` is set in its place. Transcript
+  // draws a plain line under such a bubble saying the turn was cut short, so
+  // the partial text is still there to read but is never presented as
+  // finished. Done here rather than in normalizeAgent because messages hang
+  // off the state's conversation map, not off the agent record.
+  for (const list of Object.values(messages)) {
+    if (!Array.isArray(list)) continue;
+    for (const m of list) {
+      if (!m || typeof m !== "object" || !m.streaming) continue;
+      m.streaming = false;
+      m.interrupted = true;
+    }
+  }
+
   return {
     ...raw,
     hydoSeed: SEED,
@@ -2204,7 +2243,24 @@ function createStore(opts = {}) {
     // `flags.hosted` is the one retry below; it must not re-probe or it would
     // bounce back onto the box that just failed.
     if (!flags.hosted) {
-      const decision = await localFallback.check(carefulProvider);
+      // `agentId` is what makes the yes per-teammate rather than app-wide: two
+      // bots on the same dead endpoint are two separate decisions, because the
+      // user may well want one of them waiting and the other on Grok.
+      const decision = await localFallback.check(carefulProvider, { agentId: agent.id });
+      if (decision.run === "ask") {
+        // The question, not the substitution. Nothing is submitted anywhere
+        // until this card is answered — that is the entire point of the
+        // change ("make sure ... it asks you a question").
+        //
+        // It is deliberately a `clarify` message and not a new kind: the app
+        // already has one card for "the thread is waiting on you", the user
+        // already knows what it looks like, and a second question card would
+        // be a second vocabulary to learn and to keep in sync.
+        askReroute(agent, convId, userText, carefulProvider, decision);
+        const stop = new Error(decision.question);
+        stop.hydoExplained = true;
+        throw stop;
+      }
       if (decision.run !== "local") {
         // Said out loud, in the transcript, BEFORE the answer arrives. A turn
         // that ran somewhere other than where the user chose and did not say
@@ -2280,7 +2336,19 @@ function createStore(opts = {}) {
       // nothing to think about, and it is the one turn EVERY bot takes. It
       // used to run on whatever the bot was configured for, so the first thing
       // creating a teammate did was buy a reasoning budget to write "hey".
-      reasoningEffort: flags.lean ? "minimal" : agent.reasoningEffort || "low",
+      //
+      // But it must not ask for a DIFFERENT effort than the turns after it.
+      // `sessionFor` treats a changed reasoningEffort as a different session
+      // and tears the old one down, so `minimal` here followed by `low` on the
+      // user's first real message rebuilt the session every time — visible as
+      // a teammate that starts over immediately after saying hello. The saving
+      // was a few hundred tokens on one greeting; the cost was a whole session
+      // and its prefill, on EVERY teammate ever created.
+      //
+      // The lean turn is still cheap where cheapness is free: it carries no
+      // tools and a short prompt. It just stops moving the one field the
+      // session is keyed on.
+      reasoningEffort: agent.reasoningEffort || "low",
       ...(typeof agent.fast === "boolean" ? { fast: agent.fast } : {}),
       // NOT "builder". The hydration default is `chat` and auto climbs from
       // there, so a bot with no stored profile reaching this line was paying
@@ -2879,6 +2947,120 @@ function createStore(opts = {}) {
     run();
   }
 
+  // ── "run it somewhere else?" ──────────────────────────────────────────
+  //
+  // The teammate is pinned to a local endpoint, the endpoint is not answering,
+  // and the user has not said what to do about it. Ask — and run nothing.
+  //
+  // The card is a `clarify`, the app's existing "this thread is waiting on
+  // you" card, on purpose. It carries `reroute`, which is both the flag that
+  // tells answerClarify/dismissClarify this question is Hydo's own rather than
+  // Hermes' (there is no request_id to respond to) and the whole pending turn,
+  // so a yes can replay the exact prompt instead of asking the user to retype.
+  function askReroute(agent, convId, userText, providerId, decision) {
+    pushMsg(convId || agent.id, {
+      id: uuid(),
+      role: "system",
+      kind: "clarify",
+      fromId: agent.id,
+      requestId: "",
+      text: decision.question,
+      choices: [
+        { id: "Cloud", text: `Yes, run it on ${decision.model}` },
+        { id: "Wait", text: `No, leave it for ${decision.endpoint}` },
+      ],
+      reroute: {
+        agentId: agent.id,
+        convId: convId || agent.id,
+        prompt: userText,
+        providerId,
+        provider: decision.provider,
+        model: decision.model,
+        endpoint: decision.endpoint,
+      },
+      at: now(),
+    });
+    logAction(agent.id, "model", `asked before leaving ${decision.endpoint}`);
+    saveSoon();
+  }
+
+  /** The pending question with this id, wherever in the app it was posted. */
+  function findReroute(messageId) {
+    for (const list of Object.values(state.messages || {})) {
+      const msg = (list || []).find((m) => m && m.id === messageId && m.reroute);
+      if (msg) return msg;
+    }
+    return null;
+  }
+
+  // Anything that is not an unambiguous yes is a no. The cost of reading a
+  // typo as "no" is one resend; the cost of reading it as "yes" is a turn that
+  // ran somewhere the user never agreed to, which is the thing this whole
+  // change exists to prevent.
+  function saidYes(msg, answer) {
+    const a = String(answer || "").trim().toLowerCase();
+    if (!a) return false;
+    const yes = (msg.choices || [])[0];
+    if (yes && (a === String(yes.id).toLowerCase() || a === String(yes.text).toLowerCase())) return true;
+    return /^(y|yes|yep|yeah|ok|okay|sure|do it|go ahead|cloud|grok)\b/.test(a);
+  }
+
+  /**
+   * Answer the reroute question.
+   *
+   * A yes grants the session-scoped consent FIRST and then replays the turn
+   * through the normal path, so the substitution note the transcript gets is
+   * the same sentence the automatic version used to write — one code path, one
+   * wording, no second place to keep honest.
+   *
+   * A no does not queue and does not hold. Holding would mean watching the
+   * endpoint for it to come back, and watching is the polling loop this
+   * subsystem is built to avoid; a message parked invisibly until a sleeping
+   * PC wakes is also its own way of losing it. So: nothing runs, and the card
+   * says so in a plain sentence, with the message still sitting in the thread
+   * to resend.
+   */
+  async function answerReroute(msg, answer) {
+    if (!msg || msg.answered || msg.dismissed) return publicState();
+    const agent = state.agents.find((a) => a.id === msg.reroute.agentId);
+    if (!agent) return publicState();
+    const yes = saidYes(msg, answer);
+    msg.answered = yes ? msg.choices[0].text : String(answer || msg.choices[1].text);
+    if (!yes) {
+      pushMsg(msg.reroute.convId, {
+        id: uuid(),
+        role: "system",
+        kind: "event",
+        text: `Nothing ran — ${msg.reroute.endpoint} is still down and you kept this teammate on it. Your message is still here: send it again when the endpoint is back, or switch this teammate to the cloud in its panel.`,
+        at: now(),
+      });
+      logAction(agent.id, "model", `declined the cloud; ${msg.reroute.endpoint} turn not run`);
+      setStatus(agent.id, "idle");
+      save();
+      return publicState();
+    }
+    localFallback.grant(agent.id, msg.reroute.providerId);
+    logAction(agent.id, "model", `cloud approved for ${msg.reroute.endpoint} this session`);
+    setStatus(agent.id, "working", undefined, agent.id);
+    save();
+    const extracted = await speak(agent, msg.reroute.prompt, undefined, msg.reroute.convId);
+    const rest = extracted.posted ? String(extracted.text || "").trim() : extracted.text;
+    const done = now();
+    for (const bubble of rest ? splitBubbles(rest) : []) {
+      pushMsg(msg.reroute.convId, {
+        id: uuid(),
+        role: "bot",
+        kind: "chat",
+        fromId: agent.id,
+        text: bubble,
+        at: done,
+      });
+    }
+    setStatus(agent.id, "idle");
+    save();
+    return publicState();
+  }
+
   async function speak(agent, userText, extra, convId, turnOpts = {}) {
     const soul = soulSnapshot(dir, agent.id);
     const memory = memorySnapshot(dir, agent.id);
@@ -2956,8 +3138,19 @@ function createStore(opts = {}) {
           // loop — retrying a machine that is off is the polling this avoids.
           const rescue = localFallback.afterFailure(
             modelPick.sessionProvider(agent, state.settings),
-            err
+            err,
+            { agentId: agent.id }
           );
+          // No standing yes for this teammate, so the mid-stream death gets
+          // the same question the preflight would have asked. "Never run a
+          // turn somewhere the user did not agree to" does not stop applying
+          // because the box died halfway instead of before the start.
+          if (rescue && rescue.ask) {
+            askReroute(agent, convId, userText, modelPick.sessionProvider(agent, state.settings), rescue);
+            setStatus(agent.id, "idle");
+            save();
+            return finishSpeak({ text: "", posted: true });
+          }
           if (rescue) {
             pushMsg(convId || agent.id, {
               id: uuid(),
@@ -3543,6 +3736,17 @@ function createStore(opts = {}) {
       // different gateway child on its next turn (see hermes-gateway.cjs).
       const allowed = ["name", "label", "description", "notifications", "blob", "shape", "glow", "status", "draft", "color", "activity", "activityDetail", "model", "provider", "reasoningEffort", "fast", "toolProfile", "profilePinned", "toolsets", "mcp", "sectionId", "backgroundTurn", "subagentIds", "lastSubagentId", "boxEnabled"];
       const before = agent.name;
+      // Changing where a teammate runs is a NEW decision about where it runs,
+      // so it retires the standing "yes, use the cloud" from earlier in the
+      // session. Otherwise moving a bot back onto its own machine would leave
+      // an invisible yes behind, ready to send the next failed turn to Grok
+      // without asking again.
+      if (
+        Object.prototype.hasOwnProperty.call(patch, "provider") ||
+        Object.prototype.hasOwnProperty.call(patch, "model")
+      ) {
+        localFallback.forget(agent.id);
+      }
       for (const key of allowed) {
         if (Object.prototype.hasOwnProperty.call(patch, key)) agent[key] = patch[key];
       }
@@ -4147,6 +4351,10 @@ function createStore(opts = {}) {
      * rather than silently dropping it.
      */
     async dismissClarify(messageId) {
+      // Hydo's own reroute question has no Hermes request behind it, so there
+      // is nothing to respond to — dismissing it IS declining the cloud.
+      const own = findReroute(messageId);
+      if (own) return answerReroute(own, "");
       const entry = selectedEntry();
       if (!entry) return publicState();
       const msg = threadOf(entry.id).find((m) => m.id === messageId);
@@ -4170,6 +4378,11 @@ function createStore(opts = {}) {
       return publicState();
     },
     async answerClarify(messageId, answer) {
+      // Same card, different owner: a `reroute` clarify is answered here in
+      // Hydo, never forwarded to Hermes (whose session was never started —
+      // that is what the question is about).
+      const own = findReroute(messageId);
+      if (own) return answerReroute(own, answer);
       const entry = selectedEntry();
       const body = String(answer || "").trim();
       if (!entry || !body) return publicState();

@@ -253,6 +253,12 @@ function Sidebar({
   onPlugins,
   showHome = true,
   onSettings,
+  // Both come from Shell, which asks the main process ONCE on mount. A
+  // primitive number and a useCallback, so the memo() at the bottom of this
+  // file survives them — an inline arrow here would turn it back into a no-op
+  // on every keystroke in the composer.
+  onUpdate,
+  updateBehind = 0,
   onAbout,
   onHelp,
   onFeedback,
@@ -912,6 +918,28 @@ function Sidebar({
           </span>
         </div>
 
+        {/* The ticker. Mounted ONLY when the main process counted commits this
+            build does not have (see statusFrom in electron/main.cjs); an
+            "unknown" answer arrives here as 0 and draws nothing at all, which
+            is the correct output for "cannot tell". It is a real button, not
+            an ornament — it opens the Updates pane, where the install lives. */}
+        {updateBehind > 0 ? (
+          <button
+            type="button"
+            className="sand-update"
+            data-tip="An update is ready to install"
+            title="An update is ready to install"
+            onClick={() => onUpdate?.()}
+          >
+            <span className="sand-update__dot" aria-hidden="true" />
+            <span className="sand-update__label">
+              Update ready
+              {" · "}
+              {updateBehind} new
+            </span>
+          </button>
+        ) : null}
+
         <button
           type="button"
           className="sand-plugins"
@@ -930,6 +958,8 @@ function Sidebar({
             <AccountMenu
               userName={name}
               onSettings={onSettings}
+              onUpdate={onUpdate}
+              updateBehind={updateBehind}
               onAbout={onAbout}
               onHelp={onHelp}
               onFeedback={onFeedback}

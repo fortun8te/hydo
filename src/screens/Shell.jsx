@@ -232,6 +232,44 @@ export default function Shell({ state }) {
   const onCopyId = useCallback((entry) => navigator.clipboard?.writeText(entry.id), []);
   const onPlugins = useCallback(() => setPluginsOpen(true), []);
   const onOpenSettings = useCallback(() => setSettingsOpen(true), []);
+  /**
+   * How many commits the running build is behind the working copy, or 0.
+   *
+   * Asked ONCE, on mount, and never again unless the Updates pane explicitly
+   * re-checks (hydo:checkBuild writes through to the same cache in main). No
+   * interval, no focus listener: the answer only changes when someone commits
+   * to a repo on this machine, and `git rev-list` on a timer for that would be
+   * a background process burned on a question nobody asked.
+   *
+   * 0 for every uncertain case, by construction in main.cjs `statusFrom` — so
+   * the ticker below is mounted only when there is a countable set of commits
+   * to install.
+   */
+  const [updateBehind, setUpdateBehind] = useState(0);
+  useEffect(() => {
+    const ask = window.hydo?.updateStatus;
+    if (typeof ask !== "function") return undefined;
+    let gone = false;
+    Promise.resolve(ask())
+      .then((res) => {
+        if (gone || !res || !res.available) return;
+        setUpdateBehind(Number(res.behind) || 0);
+      })
+      // A packaged app on a machine with no repo answers "unknown" and lands
+      // here or in the guard above. Either way: nothing is shown, and nothing
+      // is thrown at the user.
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, []);
+  // Straight to the Updates pane. `_pane` is a settings field (see Settings.jsx),
+  // so the pane is chosen by writing it before the dialog mounts rather than by
+  // adding a second way to address the same state.
+  const onUpdate = useCallback(() => {
+    window.hydo.setSettings?.({ _pane: "updates" });
+    setSettingsOpen(true);
+  }, []);
   const onAbout = useCallback(() => setSheet("about"), []);
   const onHelp = useCallback(() => setSheet("help"), []);
   const onFeedback = useCallback(() => setSheet("feedback"), []);
@@ -694,6 +732,8 @@ export default function Shell({ state }) {
         accountOpen={accountOpen}
         onAccountToggle={setAccountOpen}
         onSettings={onOpenSettings}
+        onUpdate={onUpdate}
+        updateBehind={updateBehind}
         onAbout={onAbout}
         onHelp={onHelp}
         onFeedback={onFeedback}

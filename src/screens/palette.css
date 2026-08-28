@@ -72,6 +72,40 @@
   color: var(--sand-text-tertiary, #ffffff9c);
 }
 
+.hy-palette__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--sand-border-default, #ffffff1a);
+  flex: none;
+  overflow-x: auto;
+}
+
+.hy-palette__tab {
+  flex: none;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sand-text-tertiary, #ffffff9c);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.hy-palette__tab:hover {
+  background: var(--sand-fill-ghost-hover, #ffffff17);
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
+/* Selected state needs to win over the plain hover rule above it, which
+   would otherwise repaint it transparent on mouseleave-then-hover — the same
+   specificity trap noted for .ghost--solid elsewhere in this app. */
+.hy-palette__tab.is-on {
+  background: var(--sand-fill-primary, #fcfcfc);
+  color: var(--sand-text-on-primary, #111);
+}
+
 .hy-palette__list {
   overflow-y: auto;
   padding: 6px;

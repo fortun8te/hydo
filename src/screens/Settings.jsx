@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { initialOf } from "../lib/marks.js";
 import { fileToAvatar } from "../lib/avatar.js";
 import { Dialog, DialogNav, SectionLabel, RowGroup, Row, Select, Button, TextInput } from "../kit/ui.jsx";
+// Reused rather than a third viewer: MediaViewer already knows how to show a
+// single image at its natural size ("never blown up past its natural size"
+// in richcontent.css), which is exactly right for a 256px avatar data URI —
+// blowing it up to fill the screen would just show the JPEG blur bigger.
+import { MediaViewer } from "./RichContent.jsx";
 
 const PANES = [
   { id: "general", label: "General", icon: "settings-gear" },
@@ -150,6 +155,7 @@ function UsageMeter({ usage }) {
 function AccountRow({ name, email, avatarUrl, onSignOut, onAvatar }) {
   const [copied, setCopied] = useState(false);
   const [avatarErr, setAvatarErr] = useState("");
+  const [preview, setPreview] = useState(false);
   const fileRef = useRef(null);
 
   function copy() {
@@ -171,29 +177,44 @@ function AccountRow({ name, email, avatarUrl, onSignOut, onAvatar }) {
     }
   }
 
-  // The avatar IS the control. A separate "Change picture" row would be a
-  // second thing to find for something everyone already knows how to do.
+  // One click cannot both preview and change the same picture, so the two
+  // gestures are split: the avatar itself opens it bigger (MediaViewer, same
+  // as any other image in the app), and the small camera badge — already
+  // sitting on top of it, previously the only affordance — changes it. That
+  // keeps "change" a single click too, just on the badge instead of the
+  // whole circle. An initials-only avatar has nothing to preview, so its
+  // click still goes straight to the file picker.
   const avatar = (
-    <>
+    <div className="settings__avatar-wrap">
       <button
         type="button"
         className="settings__avatar settings__avatar--edit"
-        title={avatarUrl ? "Change picture" : "Add a picture"}
-        aria-label={avatarUrl ? "Change picture" : "Add a picture"}
-        onClick={() => fileRef.current?.click()}
+        title={avatarUrl ? "View picture" : "Add a picture"}
+        aria-label={avatarUrl ? "View picture" : "Add a picture"}
+        onClick={() => (avatarUrl ? setPreview(true) : fileRef.current?.click())}
       >
         {avatarUrl ? (
           <img src={avatarUrl} alt="" className="settings__avatar-img" />
         ) : (
           <span className="settings__avatar-initial">{initialOf(name)}</span>
         )}
-        <span className="settings__avatar-hint" aria-hidden="true">
-          {/* `gb-icon-camera` is not a name icons.css defines — the class
-              applied, ::before resolved to `content: none`, and the badge
-              painted as an empty 0x0 grey circle on hover. The font's real
-              name for this glyph is device-camera. */}
-          <i className="gb-icon gb-icon-device-camera" />
-        </span>
+      </button>
+      <button
+        type="button"
+        className="settings__avatar-hint"
+        title={avatarUrl ? "Change picture" : "Add a picture"}
+        aria-label={avatarUrl ? "Change picture" : "Add a picture"}
+        onClick={(e) => {
+          // Must not also trigger the preview button underneath it.
+          e.stopPropagation();
+          fileRef.current?.click();
+        }}
+      >
+        {/* `gb-icon-camera` is not a name icons.css defines — the class
+            applied, ::before resolved to `content: none`, and the badge
+            painted as an empty 0x0 grey circle on hover. The font's real
+            name for this glyph is device-camera. */}
+        <i className="gb-icon gb-icon-device-camera" />
       </button>
       <input
         ref={fileRef}
@@ -205,7 +226,13 @@ function AccountRow({ name, email, avatarUrl, onSignOut, onAvatar }) {
           e.target.value = "";
         }}
       />
-    </>
+      <MediaViewer
+        items={avatarUrl ? [avatarUrl] : []}
+        index={0}
+        open={preview && !!avatarUrl}
+        onClose={() => setPreview(false)}
+      />
+    </div>
   );
 
   return (
@@ -359,6 +386,9 @@ export default function Settings({
   // /Applications and the user is told that before it happens, not after.
   const [rebuild, setRebuild] = useState("");
   const [rebuildNote, setRebuildNote] = useState("");
+  // Why the reopen did NOT happen. Only ever set on a refusal — a successful
+  // relaunch takes the renderer with it.
+  const [relaunchNote, setRelaunchNote] = useState("");
   const title = PANES.find((item) => item.id === pane)?.label || "General";
   const chatModel = chatModelOf(settings);
 
@@ -927,7 +957,7 @@ export default function Settings({
                               // wall nobody reads before clicking anyway. What matters at the
                               // moment of deciding is what gets replaced and that nothing
                               // restarts; the rest is true and belongs below, once.
-                              "Runs npm run pack, then replaces /Applications/Hydo.app. Nothing restarts."
+                              "Runs npm run pack, then replaces /Applications/Hydo.app. You choose whether to reopen."
                             : rebuildNote ||
                               "Builds this machine's copy of the source and installs it."
                       }
@@ -949,7 +979,7 @@ export default function Settings({
                                   if (res && res.ok) {
                                     setRebuild("done");
                                     setRebuildNote(
-                                      `Installed to ${res.installed}${res.seconds ? ` in ${res.seconds}s` : ""}. The running app is still the old one until you relaunch.`,
+                                      `Installed to ${res.installed}${res.seconds ? ` in ${res.seconds}s` : ""}. The running app is still the old one until you reopen.`,
                                     );
                                     const again = window.hydo?.checkBuild;
                                     if (typeof again === "function") {
@@ -992,10 +1022,41 @@ export default function Settings({
                       <Row
                         divided
                         label="Relaunch into the new build"
-                        description="Quits and reopens Hydo. Anything mid-turn is lost, so this is never done for you."
+                        description={
+                          relaunchNote ||
+                          // What the main process actually does now, in order:
+                          // it refuses outright if anyone is working, flushes
+                          // the store, stops the box and shuts the Hermes
+                          // gateway down through will-quit, then re-execs
+                          // /Applications/Hydo.app. Said here because "quits
+                          // and reopens" on its own does not tell you that
+                          // your teammates are handled.
+                          "Stops your teammates cleanly, then quits and reopens the installed build. Refused while anyone is mid-turn."
+                        }
                       >
-                        <Button variant="primary" onClick={() => window.hydo?.relaunch?.()}>
-                          Relaunch now
+                        <Button
+                          variant="primary"
+                          onClick={() => {
+                            const go = window.hydo?.relaunch;
+                            if (typeof go !== "function") return;
+                            setRelaunchNote("");
+                            Promise.resolve(go())
+                              .then((res) => {
+                                // On success the process is already on its way
+                                // out and nothing here will ever render. The
+                                // only reachable branch is the refusal.
+                                if (res && res.ok === false) {
+                                  setRelaunchNote(
+                                    res.reason === "busy"
+                                      ? `${res.detail || "A teammate is mid-turn."} Nothing was restarted.`
+                                      : `${res.detail || "Hydo could not reopen itself."} Nothing was restarted.`,
+                                  );
+                                }
+                              })
+                              .catch(() => setRelaunchNote("Hydo could not reopen itself. Nothing was restarted."));
+                          }}
+                        >
+                          Reopen now
                         </Button>
                       </Row>
                     )}

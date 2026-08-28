@@ -449,6 +449,10 @@ export function installDevMock() {
       info: MOCK_BUILD,
       check: { ok: true, state: "behind", behind: 3, dirty: true, headShort: "1c0ffee" },
     }),
+    // Matches the checkBuild fixture directly above: 3 commits behind, which
+    // is what makes the sidebar ticker and the account-menu badge visible in
+    // the mock at all. main.cjs `statusFrom` computes this shape for real.
+    updateStatus: async () => ({ ok: true, available: true, behind: 3, state: "behind", channel: "release" }),
     rebuildAndInstall: async () => ({ ok: false, reason: "The dev mock cannot run a build." }),
     relaunch: async () => ({ ok: true }),
     openExternal: async () => ({ ok: true }),

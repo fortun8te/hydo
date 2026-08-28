@@ -168,18 +168,23 @@
   border-radius: 999px;
 }
 
-/* The avatar doubles as the control for changing it: a separate "Change
-   picture" row would be a second thing to find for something everyone already
-   knows how to do. The camera badge is the only affordance it needs. */
-.settings__avatar--edit {
+/* The avatar itself now opens a bigger preview (MediaViewer), so the change
+   affordance moved to this small camera badge instead of the whole circle —
+   one click still changes the picture, it's just not the same click that
+   previews it. The wrap is the hover/focus scope for both buttons since the
+   badge is a sibling of the avatar button now, not a child of it. */
+.settings__avatar-wrap {
   position: relative;
+  display: inline-flex;
+}
+.settings__avatar--edit {
   padding: 0;
   border: 0;
   background: none;
   cursor: pointer;
   border-radius: 999px;
 }
-.settings__avatar--edit .settings__avatar-hint {
+.settings__avatar-hint {
   position: absolute;
   right: -1px;
   bottom: -1px;
@@ -187,17 +192,21 @@
   place-items: center;
   width: 16px;
   height: 16px;
+  padding: 0;
+  border: 0;
   font-size: 9px;
   border-radius: 999px;
   color: var(--cursor-text-primary);
   background: var(--cursor-bg-secondary);
+  cursor: pointer;
   /* Reads as a badge ON the avatar rather than a dot beside it. */
   box-shadow: 0 0 0 2px var(--cursor-bg-primary);
   opacity: 0;
   transition: opacity 120ms ease;
 }
-.settings__avatar--edit:hover .settings__avatar-hint,
-.settings__avatar--edit:focus-visible .settings__avatar-hint {
+.settings__avatar-wrap:hover .settings__avatar-hint,
+.settings__avatar--edit:focus-visible ~ .settings__avatar-hint,
+.settings__avatar-hint:focus-visible {
   opacity: 1;
 }
 .settings__avatar--edit:focus-visible {

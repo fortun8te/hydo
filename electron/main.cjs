@@ -12,6 +12,39 @@ const buildInfo = require("./build-info.cjs");
 // directory and would race each other into a corrupt bundle.
 let rebuilding = false;
 
+/**
+ * The sidebar ticker's answer, computed at most once per launch.
+ *
+ * Null means "not asked yet", never "no update" - the two must not collapse,
+ * because the renderer draws nothing for one and would draw a stale nothing
+ * for the other. hydo:updateStatus fills it; hydo:checkBuild overwrites it.
+ */
+let updateCache = null;
+
+/**
+ * Turn a buildInfo/check pair into the one boolean the sidebar is allowed to
+ * act on, plus the numbers it renders.
+ *
+ * `available` is deliberately narrow: state "behind" AND a positive commit
+ * count. Everything else - "current", "dirty", "dev", and above all "unknown"
+ * (no repo on this machine, a packaged app copied to another laptop, history
+ * rewritten under the stamped sha) - is NOT available and shows nothing.
+ *
+ * That asymmetry is the rule this whole feature lives under: a badge for an
+ * update that does not exist is a confident wrong status, which this codebase
+ * treats as a bug. Silence is always an available correct answer here.
+ */
+function statusFrom(info, check) {
+  const c = check || {};
+  const behind = Number(c.behind) || 0;
+  return {
+    available: c.state === "behind" && behind > 0,
+    behind,
+    state: c.state || "unknown",
+    channel: (info && info.channel) || "dev",
+  };
+}
+
 // Every Hermes-backed handler below degrades to a truthful empty answer rather
 // than rejecting into the renderer: `available()` false must leave the app
 // usable, not throw dialogs at someone who simply has not installed Hermes.
@@ -824,7 +857,11 @@ app.whenReady().then(() => {
   ipcMain.handle("hydo:buildInfo", () => ok({ info: buildInfo.buildInfo(app.isPackaged) }));
   ipcMain.handle("hydo:checkBuild", () => {
     const info = buildInfo.buildInfo(app.isPackaged);
-    return ok({ info, check: buildInfo.check(info) });
+    const res = buildInfo.check(info);
+    // Write through, so the ticker agrees with the pane the user just read
+    // instead of holding a launch-time answer beside a fresher one.
+    updateCache = statusFrom(info, res);
+    return ok({ info, check: res });
   });
   ipcMain.handle("hydo:rebuildAndInstall", async () => {
     const info = buildInfo.buildInfo(app.isPackaged);
@@ -843,13 +880,68 @@ app.whenReady().then(() => {
       rebuilding = false;
     }
   });
-  // Asked for explicitly by the pane, never done as a side effect of the
-  // install: relaunching without being asked is a crash with a nice name.
+  /**
+   * Quit and come back up in the bundle that is on disk NOW.
+   *
+   * Still never automatic - the renderer asks, after an install it watched
+   * succeed. What changed is that this used to be three lines that were each
+   * subtly wrong:
+   *
+   *  - `app.exit(0)` SKIPS `will-quit`. That is the only place the shared box
+   *    is stopped and `gateway.shutdown()` is awaited, so every relaunch left
+   *    the OLD bundle's Hermes children running against the same profile while
+   *    the new one started its own. Two gateways over one profile is a real
+   *    bug and the single-instance lock does not catch it - that lock is an
+   *    Electron primitive and these are python grandchildren. `app.quit()`
+   *    runs `will-quit`, which reaps both and THEN calls `app.exit(0)` itself.
+   *    The relaunch is armed before the quit and survives it.
+   *  - No `execPath`. A relaunch re-execs whatever binary is running, which
+   *    after "Rebuild and install" may be the pre-swap bundle the user is
+   *    trying to leave. Pointing at /Applications/Hydo.app is what makes this
+   *    an update rather than a restart.
+   *  - No busy check. Same rule as the install: a turn in flight is work the
+   *    user is waiting on, and the store's crash recovery can only mark it
+   *    interrupted afterwards - it cannot finish it.
+   */
   ipcMain.handle("hydo:relaunch", () => {
+    const busy = (store.getState().agents || []).filter((a) => a.status === "working");
+    if (busy.length) {
+      return { ok: false, reason: "busy", detail: `${busy[0].name || "A teammate"} is mid-turn.` };
+    }
+    let execPath;
+    if (app.isPackaged) {
+      // The installed bundle, not this process's binary. Guarded with
+      // existsSync: relaunching into a missing executable is a quit that never
+      // comes back, which is strictly worse than not relaunching at all.
+      const installed = path.join(buildInfo.INSTALLED, "Contents", "MacOS", "Hydo");
+      if (fs.existsSync(installed)) execPath = installed;
+      else if (!fs.existsSync(process.execPath)) {
+        return { ok: false, reason: "no-bundle", detail: "There is no Hydo.app to reopen." };
+      }
+    }
     flushStore();
-    app.relaunch();
-    app.exit(0);
-    return { ok: true };
+    app.relaunch(execPath ? { execPath } : undefined);
+    // quit, NOT exit - see above. will-quit does the reaping and the exit.
+    app.quit();
+    return { ok: true, execPath: execPath || process.execPath };
+  });
+
+  /**
+   * Is there something to install? Cached, on purpose.
+   *
+   * The sidebar ticker reads this, and a ticker that shelled out to git on a
+   * timer would be a background process running `rev-list` forever for an
+   * answer that changes when the user commits - which is not often and is
+   * never urgent. So: computed at most once per launch, and refreshed only
+   * when something explicitly checks (the Updates pane's "Check now", which
+   * calls hydo:checkBuild below and writes through to this cache).
+   */
+  ipcMain.handle("hydo:updateStatus", () => {
+    if (!updateCache) {
+      const info = buildInfo.buildInfo(app.isPackaged);
+      updateCache = statusFrom(info, buildInfo.check(info));
+    }
+    return ok(updateCache);
   });
 
   ipcMain.handle("hydo:readArtifact", (_e, id) => store.readArtifact(id));

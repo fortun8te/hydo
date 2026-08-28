@@ -28,6 +28,20 @@
  * tells five honest states apart, and a second reachability check would be a
  * second opinion to keep in sync.
  *
+ * CHANGED, one instruction later: the substitution is no longer automatic.
+ * The user's words were "if local isnt active for a local bot ... it asks you
+ * a question like are you sure you want to continue using cloud". So the
+ * decision has a third outcome, `ask`, and the caller must put a question in
+ * the transcript and run NOTHING until it is answered. Everything that made
+ * the automatic version safe survives unchanged — one probe per real turn, the
+ * cached verdict, the bounded single retry, the honest note — only the moment
+ * control passes to the user has moved earlier.
+ *
+ * A yes is remembered for that teammate's session (the consent map below),
+ * because asking once per message would be intolerable. It is remembered in
+ * MEMORY ONLY and it expires, because a yes from Tuesday must not quietly send
+ * Thursday's work to the cloud.
+ *
  * There is NO polling loop here. A probe happens only when a turn is being
  * submitted, i.e. on a real signal from the user. The cache below exists to
  * stop a burst of turns re-probing a port that just answered, not to poll.
@@ -46,8 +60,61 @@ const BAD_TTL_MS = 4_000;
 // providerId → { at, state, detail, host }
 const cache = new Map();
 
+// ── the session-scoped yes ────────────────────────────────────────────────
+//
+// `agentId::providerId` → { at }. Deliberately a plain in-process Map and
+// never written to disk: quitting Hydo is one of the things that must forget
+// the answer, and a file would survive exactly the restart that is supposed to
+// clear it.
+//
+// The other resets are explicit: `forget()` when the teammate's model or
+// provider is changed by hand (a switch is a new decision, not the old one),
+// and `forgetProvider()` from the probe below the moment the endpoint answers
+// again — the endpoint being down is the whole reason the question existed, so
+// keeping the yes past its return would send work to the cloud that the user's
+// own machine is now sitting there ready to run.
+const consent = new Map();
+
+// Belt to the restart's braces. Hydo is left running for days, so "in memory"
+// is not by itself the promise that Tuesday's yes cannot answer for Thursday.
+// Six hours is a working session.
+const CONSENT_TTL_MS = 6 * 60 * 60 * 1000;
+
+function consentKey(agentId, providerId) {
+  return `${String(agentId || "")}::${String(providerId || "").toLowerCase()}`;
+}
+
+function grant(agentId, providerId, at = Date.now()) {
+  if (!agentId || !providerId) return;
+  consent.set(consentKey(agentId, providerId), { at });
+}
+
+function hasConsent(agentId, providerId, at = Date.now()) {
+  const key = consentKey(agentId, providerId);
+  const hit = consent.get(key);
+  if (!hit) return false;
+  if (at - hit.at >= CONSENT_TTL_MS) {
+    consent.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/** Forget every yes for one teammate (its provider/model was changed by hand). */
+function forget(agentId) {
+  const prefix = `${String(agentId || "")}::`;
+  for (const key of [...consent.keys()]) if (key.startsWith(prefix)) consent.delete(key);
+}
+
+/** Forget every yes for one endpoint — it is answering again. */
+function forgetProvider(providerId) {
+  const suffix = `::${String(providerId || "").toLowerCase()}`;
+  for (const key of [...consent.keys()]) if (key.endsWith(suffix)) consent.delete(key);
+}
+
 function clearCache() {
   cache.clear();
+  consent.clear();
 }
 
 /** The five states that mean "this turn cannot run here". */
@@ -92,7 +159,14 @@ function hostedReady() {
 /**
  * Decide where this turn runs.
  *
- * @returns {Promise<{run:'local'}|{run:'hosted',provider:string,model:string,note:string,state:string}|{run:'none',note:string,state:string}>}
+ * `opts.agentId` is what makes the yes per-teammate: without one there is no
+ * consent to look up, so the answer is `ask` every time — the safe direction
+ * to be wrong in.
+ *
+ * @returns {Promise<{run:'local'}
+ *   |{run:'hosted',provider:string,model:string,note:string,state:string}
+ *   |{run:'ask',provider:string,model:string,question:string,endpoint:string,state:string}
+ *   |{run:'none',note:string,state:string}>}
  */
 async function check(providerId, opts = {}) {
   const id = String(providerId || "").trim();
@@ -125,7 +199,14 @@ async function check(providerId, opts = {}) {
 
   // `unknown` is not "down". It means the probe itself could not form an
   // opinion, and rerouting on it would move turns off a working box.
-  if (!isDown(state)) return { run: "local" };
+  if (!isDown(state)) {
+    // The endpoint answered, so any standing "yes, use the cloud" is spent.
+    // This is the only automatic reset, and it is the right one: the machine
+    // coming back is exactly the change that should earn a fresh question if
+    // it ever goes away again.
+    forgetProvider(rec.id);
+    return { run: "local" };
+  }
 
   const reason = why(state, rec.host, detail);
   if (!ready()) {
@@ -136,12 +217,28 @@ async function check(providerId, opts = {}) {
     };
   }
   const model = opts.hostedModel || modelPick.DEFAULT_CHAT;
+  const endpoint = rec.name || rec.id;
+  // Already said yes for this teammate this session. Still announced in the
+  // transcript: consent is permission to substitute, never permission to do it
+  // quietly.
+  if (opts.agentId && hasConsent(opts.agentId, rec.id, now())) {
+    return {
+      run: "hosted",
+      state,
+      provider: modelPick.DEFAULT_PROVIDER,
+      model,
+      note: `Answered on ${model} instead of ${endpoint}: ${reason}. (You said to keep using the cloud for ${endpoint} this session.)`,
+    };
+  }
   return {
-    run: "hosted",
+    run: "ask",
     state,
     provider: modelPick.DEFAULT_PROVIDER,
     model,
-    note: `Answered on ${model} instead of ${rec.name || rec.id}: ${reason}.`,
+    endpoint,
+    // One sentence: the endpoint by name, the model by name, a question mark.
+    // Rendered by the app's existing clarify card.
+    question: `${endpoint} isn't answering — ${reason}. Run this on ${model} instead?`,
   };
 }
 
@@ -167,11 +264,38 @@ function afterFailure(providerId, err, opts = {}) {
   if (!ready()) return null;
   const model = opts.hostedModel || modelPick.DEFAULT_CHAT;
   const cause = String((err && err.message) || err || "").trim().slice(0, 160);
+  const endpoint = rec.name || rec.id;
+  // The same consent gate as the preflight, for the same reason: "never run a
+  // turn somewhere the user did not agree to" does not stop applying because
+  // the box died halfway through instead of before the start. With no standing
+  // yes the caller is handed a QUESTION, not a retry.
+  if (!(opts.agentId && hasConsent(opts.agentId, rec.id, (opts.now || Date.now)()))) {
+    return {
+      ask: true,
+      provider: modelPick.DEFAULT_PROVIDER,
+      model,
+      endpoint,
+      question: `The turn on ${endpoint} (${rec.host}) failed${cause ? ` — ${cause}` : ""}. Run it on ${model} instead?`,
+    };
+  }
   return {
     provider: modelPick.DEFAULT_PROVIDER,
     model,
-    note: `Retried on ${model}: the turn on ${rec.name || rec.id} (${rec.host}) failed${cause ? ` — ${cause}` : ""}.`,
+    note: `Retried on ${model}: the turn on ${endpoint} (${rec.host}) failed${cause ? ` — ${cause}` : ""}.`,
   };
 }
 
-module.exports = { check, afterFailure, hostedReady, isDown, clearCache, OK_TTL_MS, BAD_TTL_MS };
+module.exports = {
+  check,
+  afterFailure,
+  hostedReady,
+  isDown,
+  clearCache,
+  grant,
+  hasConsent,
+  forget,
+  forgetProvider,
+  OK_TTL_MS,
+  BAD_TTL_MS,
+  CONSENT_TTL_MS,
+};

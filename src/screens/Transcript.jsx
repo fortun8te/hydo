@@ -725,6 +725,14 @@ function Bubble({
           />
         </div>
       </div>
+      {/* The turn died with the process that was writing it. store.cjs sets
+          `interrupted` on load for any bubble still carrying `streaming: true`
+          — see the note there. Without this line the partial text sits in the
+          thread indistinguishable from a finished answer, which is the worst
+          of the three possible states (worse than showing nothing). */}
+      {msg.interrupted ? (
+        <div className="hy-interrupted">Interrupted — Hydo restarted before this finished.</div>
+      ) : null}
       <Extras msg={msg} kind="files" />
       <ReactionPills
         groups={groups}
@@ -1255,7 +1263,19 @@ function Transcript({
               <ChoiceCard
                 title={toText(msg.text) || "Quick question."}
                 sub={
-                  msg.dismissed
+                  /* A `reroute` clarify is Hydo's own question — "your local
+                     endpoint is down, run this on the cloud instead?" — and it
+                     needs different reassurance from a teammate's mid-turn
+                     question: nothing is running, and declining runs nothing.
+                     Saying "carrying on" here would be false in both
+                     directions. */
+                  msg.reroute
+                    ? msg.dismissed || (answered && !/^yes/i.test(answered))
+                      ? `Nothing ran. Your message is still here — send it again when ${msg.reroute.endpoint} is back.`
+                      : answered
+                      ? `Running on ${msg.reroute.model}. Asked once — the rest of this session goes there too until ${msg.reroute.endpoint} answers again.`
+                      : "Nothing has run yet. Your message is saved either way."
+                    : msg.dismissed
                     ? "Dismissed. Carrying on without it."
                     : answered
                     ? "Answered, carrying on."

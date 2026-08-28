@@ -1445,6 +1445,15 @@
      fails contrast (~1.7:1) once the ground goes white. */
   --hy-inline-code-bg: rgba(20, 20, 20, 0.06);
   --hy-inline-code-text: #c2431f;
+
+  /* The update ticker's blue. The ONLY saturated colour in the sidebar foot,
+     which is why it works as a signal there.
+     MEASURED against --sand-bg-base, which is #fcfcfc in light: #0b62d6 is
+     5.48:1, clear of the 4.5:1 the light-mode contrast suite enforces.
+     #3b93f0 — the roster's existing blue swatch, the obvious thing to reach
+     for — is 3.09:1 on that same ground and would have failed it. */
+  --hy-update: #0b62d6;
+  --hy-update-soft: rgba(11, 98, 214, 0.1);
 }
 
 /* --sand-line is referenced all over (composer todolist strip, overlays,
@@ -1479,4 +1488,10 @@
   --hy-text-faint: #6a6a6a;
   --hy-inline-code-bg: rgba(0, 0, 0, 0.38);
   --hy-inline-code-text: #ff8b72;
+
+  /* MEASURED against --sand-bg-base, #070707 in dark: #6aa9ff is 8.38:1,
+     while the light token #0b62d6 is only 3.58:1 there. That gap is why this
+     is a real pair and not one blue used in both themes. */
+  --hy-update: #6aa9ff;
+  --hy-update-soft: rgba(106, 169, 255, 0.14);
 }

@@ -1,10 +1,23 @@
 # Hydo
 
-**An open-source desktop app for a team of AI teammates — inspired by Grok Bot, running on Hermes Agent, and yours to run on your own hardware.**
+**An open-source desktop app for a team of AI teammates — an alternative to Grok Bot's desktop client that you can run on your own hardware, on Hermes Agent.**
 
 Not a chatbot with one window. A roster of named, always-on teammates: each has its own memory, its own workspace on disk, its own tools, and its own animated face. You talk to them in threads, they talk to each other in channels, and they get on with things on a schedule while you are not looking.
 
 MIT licensed. Electron 42, React 19, Vite. Entry is `electron/main.cjs`; the renderer lives in `src/`.
+
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Main chat with the sidebar](docs/screenshots/main-chat.png) Main chat, sidebar roster | ![The Computer rail](docs/screenshots/computer-rail.png) The shared machine, in the Computer rail |
+| ![Settings — Cloud/Local switch](docs/screenshots/settings-local.png) Settings — the Cloud/Local switch | ![Command palette](docs/screenshots/command-palette.png) Command palette (mod+K) |
+
+Light theme, same screen:
+
+![Main chat in light theme](docs/screenshots/main-chat-light.png)
+
+Captured against the mock fixture (`?mock=1`) — a populated roster with no real personal data, not a live account.
 
 ## What makes it different
 
@@ -19,7 +32,14 @@ Turns run on [Hermes Agent](https://hermes-agent.nousresearch.com) over its `tui
 
 Hydo is an independent project. The layout and interaction model take inspiration from Grok Bot's desktop client; the name, the code and the backend are its own, and no user-facing string in the app says "Grok" except where it truthfully names xAI's CLI as a coding harness. Contributors: keep it that way.
 
-## Quick start
+## Requirements
+
+- **macOS**, and Node (Electron 42 bundles its own Chromium/Node; `npm install` needs a system Node to run `npm` itself).
+- **[Hermes Agent](https://hermes-agent.nousresearch.com)** installed at `~/.hermes/hermes-agent` — turns run on its `tui_gateway` JSON-RPC protocol (`electron/hermes-gateway.cjs`). Without it, Hydo has no agent to talk to.
+- **A model to run turns on** — either a hosted model through Hermes/OpenRouter, or your own OpenAI-compatible endpoint (Unsloth, LM Studio, Ollama, anything that speaks `/v1/chat/completions`) reachable from the machine Hydo runs on. See `docs/LOCAL-MODEL.md` for exactly how that wiring works and what it costs on real hardware.
+- The shared-computer feature (the Computer rail, one Linux box the whole team uses) needs the `box` CLI and an account — optional, and billed by the second. See `docs/BOX.md` for the real numbers.
+
+## Install & run
 
 ```
 npm install
@@ -28,8 +48,9 @@ npm start
 
 `npm start` runs Vite on `127.0.0.1:5173` then launches Electron (`package.json` `dev` script).
 
-- Tests: `npm test` (`scripts/test.cjs`)
-- Production renderer: `npx vite build` (output in `dist/`)
+- Tests: `npm test` (`scripts/test.cjs` and the rest of the suite)
+- Production renderer: `npm run build` (output in `dist/`), packaged app: `npm run app`
+- Distributable build: `npm run dist` (electron-builder)
 
 ## How it is wired
 

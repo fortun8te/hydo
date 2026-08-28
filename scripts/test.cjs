@@ -146,9 +146,21 @@ mustInclude("electron/store.cjs", [
     storeSrc.includes('agent.reasoningEffort || "low"'),
     "1:1 turns default reasoningEffort low"
   );
-  // The landing turn is the one turn EVERY bot takes, and it is a greeting:
-  // no tools to pick, nothing to reason about.
-  assert.ok(storeSrc.includes('flags.lean ? "minimal"'), "the landing turn does not buy thinking");
+  // The landing turn is the one turn EVERY bot takes, and it is a greeting.
+  // It stays cheap through its PROMPT and its lack of tools — but it must NOT
+  // ask for a different reasoningEffort than the turns after it. sessionFor
+  // keys the session on that field, so `minimal` here followed by `low` on the
+  // first real message tore the session down and rebuilt it, visibly, on every
+  // teammate ever created. A few hundred tokens saved against a whole session
+  // and its prefill lost.
+  // Comments stripped first: the fix's own explanation quotes the pattern it
+  // bans, and a scan that cannot tell prose from code would forbid writing
+  // down why the rule exists. That has now caught me four times in this repo.
+  const storeCode = storeSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(
+    !/flags\.lean \? "minimal"/.test(storeCode),
+    "the landing turn must not move reasoningEffort; it is the session key"
+  );
   assert.ok(storeSrc.includes("{ lean: true }"), "and landNewBot asks for it");
   // Nothing may fall back to `builder`. The hydration default is chat and auto
   // climbs from there, so a builder fallback is 16.6k/turn nobody chose.

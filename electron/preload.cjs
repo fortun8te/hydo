@@ -121,6 +121,9 @@ contextBridge.exposeInMainWorld("hydo", {
   // working copy it was built from, and rebuild from it. See build-info.cjs.
   buildInfo: () => ipcRenderer.invoke("hydo:buildInfo"),
   checkBuild: () => ipcRenderer.invoke("hydo:checkBuild"),
+  // The sidebar ticker's one question. Cached in main so the footer costs no
+  // git per render, and never polled — see the handler in main.cjs.
+  updateStatus: () => ipcRenderer.invoke("hydo:updateStatus"),
   rebuildAndInstall: () => ipcRenderer.invoke("hydo:rebuildAndInstall"),
   relaunch: () => ipcRenderer.invoke("hydo:relaunch"),
 

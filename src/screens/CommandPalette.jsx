@@ -6,38 +6,57 @@ function hit(haystack, q) {
   return typeof haystack === "string" && haystack.toLowerCase().includes(q);
 }
 
+// The reference screenshot's tab row was All / Messages / Bots / Channels /
+// Files / Links / Routines / Actions. This palette only ever has two kinds
+// of row — commands (General/Navigation/View, all real keyboard shortcuts)
+// and one "Go to {bot}" per agent — so Messages/Channels/Files/Links/
+// Routines have no rows to filter and are left out: a tab with nothing
+// behind it is the dead-control bug this app's own test suite pins
+// (scripts/dead-control-test.cjs). "Actions" covers every non-bot group.
+const TABS = [
+  { id: "all", label: "All" },
+  { id: "bots", label: "Bots" },
+  { id: "actions", label: "Actions" },
+];
+
 // Builds the flat, keyboard-navigable row list (static commands + one "Go to
 // {bot}" row per agent) and the same rows regrouped by section for display.
 // Substring-only filtering on purpose — the app ships just react + react-dom,
 // no fuzzy-match dependency.
-function buildRows(commands, agents, query, onRun) {
+function buildRows(commands, agents, query, tab, onRun) {
   const q = query.trim().toLowerCase();
 
-  const cmdRows = (Array.isArray(commands) ? commands : [])
-    .filter((cmd) => cmd && typeof cmd.id === "string" && typeof cmd.label === "string")
-    .filter((cmd) => !q || hit(cmd.label, q) || hit(cmd.id, q))
-    .map((cmd) => ({
-      key: `cmd:${cmd.id}`,
-      group: cmd.group || "Commands",
-      icon: cmd.icon || "circle",
-      face: null,
-      label: cmd.label,
-      chord: cmd.chord || (Array.isArray(cmd.keys) && cmd.keys.length ? formatChord(cmd.keys[0]) : ""),
-      run: () => onRun?.(cmd.id),
-    }));
+  const cmdRows =
+    tab === "bots"
+      ? []
+      : (Array.isArray(commands) ? commands : [])
+          .filter((cmd) => cmd && typeof cmd.id === "string" && typeof cmd.label === "string")
+          .filter((cmd) => !q || hit(cmd.label, q) || hit(cmd.id, q))
+          .map((cmd) => ({
+            key: `cmd:${cmd.id}`,
+            group: cmd.group || "Commands",
+            icon: cmd.icon || "circle",
+            face: null,
+            label: cmd.label,
+            chord: cmd.chord || (Array.isArray(cmd.keys) && cmd.keys.length ? formatChord(cmd.keys[0]) : ""),
+            run: () => onRun?.(cmd.id),
+          }));
 
-  const botRows = (Array.isArray(agents) ? agents : [])
-    .filter((a) => a && typeof a.id === "string" && typeof a.name === "string" && a.name)
-    .filter((a) => !q || hit(a.name, q) || hit(`go to ${a.name}`, q))
-    .map((a) => ({
-      key: `bot:${a.id}`,
-      group: "Bots",
-      icon: "agent-circle",
-      face: a,
-      label: `Go to ${a.name}`,
-      chord: "",
-      run: () => onRun?.("sand.goToAgent", { agentId: a.id }),
-    }));
+  const botRows =
+    tab === "actions"
+      ? []
+      : (Array.isArray(agents) ? agents : [])
+          .filter((a) => a && typeof a.id === "string" && typeof a.name === "string" && a.name)
+          .filter((a) => !q || hit(a.name, q) || hit(`go to ${a.name}`, q))
+          .map((a) => ({
+            key: `bot:${a.id}`,
+            group: "Bots",
+            icon: "agent-circle",
+            face: a,
+            label: `Go to ${a.name}`,
+            chord: "",
+            run: () => onRun?.("sand.goToAgent", { agentId: a.id }),
+          }));
 
   const flat = [...cmdRows, ...botRows];
   const groups = [];
@@ -59,14 +78,15 @@ export default function CommandPalette({ open, commands, agents, onRun, onClose 
   const roster = Array.isArray(agents) ? agents : [];
 
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState("all");
   const [active, setActive] = useState(0);
   const inputRef = useRef(null);
   const itemRefs = useRef([]);
   const previouslyFocused = useRef(null);
 
   const { flat: flatRows, groups } = useMemo(
-    () => buildRows(list, roster, query, onRun),
-    [list, roster, query, onRun]
+    () => buildRows(list, roster, query, tab, onRun),
+    [list, roster, query, tab, onRun]
   );
 
   // Open: remember what had focus, reset the search, move focus into the
@@ -75,6 +95,7 @@ export default function CommandPalette({ open, commands, agents, onRun, onClose 
     if (!open) return undefined;
     previouslyFocused.current = document.activeElement;
     setQuery("");
+    setTab("all");
     setActive(0);
     const id = requestAnimationFrame(() => inputRef.current?.focus());
     return () => {
@@ -155,6 +176,24 @@ export default function CommandPalette({ open, commands, agents, onRun, onClose 
             aria-label="Search commands"
           />
         </div>
+        <div className="hy-palette__tabs" role="tablist" aria-label="Filter results">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              className={tab === t.id ? "hy-palette__tab is-on" : "hy-palette__tab"}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setTab(t.id);
+                setActive(0);
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
         <div className="hy-palette__list" role="listbox" aria-label="Results">
           {flatRows.length === 0 && <div className="hy-palette__empty">No matches</div>}
           {groups.map((group) => (
@@ -198,3 +237,8 @@ export default function CommandPalette({ open, commands, agents, onRun, onClose 
     </div>
   );
 }
+
+// Exported for scripts/palette-tabs-test.cjs: a tab that filters nothing is
+// the dead-control bug this app's test suite pins (dead-control-test.cjs),
+// so the test drives the real row-building logic rather than grepping JSX.
+export { buildRows, TABS };

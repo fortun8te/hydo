@@ -604,6 +604,19 @@
   padding: 6px 0;
 }
 
+/* A turn that was cut off by a restart. Deliberately quiet and left-aligned
+   under its own bubble rather than centred like .hy-event: this is a footnote
+   ON one message, not a thread-level event. --hy-text-muted, not
+   --hy-text-faint, because the faint token measures 2.74:1 on the light
+   ground and this sentence is the only thing telling the reader the answer
+   above is incomplete. */
+.sand-transcript .hy-interrupted {
+  padding: 2px 2px 0;
+  color: var(--hy-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
 /* ------------------------------------------------------------- working row */
 
 /* Tool names are plumbing and never reach this row — Transcript.jsx maps them

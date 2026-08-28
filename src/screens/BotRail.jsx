@@ -34,6 +34,14 @@ function coldLabel(sec) {
 // of a second number. Work and Deep share a profile, and the row used to print
 // "16.6k" under both of them, which made the two chips look like the same
 // button twice.
+// The hosted pick, mirrored from electron/model-pick.cjs (DEFAULT_PROVIDER /
+// DEFAULT_CHAT). The renderer cannot require a .cjs out of electron/, and a
+// wrong literal here would pin a teammate to a provider Hermes has no auth
+// for — so scripts/local-consent-test.cjs asserts these two strings against
+// model-pick.cjs itself rather than trusting the copy.
+const CLOUD_PROVIDER = "xai-oauth";
+const CLOUD_MODEL = "grok-4.6";
+
 const PRESETS = [
   { id: "cheap", label: "Cheap", profile: "chat", effort: "minimal",
     hint: "Talks, remembers, keeps a todo. No files, no shell, no web." },
@@ -113,6 +121,11 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
   // the cold-start second count mean anything: on a hosted model prefill is
   // not the wait, and a seconds figure next to every profile would be noise.
   const [onLocal, setOnLocal] = useState(false);
+  // The endpoints in ~/.hermes/config.yaml plus what the app default resolves
+  // to, so the rail can say "inherits the app default (Cloud)" as a fact
+  // rather than a guess.
+  const [locals, setLocals] = useState([]);
+  const [appDefault, setAppDefault] = useState({ provider: "", model: "" });
   const [connections, setConnections] = useState([]);
   const [toolsets, setToolsets] = useState([]);
   const [abilitiesOpen, setAbilitiesOpen] = useState(false);
@@ -199,6 +212,11 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
       .then(([local, state]) => {
         if (gone) return;
         const list = Array.isArray(local?.providers) ? local.providers : [];
+        setLocals(list);
+        setAppDefault({
+          provider: String(state?.settings?.provider || ""),
+          model: String(state?.settings?.model || ""),
+        });
         if (!list.length) return setOnLocal(false);
         const settings = state?.settings || {};
         const provider = String(agent?.provider || settings.provider || "");
@@ -223,6 +241,27 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
     live && live.length
       ? extraToolsets.filter((t) => !live.some((x) => x.name === t && x.enabled))
       : [];
+
+  // Which of the three states this teammate is in. The PROVIDER decides and
+  // the model string is only the fallback, for the same reason the cold-start
+  // hint above uses that order: two providers can serve the same model id and
+  // only one of them is the box in the next room.
+  const pinnedProvider = String(agent?.provider || "");
+  const pinnedModel = String(agent?.model || "");
+  const localPin =
+    locals.find(
+      (p) =>
+        (pinnedProvider && p.id === pinnedProvider) ||
+        (!pinnedProvider && pinnedModel && p.model === pinnedModel)
+    ) || null;
+  const runsOn = !pinnedProvider && !pinnedModel ? "inherit" : localPin ? "local" : "cloud";
+  const defaultLocal =
+    locals.find(
+      (p) =>
+        (appDefault.provider && p.id === appDefault.provider) ||
+        (!appDefault.provider && appDefault.model && p.model === appDefault.model)
+    ) || null;
+  const appDefaultLabel = defaultLocal ? defaultLocal.name || defaultLocal.id : "Cloud";
 
   const advancedMeta = [
     profileLabel(toolProfile),
@@ -470,6 +509,69 @@ export default function BotRail({ agent, onChange, onClose, onOpenRoutines, onCr
           onChange={(e) => onChange({ description: e.target.value })}
         />
       </label>
+      {/* ── where this teammate runs ─────────────────────────────────────
+          Per-teammate cloud/local. The model layer already honoured
+          `agent.provider` / `agent.model` ahead of the app default
+          (electron/model-pick.cjs) — what was missing was any way to SAY so
+          without opening Settings and changing it for everybody.
+
+          Three states, and they must not look alike: following the app
+          default is not the same fact as being pinned to the cloud, even when
+          the app default IS the cloud, because only the pinned one keeps
+          running there after someone changes Settings. The line under the row
+          spells the state out and is styled differently for an override (see
+          `.bot-rail__runs-state.is-override` in rails.css). */}
+      <div className="bot-rail__field">
+        <span className="bot-rail__field-label">Runs on</span>
+        <div className="bot-rail__runs" role="group" aria-label="Runs on">
+          <button
+            type="button"
+            className={runsOn === "inherit" ? "bot-rail__preset is-on" : "bot-rail__preset"}
+            aria-pressed={runsOn === "inherit"}
+            title="Follow whatever Settings is set to."
+            onClick={() => onChange({ provider: "", model: "" })}
+          >
+            <span>Default</span>
+            <span className="bot-rail__preset-cost">{appDefaultLabel}</span>
+          </button>
+          <button
+            type="button"
+            className={runsOn === "cloud" ? "bot-rail__preset is-on" : "bot-rail__preset"}
+            aria-pressed={runsOn === "cloud"}
+            title="Always the hosted model, whatever Settings says."
+            onClick={() => onChange({ provider: CLOUD_PROVIDER, model: CLOUD_MODEL })}
+          >
+            <span>Cloud</span>
+            <span className="bot-rail__preset-cost">{CLOUD_MODEL}</span>
+          </button>
+          {locals.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={localPin?.id === p.id ? "bot-rail__preset is-on" : "bot-rail__preset"}
+              aria-pressed={localPin?.id === p.id}
+              title={`Your own machine: ${p.host}`}
+              onClick={() => onChange({ provider: p.id, model: p.model || "" })}
+            >
+              <span>{p.name || p.id}</span>
+              <span className="bot-rail__preset-cost">{p.host}</span>
+            </button>
+          ))}
+        </div>
+        <p
+          className={
+            runsOn === "inherit"
+              ? "bot-rail__cost bot-rail__runs-state"
+              : "bot-rail__cost bot-rail__runs-state is-override"
+          }
+        >
+          {runsOn === "inherit"
+            ? `Inherits the app default (${appDefaultLabel}).`
+            : runsOn === "local"
+            ? `Local · ${localPin?.name || localPin?.id}. If it isn’t answering, this Bot asks before anything runs on the cloud.`
+            : `Cloud · ${agent?.model || CLOUD_MODEL}. Overrides Settings for this Bot only.`}
+        </p>
+      </div>
       <div className="bot-rail__field">
         <span className="bot-rail__field-label">Mode</span>
         <div className="bot-rail__presets" role="group" aria-label="Mode">

@@ -1319,6 +1319,31 @@ aside.routine-rail .routine-rail__toolbar {
   color: var(--sand-text-tertiary, #8d8d8d);
 }
 
+/* -- where a teammate runs ------------------------------------------------ */
+/* Its own grid, NOT `.bot-rail__presets`: that one is a hard `repeat(5, 1fr)`
+   and this row is 2 buttons plus one per endpoint in ~/.hermes/config.yaml,
+   which is a number nobody knows up front. Sharing the class would have meant
+   two rules setting grid-template-columns at the same specificity, decided by
+   file order — the exact "the class is applied and nothing moves" trap this
+   rail has been bitten by before. The BUTTONS still reuse .bot-rail__preset,
+   so a pick here looks like a pick anywhere else in the rail. */
+.bot-rail .bot-rail__runs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+  gap: 4px;
+}
+
+/* Following the app default and overriding it are different facts and must
+   not read the same. Inheriting stays tertiary (it is a description of
+   somewhere else's setting); an override is promoted to primary text, because
+   it is a decision this panel is responsible for.
+   Specificity 0,3,0 beats `.bot-rail .bot-rail__cost` (0,2,0), so the colour
+   really changes — asserted as a computed value in
+   scripts/local-consent-test.cjs, never as "the class is there". */
+.bot-rail .bot-rail__runs-state.is-override {
+  color: var(--sand-text-primary, #fcfcfc);
+}
+
 /* Background processes a teammate left running. */
 .bot-rail .bot-rail__procs {
   list-style: none;
