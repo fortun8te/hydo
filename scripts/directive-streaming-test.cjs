@@ -129,6 +129,71 @@ const bubbles = (st, id) =>
     assert.equal(bubbles(st, id).length, 1, "the explanation was dropped");
   });
 
+  // ── the same seam, in every other path ──────────────────────────────────
+  //
+  // The streaming/extraction seam is not specific to one caller. Every place
+  // that asked "did this turn say anything?" read `extracted.text`, which is
+  // empty whenever streaming already opened a bubble. Each of these was wrong
+  // in its own way, and each is asserted separately because a shared helper
+  // that only one caller uses is not a fix.
+
+  await test("a SKIP in a DM leaves no bubble behind", async () => {
+    const store = stub("SKIP");
+    const id = store.createAgent({ name: "Bot" }).selectedId;
+    store.select(id);
+    const st = await store.send("you there");
+    assert.deepEqual(
+      bubbles(st, id),
+      [],
+      'the literal word "SKIP" was left in the DM transcript'
+    );
+  });
+
+  await test("a SKIP that also renames still renames", async () => {
+    const store = stub('SKIP\nSELF: {"name":"Renamed"}');
+    const id = store.createAgent({ name: "Bot" }).selectedId;
+    store.select(id);
+    const st = await store.send("go");
+    assert.equal(
+      st.agents.find((a) => a.id === id).name,
+      "Renamed",
+      "a silent turn threw away its own directives"
+    );
+    assert.deepEqual(bubbles(st, id), [], "a silent turn still posted something");
+  });
+
+  await test("the first-run opening is not doubled by the canned fallback", async () => {
+    const store = stub("Hey Michael. What are you in the middle of?");
+    const id = store.createAgent({ name: "Bot" }).selectedId;
+    await store.landNewBot(id);
+    const shown = bubbles(store.getState(), id);
+    assert.ok(shown.length >= 1, "no opening at all");
+    // The canned landing lines are the fallback for "the model said nothing".
+    // Reading `text` made that look true for a streamed opening, so BOTH were
+    // printed: the model's line, then the canned ones underneath it.
+    assert.ok(
+      shown.some((t) => /in the middle of/.test(t)),
+      "the model's own opening was lost"
+    );
+    assert.equal(
+      shown.filter((t) => /in the middle of/.test(t)).length,
+      shown.length,
+      `canned landing lines were printed under the real opening: ${JSON.stringify(shown)}`
+    );
+  });
+
+  await test("every caller asks about silence the same way", async () => {
+    // `extracted.text` is empty for any streamed turn, so testing SKIP against
+    // it is always the wrong question. Nothing may go back to doing that.
+    const src = fs.readFileSync(path.join(__dirname, "..", "electron", "store.cjs"), "utf8");
+    const { stripComments } = require("./lib/source-scan.cjs");
+    const code = stripComments(src);
+    const bad = code.match(/SKIP[^\n]{0,40}test\(\s*(?:String\()?extracted\.text/g) || [];
+    assert.deepEqual(bad, [], `a SKIP check is reading .text instead of .spoken: ${bad.join(", ")}`);
+    assert.ok(/function isQuietTurn\(/.test(code), "the shared silence check is gone");
+    assert.ok(/function retractTurn\(/.test(code), "the shared bubble retraction is gone");
+  });
+
   if (failed) {
     console.log(`directive-streaming-test FAILED (${failed})`);
     process.exit(1);

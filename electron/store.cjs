@@ -1541,7 +1541,11 @@ function createStore(opts = {}) {
       text: ask,
       at: pingAt,
     });
-    for (const bubble of splitBubbles(specialist.text)) {
+    // `spoken`: this is the DM RECORD of what the peer answered, in a
+    // different thread from the bubble streaming opened, so it must carry the
+    // whole reply. Reading `text` here silently dropped the answer out of the
+    // record whenever the peer streamed it.
+    for (const bubble of splitBubbles(specialist.spoken || specialist.text)) {
       pushDm(agent.id, peer.id, {
         id: uuid(),
         role: "bot",
@@ -2923,10 +2927,23 @@ function createStore(opts = {}) {
       // without this, a teammate answering SKIP left the word "SKIP" sitting
       // in the transcript, which is the opposite of staying quiet.
       const bubbleId = posted ? bubble.id : "";
+      // What the user ACTUALLY saw this turn, directives already stripped.
+      //
+      // `text` cannot answer that: once streaming has opened a bubble it holds
+      // only the LEFTOVER after the last committed beat, and for a plain turn
+      // that is the empty string. Every caller that asked "did this teammate
+      // say SKIP?" or logged `extracted.text` was therefore reading "" and
+      // drawing the wrong conclusion from it. `text` keeps its meaning (what
+      // is still un-posted, so callers do not double-post); `spoken` is the
+      // whole reply.
+      const spoken = [opened ? String(bubble.text || "") : "", leftover]
+        .filter((x) => x && x.trim())
+        .join("\n")
+        .trim();
       if (bubble.images && bubble.images.length) {
-        return { text, images: bubble.images, posted, bubbleId, preDirs };
+        return { text, images: bubble.images, posted, bubbleId, preDirs, spoken };
       }
-      return { text, posted, bubbleId, preDirs };
+      return { text, posted, bubbleId, preDirs, spoken };
     } catch (err) {
       if (opened) {
         const list = threadOf(agent.id);
@@ -3146,6 +3163,36 @@ function createStore(opts = {}) {
     return publicState();
   }
 
+  /**
+   * Did this turn say nothing?
+   *
+   * Always ask via `spoken`, never via `text`: a streamed turn leaves `text`
+   * empty regardless of what was said, so `/^SKIP$/.test(extracted.text)` was
+   * false for a teammate that had just streamed the word SKIP, and true-ish
+   * for one that had streamed a real answer. Both wrong, in opposite
+   * directions, everywhere it was written.
+   */
+  function isQuietTurn(extracted) {
+    const said = String((extracted && extracted.spoken) || "").trim();
+    return !said || /^SKIP\.?$/i.test(said);
+  }
+
+  /**
+   * Take back the bubble streaming already posted.
+   *
+   * Staying quiet has to mean nothing appears. Streaming opens the bubble
+   * before anyone knows how the turn ends, so a silent turn needs the bubble
+   * removed rather than merely not added to -- otherwise the transcript shows
+   * the literal word "SKIP", which is what it did in every path.
+   */
+  function retractTurn(convId, extracted) {
+    const id = extracted && extracted.bubbleId;
+    if (!id) return;
+    const list = threadOf(convId);
+    const at = list.findIndex((x) => x && x.id === id);
+    if (at >= 0) list.splice(at, 1);
+  }
+
   async function speak(agent, userText, extra, convId, turnOpts = {}) {
     const soul = soulSnapshot(dir, agent.id);
     const memory = memorySnapshot(dir, agent.id);
@@ -3179,12 +3226,14 @@ function createStore(opts = {}) {
       let yielded = false;
       let bubbleId = "";
       let preDirs = null;
+      let spokenText = "";
       if (out && typeof out === "object" && out.text != null) {
         shots = Array.isArray(out.images) ? out.images : [];
         posted = !!out.posted;
         yielded = !!out.yielded;
         bubbleId = String(out.bubbleId || "");
         preDirs = out.preDirs || null;
+        spokenText = String(out.spoken || "");
         out = out.text;
       }
       const done = extractDirectives(String(out || "").trim() || (posted ? "" : "Empty reply."));
@@ -3201,6 +3250,9 @@ function createStore(opts = {}) {
       done.images = shots;
       done.posted = posted;
       done.bubbleId = bubbleId;
+      // Falls back to `text` for the non-streaming path (`complete:`), where
+      // nothing was ever posted and `text` IS the whole reply.
+      done.spoken = (spokenText || done.text || "").trim();
       done.yielded = yielded;
       return done;
     }
@@ -3719,7 +3771,10 @@ function createStore(opts = {}) {
       let opened = "";
       try {
         const res = await speak(agent, brief, undefined, agent.id, { lean: true });
-        opened = String((res && res.text) || "").trim();
+        // `spoken`, not `text`: a streamed opening leaves `text` empty, so
+        // this read "" and fell through to the canned landing lines below --
+        // printing them UNDERNEATH the opening the model had just streamed.
+        opened = String((res && (res.spoken || res.text)) || "").trim();
       } catch {
         /* no Hermes: leave the thread empty rather than fake a hello */
       }
@@ -4064,7 +4119,7 @@ function createStore(opts = {}) {
         agent.id
       );
       const t = now();
-      item.runs.unshift({ id: uuid(), at: t, text: extracted.text.slice(0, 240) });
+      item.runs.unshift({ id: uuid(), at: t, text: String(extracted.spoken || extracted.text || "").slice(0, 240) });
       for (const bubble of splitBubbles(extracted.text)) {
         pushMsg(agent.id, { id: uuid(), role: "bot", kind: "chat", fromId: agent.id, text: bubble, at: t });
       }
@@ -4203,11 +4258,13 @@ function createStore(opts = {}) {
         save();
         return publicState();
       }
-      if (/^SKIP$/i.test(extracted.text.trim())) {
-        setStatus(agent.id, "idle");
-        save();
-        return publicState();
-      }
+      // A turn can say NOTHING and still have done something: a reply that is
+      // only `SELF: {...}` renames the teammate and shows no bubble. So the
+      // silence is recorded here and acted on AFTER the directives below --
+      // returning early here (as this did) threw away the rename, the hire and
+      // the ping along with the empty bubble.
+      const quiet = isQuietTurn(extracted);
+      if (quiet) retractTurn(agent.id, extracted);
       // Self-settings first: a bot that renames itself this turn should be
       // addressed by the new name in everything below.
       for (const spec of extracted.dirs.self || []) applySelf(agent, spec);
@@ -4227,7 +4284,7 @@ function createStore(opts = {}) {
           `${agent.name} pinged you:\n${ping.text || trimmed}`
         );
       }
-      const rest = extracted.posted ? String(extracted.text || "").trim() : extracted.text;
+      const rest = quiet ? "" : extracted.posted ? String(extracted.text || "").trim() : extracted.text;
       const bubbles = rest ? splitBubbles(rest) : [];
       const done = now();
       const posted = [];
@@ -4918,7 +4975,9 @@ function createStore(opts = {}) {
         convId
       );
       const threadId = convId || agent.id;
-      if (!/^SKIP\.?$/i.test(String(extracted.text || "").trim())) {
+      if (isQuietTurn(extracted)) {
+        retractTurn(threadId, extracted);
+      } else {
         for (const bubble of splitBubbles(extracted.text, { max: 2 })) {
           pushMsg(threadId, {
             id: uuid(),
