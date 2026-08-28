@@ -30,8 +30,26 @@ function profileName(botId) {
   return `hydo${hex || "bot"}`;
 }
 
+/**
+ * Where a teammate's Hermes profile lives.
+ *
+ * `HYDO_PROFILE_ROOT` exists because this was hardcoded to the real
+ * `~/.hermes/profiles`, which meant the TEST SUITE wrote profiles into the
+ * user's actual Hermes home. Every run that created a teammate left one
+ * behind, and nothing ever removed them: measured at 1,198 profiles and 749MB
+ * on this machine, almost none of them belonging to a bot that still exists.
+ *
+ * The app itself never sets this, so a real teammate still lands in the real
+ * place. Tests point it at a temp directory and leave no trace.
+ */
+function profileRoot() {
+  const override = String(process.env.HYDO_PROFILE_ROOT || "").trim();
+  if (override && path.isAbsolute(override)) return override;
+  return path.join(os.homedir(), ".hermes", "profiles");
+}
+
 function profileDir(botId) {
-  return path.join(os.homedir(), ".hermes", "profiles", profileName(botId));
+  return path.join(profileRoot(), profileName(botId));
 }
 
 function workspaceDir(hydoDir, botId) {
@@ -785,5 +803,6 @@ module.exports = {
   prepare,
   appendSubagentLog,
   readSharedMemory,
+  profileRoot,
   AGENTS_STAMP,
 };

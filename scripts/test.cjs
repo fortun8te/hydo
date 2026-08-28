@@ -1,3 +1,10 @@
+// Tests must not write into the user's real Hermes home. `profileDir` used to
+// be hardcoded to ~/.hermes/profiles, so every suite run that created a
+// teammate left a profile there permanently: measured at 1,198 profiles and
+// 749MB, of which exactly ONE belonged to a bot that still existed.
+process.env.HYDO_PROFILE_ROOT =
+  process.env.HYDO_PROFILE_ROOT ||
+  require("node:fs").mkdtempSync(require("node:path").join(require("node:os").tmpdir(), "hydo-profiles-"));
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
