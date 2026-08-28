@@ -1,7 +1,65 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+
+/**
+ * Put the user's avatar back into the state the renderer receives.
+ *
+ * main.cjs replaces the avatar with a short token before every push, because
+ * the bytes were 99.7% of the payload and the payload is copied roughly ten
+ * times a second while a reply streams. The renderer is not asked to care: it
+ * still reads `settings.userAvatar` as a data URI, so no component changed.
+ *
+ * A token this process has not seen yet resolves ASYNCHRONOUSLY -- one IPC per
+ * distinct image, not per push. Until it lands the avatar renders as empty,
+ * which is the same thing the app shows before an avatar is chosen, and the
+ * push is repeated once the bytes arrive so nothing is left blank.
+ */
+const avatarCache = new Map();
+let avatarPending = "";
+function rehydrateAvatar(state, fn) {
+  const token = state && state.settings && state.settings.userAvatar;
+  if (!token || typeof token !== "string" || !token.startsWith("hydo-avatar:")) return state;
+  const hit = avatarCache.get(token);
+  if (hit !== undefined) {
+    return { ...state, settings: { ...state.settings, userAvatar: hit } };
+  }
+  if (avatarPending !== token) {
+    avatarPending = token;
+    ipcRenderer
+      .invoke("hydo:avatarData", token)
+      .then((uri) => {
+        // Bounded for the same reason main.cjs bounds its side.
+        if (avatarCache.size > 8) avatarCache.delete(avatarCache.keys().next().value);
+        avatarCache.set(token, String(uri || ""));
+        avatarPending = "";
+        // Re-deliver the state we just handed over blank.
+        try {
+          fn(rehydrateAvatar(state, fn));
+        } catch {
+          /* the renderer may have unmounted */
+        }
+      })
+      .catch(() => {
+        avatarPending = "";
+      });
+  }
+  return { ...state, settings: { ...state.settings, userAvatar: "" } };
+}
+
 contextBridge.exposeInMainWorld("hydo", {
-  getState: () => ipcRenderer.invoke("hydo:getState"),
+  // Rehydrated like the pushed state, so a caller that reads getState()
+  // directly is not the one place that sees a token instead of an image.
+  getState: () =>
+    ipcRenderer.invoke("hydo:getState").then((st) => {
+      const token = st && st.settings && st.settings.userAvatar;
+      if (!token || typeof token !== "string" || !token.startsWith("hydo-avatar:")) return st;
+      const hit = avatarCache.get(token);
+      if (hit !== undefined) return { ...st, settings: { ...st.settings, userAvatar: hit } };
+      return ipcRenderer.invoke("hydo:avatarData", token).then((uri) => {
+        avatarCache.set(token, String(uri || ""));
+        return { ...st, settings: { ...st.settings, userAvatar: String(uri || "") } };
+      });
+    }),
   signIn: () => ipcRenderer.invoke("hydo:signIn"),
   signOut: () => ipcRenderer.invoke("hydo:signOut"),
   select: (id) => ipcRenderer.invoke("hydo:select", id),
@@ -85,7 +143,6 @@ contextBridge.exposeInMainWorld("hydo", {
   insights: (days) => ipcRenderer.invoke("hydo:insights", days),
 
   // Hermes' scheduler.
-  cron: (action, params) => ipcRenderer.invoke("hydo:cron", action, params),
 
   // Tool profiles. A bot's profile decides how much tool schema it carries on
   // every turn — `chat` costs 5,096 prompt tokens where Hermes' own default
@@ -153,7 +210,7 @@ contextBridge.exposeInMainWorld("hydo", {
   setApprovalMode: (agentId, mode) => ipcRenderer.invoke("hydo:setApprovalMode", agentId, mode),
   revokeApproval: (agentId, pattern) => ipcRenderer.invoke("hydo:revokeApproval", agentId, pattern),
   onState: (fn) => {
-    const listener = (_e, state) => fn(state);
+    const listener = (_e, state) => fn(rehydrateAvatar(state, fn));
     ipcRenderer.on("hydo:state", listener);
     return () => ipcRenderer.removeListener("hydo:state", listener);
   },

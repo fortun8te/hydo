@@ -6,6 +6,7 @@ const gateway = require("./hermes-gateway.cjs");
 const plugins = require("./hermes-plugins.cjs");
 const boxRuntime = require("./box-runtime.cjs");
 const localProviders = require("./local-providers.cjs");
+const crypto = require("node:crypto");
 const buildInfo = require("./build-info.cjs");
 
 // One rebuild at a time. Two concurrent `npm run pack` runs share one dist/
@@ -183,6 +184,56 @@ function saveWindowState(win) {
   }
 }
 
+
+
+/**
+ * Which paths the RENDERER is allowed to name.
+ *
+ * `hydo:previewFile` read any path it was handed, and `hydo:saveFile` copied
+ * any path out. The renderer is sandboxed, but it renders artifacts a model
+ * wrote, so "the renderer asked for it" is not the same as "the user asked for
+ * it" -- and `~/.ssh/id_rsa` is as valid an argument as an attachment.
+ *
+ * Two things legitimately name a path:
+ *
+ *   1. Hydo's own directories -- bot workspaces, the store, artifacts. Bounded
+ *      and known.
+ *   2. A file the USER chose in the native picker. That dialog IS the consent,
+ *      so those paths are remembered here and allowed once granted; without
+ *      this, gating would break every attachment of a file living anywhere
+ *      else, which is most of them.
+ *
+ * Anything else is refused. This is defence in depth rather than a wall: a
+ * teammate with shell tools can read files directly. What it removes is the
+ * path where content Hydo RENDERS can turn into content Hydo READS.
+ */
+const pickedPaths = new Set();
+function rememberPicked(p) {
+  const abs = path.resolve(String(p || ""));
+  if (!abs) return;
+  // Bounded: this is a session-lifetime set fed by a human clicking a dialog,
+  // but it should still not grow without limit.
+  if (pickedPaths.size > 500) pickedPaths.delete(pickedPaths.values().next().value);
+  pickedPaths.add(abs);
+}
+function allowedRoots() {
+  const roots = [];
+  try {
+    roots.push(app.getPath("userData"));
+  } catch {
+    /* not ready yet */
+  }
+  const home = process.env.HYDO_USER_DATA;
+  if (home) roots.push(path.resolve(home));
+  return roots.filter(Boolean).map((r) => path.resolve(r));
+}
+/** @returns {boolean} whether the renderer may name this path. */
+function pathAllowed(p) {
+  const abs = path.resolve(String(p || ""));
+  if (!abs) return false;
+  if (pickedPaths.has(abs)) return true;
+  return allowedRoots().some((root) => abs === root || abs.startsWith(root + path.sep));
+}
 
 /**
  * Is this the app itself, rather than somewhere the app was pushed to?
@@ -394,11 +445,47 @@ app.whenReady().then(() => {
     console.log(`[mcp-import] ${err.message}`);
   });
 
-  push = () => {
-    win?.webContents.send("hydo:state", store.getState());
+  /**
+   * The user's avatar, kept OUT of the state that streams to the renderer.
+   *
+   * MEASURED on this machine: state.json was 127,924 bytes, of which the
+   * avatar was 127,534 -- 99.7% of it. That whole payload was JSON-cloned by
+   * `publicState()` AND structured-cloned across IPC on every push, and the
+   * streaming path pushes about ten times a second while a reply comes in. So
+   * the app spent most of its per-token budget copying a picture that had not
+   * changed since the user chose it.
+   *
+   * The renderer still receives a plain data URI: the swap is undone in
+   * preload.cjs, which fetches the bytes once per distinct avatar and caches
+   * them. Nothing in src/ knows this happens.
+   */
+  const avatarStash = new Map(); // token -> data URI
+  const avatarToken = (uri) => {
+    const s = String(uri || "");
+    if (!s) return "";
+    const token = `hydo-avatar:${crypto.createHash("sha1").update(s).digest("hex").slice(0, 16)}`;
+    if (!avatarStash.has(token)) {
+      // One entry per distinct image. Bounded, because an unbounded cache of
+      // 128KB strings is the leak this function exists to avoid.
+      if (avatarStash.size > 8) avatarStash.delete(avatarStash.keys().next().value);
+      avatarStash.set(token, s);
+    }
+    return token;
+  };
+  /** State as the renderer sees it: identical, minus the avatar bytes. */
+  const lightState = () => {
+    const st = store.getState();
+    const uri = st && st.settings && st.settings.userAvatar;
+    if (!uri || String(uri).startsWith("hydo-avatar:")) return st;
+    return { ...st, settings: { ...st.settings, userAvatar: avatarToken(uri) } };
   };
 
-  ipcMain.handle("hydo:getState", () => store.getState());
+  push = () => {
+    win?.webContents.send("hydo:state", lightState());
+  };
+
+  ipcMain.handle("hydo:avatarData", (_e, token) => avatarStash.get(String(token || "")) || "");
+  ipcMain.handle("hydo:getState", () => lightState());
   ipcMain.handle("hydo:signIn", () => {
     const next = store.signIn();
     push();
@@ -503,10 +590,12 @@ app.whenReady().then(() => {
     return listZip(filePath);
   });
   ipcMain.handle("hydo:previewFile", (_e, filePath) => {
+    if (!pathAllowed(filePath)) return { ok: false, reason: "blocked-path" };
     const { previewFile } = require("./file-preview.cjs");
     return previewFile(filePath);
   });
   ipcMain.handle("hydo:saveFile", async (e, filePath, name) => {
+    if (!pathAllowed(filePath)) return { ok: false, reason: "blocked-path" };
     const abs = path.resolve(String(filePath || ""));
     if (!abs || !fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
       return { ok: false, reason: "missing" };
@@ -672,10 +761,18 @@ app.whenReady().then(() => {
         return nope(err.message);
       }
     });
-  attach("hydo:attachFile", (id, p, o) => gateway.attachFile(id, p, o || {}));
-  attach("hydo:attachImage", (id, p) => gateway.attachImage(id, p));
+  // Same gate as previewFile/saveFile: a path the renderer names must be one
+  // Hydo owns or one the user picked. `attachImageBytes` carries bytes, not a
+  // path, so it is deliberately not gated here.
+  const attachPath = (name, fn) =>
+    attach(name, (id, p, ...rest) => {
+      if (!pathAllowed(p)) throw new Error("blocked-path");
+      return fn(id, p, ...rest);
+    });
+  attachPath("hydo:attachFile", (id, p, o) => gateway.attachFile(id, p, o || {}));
+  attachPath("hydo:attachImage", (id, p) => gateway.attachImage(id, p));
   attach("hydo:attachImageBytes", (id, b64, o) => gateway.attachImageBytes(id, b64, o || {}));
-  attach("hydo:attachPdf", (id, p, o) => gateway.attachPdf(id, p, o || {}));
+  attachPath("hydo:attachPdf", (id, p, o) => gateway.attachPdf(id, p, o || {}));
   attach("hydo:pasteClipboard", (id) => gateway.pasteClipboard(id));
   attach("hydo:detachImage", (id, p) => gateway.detachImage(id, p));
 
@@ -700,15 +797,13 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("hydo:insights", (_e, days) => gateway.insights(days));
 
-  // ── Cron (Hermes' real scheduler, alongside Hydo's own routine loop) ───
-  ipcMain.handle("hydo:cron", async (_e, action, params) => {
-    if (!gateway.available()) return nope("Hermes is not installed");
-    try {
-      return ok({ result: await gateway.cron(action, params || {}) });
-    } catch (err) {
-      return nope(err.message);
-    }
-  });
+  // Hermes' cron store is deliberately NOT on the renderer bridge.
+  //
+  // Nothing in src/ called it, and `cron.manage` goes to the LAUNCH gateway --
+  // the user's own ~/.hermes -- not to a bot's profile. So the only thing it
+  // offered a renderer was the ability to write scheduled jobs into the user's
+  // personal Hermes under no teammate's name. `gateway.cron()` still exists
+  // for main-side use if the routine loop ever wants it.
 
   // ── Tool profiles (the context-cost lever) ─────────────────────────────
   ipcMain.handle("hydo:toolProfiles", () => ok({ profiles: gateway.toolProfiles() }));
@@ -751,6 +846,9 @@ app.whenReady().then(() => {
       buttonLabel: "Attach",
     });
     if (res.canceled) return { ok: true, files: [] };
+    // The dialog is the consent. Remember what the user chose so the attach
+    // and preview handlers can accept these paths without accepting every path.
+    for (const p of res.filePaths || []) rememberPicked(p);
     return {
       ok: true,
       files: (res.filePaths || []).map((p) => ({
@@ -776,6 +874,7 @@ app.whenReady().then(() => {
    * `attachFile`, which puts it on the turn as a readable document.
    */
   ipcMain.handle("hydo:attachAny", async (_e, agentId, filePath) => {
+    if (!pathAllowed(filePath)) return { ok: false, reason: "blocked-path" };
     const ext = String(path.extname(filePath || "")).slice(1).toLowerCase();
     try {
       if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif"].includes(ext)) {
