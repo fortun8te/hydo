@@ -597,6 +597,51 @@ app.whenReady().then(() => {
     const { listZip } = require("./zip-list.cjs");
     return listZip(filePath);
   });
+  /**
+   * Open an attachment, or show it in Finder.
+   *
+   * The MediaViewer has had these two buttons since it was written, both
+   * permanently `disabled` because nothing ever put `openAttachment` /
+   * `revealAttachment` on the bridge — a control that looks like a feature
+   * and does nothing, which is the exact class of bug scripts/dead-control
+   * -test.cjs exists for.
+   *
+   * Same consent gate as previewFile: Hydo's own directories, or a path the
+   * user picked in the native dialog. `shell.openPath` hands a file to
+   * whatever app is registered for it, so an ungated version would let
+   * rendered content ask macOS to open anything on disk.
+   */
+  const attachmentPath = (item) => {
+    const raw = item && typeof item === "object" ? item.path || item.src || "" : String(item || "");
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    // file:// URLs arrive from the renderer's own <img src>.
+    if (s.startsWith("file://")) {
+      try {
+        return decodeURIComponent(new URL(s).pathname);
+      } catch {
+        return "";
+      }
+    }
+    return s.startsWith("/") ? s : "";
+  };
+
+  ipcMain.handle("hydo:openAttachment", async (_e, item) => {
+    const abs = attachmentPath(item);
+    if (!abs || !pathAllowed(abs)) return { ok: false, reason: "blocked-path" };
+    if (!fs.existsSync(abs)) return { ok: false, reason: "missing" };
+    const err = await shell.openPath(abs);
+    return err ? { ok: false, reason: err } : { ok: true };
+  });
+
+  ipcMain.handle("hydo:revealAttachment", (_e, item) => {
+    const abs = attachmentPath(item);
+    if (!abs || !pathAllowed(abs)) return { ok: false, reason: "blocked-path" };
+    if (!fs.existsSync(abs)) return { ok: false, reason: "missing" };
+    shell.showItemInFolder(abs);
+    return { ok: true };
+  });
+
   ipcMain.handle("hydo:previewFile", (_e, filePath) => {
     if (!pathAllowed(filePath)) return { ok: false, reason: "blocked-path" };
     const { previewFile } = require("./file-preview.cjs");

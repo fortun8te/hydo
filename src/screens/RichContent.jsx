@@ -1679,6 +1679,99 @@ function MonitorGlyph() {
 }
 
 /**
+ * The image in the viewer, zoomable.
+ *
+ * A picture you cannot enlarge is a thumbnail with extra steps: the viewer
+ * fits the image to the window and that was the only size on offer, so an
+ * avatar or a screenshot with small text could not actually be READ.
+ *
+ * Scroll or +/- to zoom, click to toggle 1x, drag to pan when zoomed in.
+ * Zoom resets whenever the item changes, because carrying a 4x pan onto the
+ * next picture in the strip lands the viewer somewhere nobody chose.
+ */
+function ZoomableImage({ item }) {
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragging = useRef(null);
+
+  useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [item && item.src]);
+
+  const clamp = (z) => Math.min(Math.max(z, 1), 6);
+  const zoomTo = useCallback((next) => {
+    const z = clamp(next);
+    setZoom(z);
+    // At 1x there is nothing to pan to, and a stale offset would show the
+    // next image already dragged off-centre.
+    if (z === 1) setPan({ x: 0, y: 0 });
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "+" || e.key === "=") zoomTo(zoom + 0.5);
+      else if (e.key === "-" || e.key === "_") zoomTo(zoom - 0.5);
+      else if (e.key === "0") zoomTo(1);
+      else return;
+      e.preventDefault();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [zoom, zoomTo]);
+
+  return (
+    <img
+      className="hy-rc-mv-image"
+      src={item.src}
+      alt={item.alt || itemLabel(item)}
+      draggable="false"
+      style={{
+        transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+        cursor: zoom > 1 ? (dragging.current ? "grabbing" : "grab") : "zoom-in",
+      }}
+      onWheel={(e) => {
+        e.preventDefault();
+        zoomTo(zoom - e.deltaY * 0.003);
+      }}
+      onDoubleClick={() => zoomTo(zoom > 1 ? 1 : 2.5)}
+      onClick={(e) => {
+        // A plain click toggles, but not the one that ended a pan drag.
+        if (dragging.current && dragging.current.moved) return;
+        e.stopPropagation();
+        zoomTo(zoom > 1 ? 1 : 2);
+      }}
+      onPointerDown={(e) => {
+        if (zoom <= 1) return;
+        dragging.current = { x: e.clientX, y: e.clientY, ox: pan.x, oy: pan.y, moved: false };
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        const d = dragging.current;
+        if (!d) return;
+        const dx = e.clientX - d.x;
+        const dy = e.clientY - d.y;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) d.moved = true;
+        setPan({ x: d.ox + dx, y: d.oy + dy });
+      }}
+      onPointerUp={(e) => {
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        } catch {
+          /* capture may already be gone */
+        }
+        // Cleared on the next tick so the click handler above can still see
+        // whether this was a drag or a tap.
+        const was = dragging.current;
+        setTimeout(() => {
+          if (dragging.current === was) dragging.current = null;
+        }, 0);
+      }}
+    />
+  );
+}
+
+/**
  * <TaskCard title status statusLabel description actionLabel onAction />
  *   title       — defaults to "Computer".
  *   status      — "done" | "running" | "failed" | "waiting" (case-insensitive;
@@ -1948,7 +2041,7 @@ function ViewerStage({ item }) {
 
   if (item.kind === "image") {
     if (!item.src) return <ViewerFileCard item={item} note="No preview available" />;
-    return <img className="hy-rc-mv-image" src={item.src} alt={item.alt || itemLabel(item)} draggable="false" />;
+    return <ZoomableImage item={item} />;
   }
 
   if (item.kind === "link") {

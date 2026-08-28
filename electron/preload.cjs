@@ -82,6 +82,10 @@ contextBridge.exposeInMainWorld("hydo", {
   answerGate: (messageId, value) => ipcRenderer.invoke("hydo:answerGate", messageId, value),
   previewZip: (filePath) => ipcRenderer.invoke("hydo:previewZip", filePath),
   previewFile: (filePath) => ipcRenderer.invoke("hydo:previewFile", filePath),
+  // The MediaViewer's Open / Reveal buttons. They existed and were disabled
+  // for want of these two lines.
+  openAttachment: (item) => ipcRenderer.invoke("hydo:openAttachment", item),
+  revealAttachment: (item) => ipcRenderer.invoke("hydo:revealAttachment", item),
   saveFile: (filePath, name) => ipcRenderer.invoke("hydo:saveFile", filePath, name),
   interrupt: (agentId) => ipcRenderer.invoke("hydo:interrupt", agentId),
   openWorkspace: (agentId) => ipcRenderer.invoke("hydo:openWorkspace", agentId),

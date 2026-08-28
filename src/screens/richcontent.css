@@ -711,8 +711,12 @@ button.hy-rc-image-tile {
   align-items: stretch;
   justify-content: center;
   padding: 14px;
-  background: var(--sand-bg-scrim-heavy, #141414f2);
-  backdrop-filter: blur(var(--sand-blur-background, 12px));
+  /* A near-opaque ground, not a frosted one. The heavy backdrop-blur made
+     the viewer feel like a system sheet laid over the app rather than a place
+     to LOOK at a picture -- and it blurred nothing worth seeing, since the
+     scrim behind it is already almost solid. */
+  background: var(--sand-bg-scrim-heavy, #0b0b0bfa);
+  backdrop-filter: blur(2px);
   overscroll-behavior: contain;
 }
 
@@ -801,7 +805,18 @@ button.hy-rc-image-tile {
   padding: 0 52px;
 }
 
+/* Zoom transforms live on the image itself, so the stage has to let it
+   overflow rather than clipping the enlarged picture to the box. */
+.hy-rc .hy-rc-mv-image {
+  transform-origin: center center;
+  transition: transform 120ms ease-out;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .hy-rc .hy-rc-mv-content {
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
