@@ -313,6 +313,9 @@ export default function Shell({ state }) {
   // update happens where the user noticed it instead of behind three more
   // clicks in Settings.
   const [updatePhase, setUpdatePhase] = useState("");
+  // Why the last attempt failed, shown on the ticker so a dead end reads as a
+  // dead end rather than as something retrying might fix.
+  const [updateNote, setUpdateNote] = useState("");
   useEffect(() => {
     const ask = window.hydo?.updateStatus;
     if (typeof ask !== "function") return undefined;
@@ -376,8 +379,22 @@ export default function Shell({ state }) {
         return phase;
       }
       Promise.resolve(run())
-        .then((res) => setUpdatePhase(res && res.ok ? "done" : "failed"))
-        .catch(() => setUpdatePhase("failed"));
+        .then((res) => {
+          if (res && res.ok) {
+            setUpdateNote("");
+            setUpdatePhase("done");
+            return;
+          }
+          // Say WHY. "Update failed · retry" on a cause that cannot resolve
+          // itself — npm missing from a GUI app's PATH, a teammate mid-turn —
+          // is an invitation to press the same button forever.
+          setUpdateNote(String((res && (res.detail || res.reason)) || "").slice(0, 240));
+          setUpdatePhase("failed");
+        })
+        .catch((err) => {
+          setUpdateNote(String((err && err.message) || "").slice(0, 240));
+          setUpdatePhase("failed");
+        });
       return "running";
     });
   }, []);
@@ -857,6 +874,7 @@ export default function Shell({ state }) {
         onUpdate={onUpdate}
         updateBehind={updateBehind}
         updatePhase={updatePhase}
+        updateNote={updateNote}
         onUpdateNow={onUpdateNow}
         onAbout={onAbout}
         onHelp={onHelp}

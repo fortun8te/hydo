@@ -160,6 +160,73 @@ assert.ok(
 );
 assert.ok(/\{behind > 0 \? \(/.test(menu), "the badge only exists when there is something to install");
 
+// ── npm has to be findable from a GUI app ────────────────────────────────
+//
+// THE reason "Update failed" was a loop. A GUI-launched Mac app inherits
+// roughly /usr/bin:/bin:/usr/sbin:/sbin, and on this machine npm lives at
+// ~/.hermes/node/bin/npm. `execFile("npm", ...)` was ENOENT before a build
+// ever started, and retry did the same nothing.
+{
+  const bi = require("../electron/build-info.cjs");
+  const realPath = process.env.PATH;
+  try {
+    // Exactly what a double-clicked .app gets.
+    process.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+    const npm = bi.findNpm();
+    assert.ok(
+      npm,
+      "npm was not found with a GUI app's PATH — this is the update-failed loop"
+    );
+    assert.ok(fs.existsSync(npm), `findNpm returned ${npm}, which does not exist`);
+    // The child needs it too: npm run pack shells out to node, electron-builder
+    // and git in turn.
+    const childPath = bi.buildPath(npm).split(path.delimiter);
+    assert.equal(
+      childPath[0],
+      path.dirname(npm),
+      "npm's own directory must come first on the child's PATH"
+    );
+    for (const dir of ["/usr/bin", "/bin"]) {
+      assert.ok(childPath.includes(dir), `${dir} missing from the child PATH`);
+    }
+    assert.equal(new Set(childPath).size, childPath.length, "the child PATH has duplicates");
+  } finally {
+    process.env.PATH = realPath;
+  }
+
+  // An explicit override wins, so someone with an exotic setup has a way out.
+  const prev = process.env.HYDO_NPM;
+  try {
+    process.env.HYDO_NPM = "/usr/bin/env";
+    assert.equal(bi.findNpm(), "/usr/bin/env", "HYDO_NPM was ignored");
+  } finally {
+    if (prev == null) delete process.env.HYDO_NPM;
+    else process.env.HYDO_NPM = prev;
+  }
+}
+
+// A failure must say WHAT failed, not just that something did.
+{
+  const main = read("electron/main.cjs");
+  const shell2 = read("src/screens/Shell.jsx");
+  const sidebar2 = read("src/screens/Sidebar.jsx");
+  const bi = fs.readFileSync(path.join(ROOT, "electron/build-info.cjs"), "utf8");
+  assert.ok(
+    /npm was not found on this machine/.test(bi),
+    "a missing npm still reports the generic 'the build failed'"
+  );
+  assert.ok(/setUpdateNote/.test(shell2), "the renderer drops the failure reason");
+  assert.ok(
+    /res\.detail \|\| res\.reason/.test(shell2),
+    "the reason from main is not surfaced"
+  );
+  assert.ok(
+    /data-tip=\{updateNote \|\|/.test(sidebar2),
+    "the ticker shows a generic tip even when there is a real reason"
+  );
+  assert.ok(main.length > 0);
+}
+
 // ── 2. no polling, no network ─────────────────────────────────────────────
 const askAt = shell.indexOf("const [updateBehind, setUpdateBehind]");
 assert.ok(askAt > 0, "Shell must hold the update count");

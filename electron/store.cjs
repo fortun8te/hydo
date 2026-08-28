@@ -2274,11 +2274,26 @@ function createStore(opts = {}) {
     // Short, and built from what the app already knows, because this file is
     // taxed on every turn.
     const extras = Array.isArray(agent.toolsets) ? agent.toolsets.filter(Boolean) : [];
+    // This block told the teammate to NARRATE ITS OWN CONFIGURATION.
+    //
+    // It used to end with "say so and name the switch: extra toolsets are the
+    // Advanced section of this Bot's panel..." — so when a job needed a tool,
+    // the honest thing to do was, per this file, to explain the panel. That is
+    // exactly the reply the soul bans, and the soul kept losing: this is
+    // rewritten into the prompt every turn and names specifics, so it won
+    // seven straight attempts to fix the behaviour from the other side. It is
+    // also where the bold-and-bullets register came from — asked what it could
+    // do, the model handed back this framing, markdown and all.
+    //
+    // Now it states the reach as plain fact, and points at the one action the
+    // teammate can actually take by itself.
     const reachBlock = [
       "",
       "## What you can reach",
-      `Tool profile **${agent.toolProfile || "chat"}**${extras.length ? `, plus ${extras.join(", ")}` : ""}.`,
-      "If a job needs something you do not have, say so and name the switch: extra toolsets are the **Advanced** section of this Bot's panel, and the shared Linux machine is the **Linux workspace** toggle there. Do not improvise around a missing tool and do not fail silently.",
+      `Tools available this turn: ${(gatewayProfiles[agent.toolProfile || "chat"] || []).join(", ") || "conversation only"}${extras.length ? `, plus ${extras.join(", ")}` : ""}.`,
+      "You can widen this yourself: `SELF: {\"toolsets\":[\"browser\"]}` adds a toolset for later turns (browser, search, x_search, vision, image_gen, desktop_ui, memory, cronjob). Take what the job needs.",
+      "The shared Linux machine is NOT yours to switch on: that is the **Linux workspace** toggle in this Bot's panel, and only he can flip it. Name it when a job actually needs the machine.",
+      "Everything else: if something is out of reach . a login only he has, an account nobody connected . say that in one sentence, say what you did up to that point, and hand him the next step. Never recite your tool profile and never send him to the **Advanced** panel for a toolset you could have taken yourself: that is a support ticket about yourself, not an answer. Do not improvise around a missing tool and do not fail silently.",
       "",
     ].join("\n");
     const agentsWant = `${botHome.AGENTS_STAMP}\n${modelPick.agentsModelBlock(agent, state.settings)}\n${boxBlock}${reachBlock}`;

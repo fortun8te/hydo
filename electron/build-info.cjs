@@ -219,6 +219,89 @@ function check(info) {
 const APPS_DIR = "/Applications";
 const INSTALLED = path.join(APPS_DIR, "Hydo.app");
 
+
+/**
+ * Where npm actually is.
+ *
+ * THE reason "Update failed" was a loop. A GUI-launched Mac app does not
+ * inherit a login shell's PATH -- it gets roughly /usr/bin:/bin:/usr/sbin:
+ * /sbin -- and on this machine npm lives at ~/.hermes/node/bin/npm, which is
+ * on none of those. So `execFile("npm", ...)` was ENOENT before a build ever
+ * started, the handler reported the generic "The build failed", and pressing
+ * retry did exactly the same nothing. The same class of bug the gateway
+ * already fixes by prepending ~/.ascii/bin to its child's PATH.
+ *
+ * Ordered by how much they are worth trusting: an explicit override, then the
+ * interpreter we are already running under, then the usual install roots, then
+ * the user's own login shell as a last resort (correct, but it spawns a shell,
+ * so it is not the first thing tried).
+ */
+function npmCandidates() {
+  const home = os.homedir();
+  const out = [];
+  const override = String(process.env.HYDO_NPM || "").trim();
+  if (override) out.push(override);
+  // Node ships npm beside it. `process.execPath` in a packaged app is
+  // Electron, not node, so this only helps unpackaged -- but when it helps it
+  // is the most correct answer available.
+  try {
+    out.push(path.join(path.dirname(process.execPath), "npm"));
+  } catch {
+    /* execPath is always set in practice */
+  }
+  out.push(
+    path.join(home, ".hermes", "node", "bin", "npm"),
+    "/opt/homebrew/bin/npm",
+    "/usr/local/bin/npm",
+    "/usr/bin/npm"
+  );
+  // nvm keeps one npm per installed version; take the newest that exists.
+  try {
+    const nvm = path.join(home, ".nvm", "versions", "node");
+    const versions = fs.readdirSync(nvm).sort().reverse();
+    for (const v of versions) out.push(path.join(nvm, v, "bin", "npm"));
+  } catch {
+    /* no nvm on this machine */
+  }
+  return out;
+}
+
+/** @returns {string} an absolute npm path, or "" when there is genuinely none. */
+function findNpm() {
+  for (const c of npmCandidates()) {
+    try {
+      if (c && fs.existsSync(c)) return c;
+    } catch {
+      /* unreadable candidate is just a miss */
+    }
+  }
+  // Last resort: ask the user's own shell, which knows about version managers
+  // we have never heard of. Bounded, and failure here is still just "".
+  try {
+    const shell = process.env.SHELL || "/bin/zsh";
+    const found = String(
+      execFileSync(shell, ["-lc", "command -v npm"], {
+        timeout: 5000,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+    ).trim();
+    if (found && fs.existsSync(found)) return found;
+  } catch {
+    /* no shell, or npm genuinely absent */
+  }
+  return "";
+}
+
+/** PATH for the build child: npm's own directory first, then the usual ones. */
+function buildPath(npmBin) {
+  const dirs = [];
+  if (npmBin) dirs.push(path.dirname(npmBin));
+  dirs.push("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin");
+  const existing = String(process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  return [...new Set([...dirs, ...existing])].join(path.delimiter);
+}
+
 /**
  * Rebuild from the working copy and swap the result into /Applications.
  *
@@ -241,9 +324,21 @@ function rebuildAndInstall(opts) {
       resolve({ ok: false, reason: "No working copy to build from." });
       return;
     }
+    const npmBin = findNpm();
+    if (!npmBin) {
+      // Say WHICH thing is missing. "The build failed" sent the user to press
+      // retry on an error that could never resolve itself.
+      resolve({
+        ok: false,
+        reason: "npm was not found on this machine.",
+        detail:
+          "Hydo builds itself with npm and could not locate it. Set HYDO_NPM to the full path of your npm binary, or install Node.",
+      });
+      return;
+    }
     const started = Date.now();
     execFile(
-      "npm",
+      npmBin,
       ["run", "pack"],
       {
         cwd: repo,
@@ -255,7 +350,10 @@ function rebuildAndInstall(opts) {
         // CSC_IDENTITY_AUTO_DISCOVERY=false is already in the pack script.
         // There are no signing certificates on this machine and a failed
         // signing step fails the whole build.
-        env: { ...process.env, npm_config_yes: "true" },
+        // A GUI-launched app has almost no PATH, and `npm run pack` shells
+        // out to node, electron-builder and git in turn — all of which need
+        // to be findable by the CHILD, not just by us.
+        env: { ...process.env, npm_config_yes: "true", PATH: buildPath(npmBin) },
       },
       (err, stdout, stderr) => {
         if (err) {
@@ -309,4 +407,4 @@ function install(built, dir) {
   return { ok: true, installed: target, replaced: had };
 }
 
-module.exports = { buildInfo, check, rebuildAndInstall, install, STAMP_PATH, INSTALLED };
+module.exports = { buildInfo, check, rebuildAndInstall, install, findNpm, buildPath, STAMP_PATH, INSTALLED };

@@ -113,13 +113,36 @@ console.log("agents-md-test (box section) ok");
   const store = fs.readFileSync(path.join(__dirname, "../electron/store.cjs"), "utf8");
 
   assert.ok(/## What you can reach/.test(store), "AGENTS.md says what it carries");
-  assert.ok(/Tool profile \*\*\$\{agent\.toolProfile/.test(store), "built from the real profile");
+  // The actual tools, not the profile's NAME.
+  //
+  // This block used to say `Tool profile **${agent.toolProfile}**` and then
+  // tell the teammate to "name the switch: extra toolsets are the **Advanced**
+  // section of this Bot's panel". MEASURED consequence: asked to chase a
+  // support chat, a teammate replied with a wall of markdown about which panel
+  // to change; asked what it could do, it recited its tool profile in bold.
+  // The soul bans exactly that, and lost seven straight attempts, because THIS
+  // is rewritten into the prompt every turn and names specifics.
+  //
+  // The distinction that resolves it: a toolset is the teammate's to take, the
+  // shared machine is not.
+  assert.ok(/Tools available this turn/.test(store), "states the real tools");
+  assert.ok(/gatewayProfiles\[agent\.toolProfile/.test(store), "built from the real profile");
   assert.ok(/plus \$\{extras\.join/.test(store), "and the real extras, not a guess");
+  assert.ok(
+    !/Tool profile \*\*/.test(store),
+    "the profile NAME is back in the prompt — that is what it recited at the user"
+  );
 
-  // The switch is named. "Ask the user to enable it" is useless advice if the
-  // teammate cannot say where the switch is.
-  assert.ok(/\*\*Advanced\*\*/.test(store), "names where extra toolsets live");
+  // A toolset it can grant itself must never become advice about a panel.
+  assert.ok(/SELF: \{\\"toolsets/.test(store), "does not tell the teammate it can widen itself");
+  assert.ok(
+    /never send him to the \*\*Advanced\*\* panel/.test(store),
+    "the Advanced panel is offered as advice again"
+  );
+
+  // The box is genuinely user-only, so naming THAT switch is still right.
   assert.ok(/\*\*Linux workspace\*\*/.test(store), "and where the shared machine is turned on");
+  assert.ok(/NOT yours to switch on/.test(store), "the box must be named as the user's to enable");
   assert.ok(/do not fail silently/.test(store), "and forbids the two bad alternatives");
 
   // Still one writer. This block goes in the same single assembly as the rest;

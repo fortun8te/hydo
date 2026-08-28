@@ -272,6 +272,7 @@ function Sidebar({
   onUpdate,
   updateBehind = 0,
   updatePhase = "",
+  updateNote = "",
   onUpdateNow,
   onAbout,
   onHelp,
@@ -942,8 +943,10 @@ function Sidebar({
             type="button"
             className="sand-update"
             data-phase={updatePhase || "ready"}
-            data-tip={UPDATE_TIP[updatePhase] || UPDATE_TIP[""]}
-            title={UPDATE_TIP[updatePhase] || UPDATE_TIP[""]}
+            // The real reason wins over the generic line: "npm was not found
+            // on this machine" is actionable, "the build failed" is not.
+            data-tip={updateNote || UPDATE_TIP[updatePhase] || UPDATE_TIP[""]}
+            title={updateNote || UPDATE_TIP[updatePhase] || UPDATE_TIP[""]}
             // Busy is not clickable: a second press mid-build cannot help. The
             // failure state deliberately stays pressable, so a retry does not
             // need a trip through Settings.
