@@ -776,26 +776,18 @@ app.whenReady().then(() => {
   attach("hydo:pasteClipboard", (id) => gateway.pasteClipboard(id));
   attach("hydo:detachImage", (id, p) => gateway.detachImage(id, p));
 
-  // ── Hermes' own learning store (read + curate) ──────────────────────────
-  ipcMain.handle("hydo:learningFrames", (_e, o) => gateway.learningFrames(o || {}));
-  ipcMain.handle("hydo:learningDetail", (_e, id) => gateway.learningDetail(id));
-  ipcMain.handle("hydo:learningEdit", async (_e, id, content) => {
-    if (!gateway.available()) return nope("Hermes is not installed");
-    try {
-      return ok({ result: await gateway.learningEdit(id, content) });
-    } catch (err) {
-      return nope(err.message);
-    }
-  });
-  ipcMain.handle("hydo:learningDelete", async (_e, id) => {
-    if (!gateway.available()) return nope("Hermes is not installed");
-    try {
-      return ok({ result: await gateway.learningDelete(id) });
-    } catch (err) {
-      return nope(err.message);
-    }
-  });
-  ipcMain.handle("hydo:insights", (_e, days) => gateway.insights(days));
+  // Hermes' learning store is deliberately NOT on the renderer bridge.
+  //
+  // Same defect as `hydo:cron` below, and worse in one respect. `learning.*`
+  // goes to the LAUNCH gateway -- the user's own ~/.hermes -- not to any
+  // teammate's profile, because `request()` without a pin resolves the default
+  // profile. Nothing in src/ called these, and two of the four were WRITES:
+  // the renderer could edit and delete the user's personal learning store
+  // under no teammate's name.
+  //
+  // Re-exposing them needs the RPC to take a `profile` param first (see
+  // docs/HERMES-GAPS.md); until then the honest surface is none. The
+  // `gateway.learning*` functions remain for main-side use.
 
   // Hermes' cron store is deliberately NOT on the renderer bridge.
   //

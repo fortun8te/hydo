@@ -135,12 +135,6 @@ contextBridge.exposeInMainWorld("hydo", {
   pasteClipboard: (agentId) => ipcRenderer.invoke("hydo:pasteClipboard", agentId),
   detachImage: (agentId, path) => ipcRenderer.invoke("hydo:detachImage", agentId, path),
 
-  // Hermes' learning store (skills + memories it wrote for itself).
-  learningFrames: (opts) => ipcRenderer.invoke("hydo:learningFrames", opts),
-  learningDetail: (id) => ipcRenderer.invoke("hydo:learningDetail", id),
-  learningEdit: (id, content) => ipcRenderer.invoke("hydo:learningEdit", id, content),
-  learningDelete: (id) => ipcRenderer.invoke("hydo:learningDelete", id),
-  insights: (days) => ipcRenderer.invoke("hydo:insights", days),
 
   // Hermes' scheduler.
 

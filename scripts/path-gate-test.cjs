@@ -137,12 +137,48 @@ test("the picker records what the user chose", () => {
   );
 });
 
+/**
+ * The launch-home leak.
+ *
+ * `cron.manage` and `learning.*` both go through `request()` with no pin,
+ * which resolves the DEFAULT profile -- the user's own ~/.hermes, not any
+ * teammate's. Nothing in src/ called either, and two of the four learning
+ * methods were WRITES, so the renderer could edit and delete the user's
+ * personal learning store under no teammate's name.
+ *
+ * These stay off the bridge until the RPCs take a `profile` param. The test
+ * is written against the BRIDGE, not against the gateway functions, because
+ * keeping those for main-side use is fine -- what must not exist is a way for
+ * renderer code to reach them.
+ */
+const preload = stripComments(
+  fs.readFileSync(path.join(__dirname, "..", "electron", "preload.cjs"), "utf8")
+);
+
 test("the dead cron bridge is gone", () => {
   assert.ok(!/ipcMain\.handle\("hydo:cron"/.test(main), "hydo:cron is still on the bridge");
-  const preload = stripComments(
-    fs.readFileSync(path.join(__dirname, "..", "electron", "preload.cjs"), "utf8")
-  );
   assert.ok(!/cron:/.test(preload), "cron is still exposed to the renderer");
+});
+
+test("nothing profile-unscoped reaches the renderer", () => {
+  for (const m of ["learningFrames", "learningDetail", "learningEdit", "learningDelete"]) {
+    assert.ok(
+      !new RegExp(`${m}:`).test(preload),
+      `${m} is exposed to the renderer but reads the user's own ~/.hermes, not a bot profile`
+    );
+    assert.ok(
+      !new RegExp(`ipcMain\\.handle\\("hydo:${m}"`).test(main),
+      `hydo:${m} still has a handler`
+    );
+  }
+  // image.generate and pet.* are named in the same finding; they were never
+  // exposed, and this keeps it that way.
+  // `insights.get` is read-only, but it is still the USER's own session
+  // stats rather than a teammate's, and nothing rendered it.
+  assert.ok(!/insights:/.test(preload), "insights is exposed but reads the launch home");
+  for (const m of ["imageGenerate", "petGenerate", "petHatch"]) {
+    assert.ok(!new RegExp(`${m}:`).test(preload), `${m} was added without profile scoping`);
+  }
 });
 
 if (failed) {
